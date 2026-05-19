@@ -27,15 +27,12 @@ export default function AddProductModal({ isOpen, onClose, businessId, onProduct
     unit: 'pcs'
   });
 
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await addDoc(collection(db, 'products'), {
+      await addDoc(collection(db, 'businesses', businessId, 'inventory'), {
         ...formData,
-        businessId,
         createdAt: Date.now()
       });
       toast.success('Product added successfully');
@@ -50,7 +47,7 @@ export default function AddProductModal({ isOpen, onClose, businessId, onProduct
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-red-500/50 p-4 ${isOpen ? '' : 'hidden'}`}>
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold">Add New Product</h2>

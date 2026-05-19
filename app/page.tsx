@@ -2,23 +2,25 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { useAppStore } from '@/lib/store';
 
 export default function RootPage() {
   const router = useRouter();
+  const { user, isLoading } = useAppStore();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        router.push('/dashboard');
-      } else {
-        router.push('/auth/login');
-      }
-    });
+    if (isLoading) return;
 
-    return () => unsubscribe();
-  }, [router]);
+    if (user) {
+      if (user.role === 'MASTER_ADMIN') {
+        router.push('/admin/dashboard');
+      } else {
+        router.push('/dashboard');
+      }
+    } else {
+      router.push('/auth/login');
+    }
+  }, [user, isLoading, router]);
 
   return (
     <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">

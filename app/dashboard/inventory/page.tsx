@@ -16,7 +16,7 @@ export default function InventoryPage() {
 
   const fetchProducts = useCallback(async () => {
     if (!business) return;
-    const q = query(collection(db, 'products'), where('businessId', '==', business.id));
+    const q = query(collection(db, 'businesses', business.id, 'inventory'));
     const snap = await getDocs(q);
     setProducts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
     setLoading(false);

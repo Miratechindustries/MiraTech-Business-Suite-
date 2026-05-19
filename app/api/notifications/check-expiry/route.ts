@@ -1,9 +1,10 @@
 
-import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, addDoc, Timestamp } from 'firebase/firestore';
 import { NextResponse } from 'next/server';
 
 export async function POST() {
+  const { db } = await import('@/lib/firebase');
+  const { collection, query, where, getDocs, addDoc } = await import('firebase/firestore');
+
   try {
     const now = Date.now();
     const threeDaysFromNow = now + (3 * 24 * 60 * 60 * 1000);

@@ -30,6 +30,10 @@ service cloud.firestore {
       return isSignedIn() && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerId == request.auth.uid;
     }
 
+    function isMasterAdmin() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MASTER_ADMIN';
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;
@@ -40,12 +44,13 @@ service cloud.firestore {
     // ---------------------------------------------------------
     
     match /users/{userId} {
-      allow get: if isOwner(userId);
+      allow list: if isSignedIn() && isMasterAdmin();
+      allow get: if isOwner(userId) || isMasterAdmin();
       allow create: if isOwner(userId) && 
         incoming().keys().hasAll(['uid', 'email']) && 
         incoming().uid == userId;
-      allow update: if isOwner(userId) && 
-        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']);
+      allow update: if (isOwner(userId) || isMasterAdmin()) && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt', 'role']);
     }
 
     // ---------------------------------------------------------
@@ -53,14 +58,12 @@ service cloud.firestore {
     // ---------------------------------------------------------
     
     match /businesses/{businessId} {
-      allow get: if isSignedIn() && (existing().ownerId == request.auth.uid);
-      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid);
-      allow create: if isSignedIn() && 
-        incoming().ownerId == request.auth.uid &&
-        isValidId(businessId);
-      allow update: if isBusinessOwner(businessId) &&
+      allow get: if isSignedIn() && (existing().ownerId == request.auth.uid || isMasterAdmin());
+      allow list: if isSignedIn() && isMasterAdmin();
+      allow create: if isSignedIn() && (incoming().ownerId == request.auth.uid || isMasterAdmin());
+      allow update: if (isBusinessOwner(businessId) || isMasterAdmin()) &&
         incoming().ownerId == existing().ownerId &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'phone', 'address', 'currency', 'updatedAt']);
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'phone', 'address', 'currency', 'updatedAt', 'status']);
     }
 
     // ---------------------------------------------------------
@@ -68,15 +71,15 @@ service cloud.firestore {
     // ---------------------------------------------------------
     
     match /businesses/{businessId}/inventory/{itemId} {
-      allow read, write: if isBusinessOwner(businessId);
+      allow read, write: if (isBusinessOwner(businessId) || isMasterAdmin());
     }
     
     match /businesses/{businessId}/customers/{customerId} {
-      allow read, write: if isBusinessOwner(businessId);
+      allow read, write: if (isBusinessOwner(businessId) || isMasterAdmin());
     }
     
     match /businesses/{businessId}/invoices/{invoiceId} {
-      allow read, write: if isBusinessOwner(businessId);
+      allow read, write: if (isBusinessOwner(businessId) || isMasterAdmin());
     }
 
     // ---------------------------------------------------------
@@ -86,7 +89,7 @@ service cloud.firestore {
     match /audit_logs/{logId} {
       allow create: if isSignedIn() && incoming().userId == request.auth.uid;
       // Audit logs are typically immutable
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || (resource.data.businessId != null && isBusinessOwner(resource.data.businessId)));
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || (resource.data.businessId != null && isBusinessOwner(resource.data.businessId)) || isMasterAdmin());
     }
 
     // ---------------------------------------------------------

@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useEffect, useState } from 'react';
-import { Users, Building, Shield, Activity } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Users, Building, Shield, Activity, Plus } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { UserProfile, Business } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
+import AddCompanyModal from '@/components/AddCompanyModal';
 
 export default function MasterAdminDashboardPage() {
   const { user } = useAppStore();
@@ -13,26 +14,28 @@ export default function MasterAdminDashboardPage() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isModalOpen, setModalOpen] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    if (!isAuthorized) return;
+    setLoading(true);
+    const bizQuery = query(collection(db, 'businesses'), orderBy('createdAt', 'desc'));
+    const userQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    
+    const [bizSnapshot, userSnapshot] = await Promise.all([
+      getDocs(bizQuery),
+      getDocs(userQuery)
+    ]);
+    
+    setBusinesses(bizSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Business)));
+    setUsers(userSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile)));
+    setLoading(false);
+  }, [isAuthorized]);
 
   useEffect(() => {
-    if (!isAuthorized) return;
-    const fetchData = async () => {
-      setLoading(true);
-      const bizQuery = query(collection(db, 'businesses'), orderBy('createdAt', 'desc'));
-      const userQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
-      
-      const [bizSnapshot, userSnapshot] = await Promise.all([
-        getDocs(bizQuery),
-        getDocs(userQuery)
-      ]);
-      
-      setBusinesses(bizSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Business)));
-      setUsers(userSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile)));
-      setLoading(false);
-    };
-    
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
-  }, [isAuthorized]);
+  }, [fetchData]);
 
   if (!isAuthorized) {
     return <div className="p-8 text-slate-500 font-mono">Access Denied</div>;
@@ -42,8 +45,14 @@ export default function MasterAdminDashboardPage() {
 
   return (
     <div className="p-8 space-y-8 bg-[#E4E3E0] min-h-screen text-[#141414]">
-      <header className="border-b border-[#141414] pb-4">
+      <header className="border-b border-[#141414] pb-4 flex justify-between items-center">
         <h1 className="font-['Georgia',_serif] italic text-4xl">Master Admin</h1>
+        <button 
+          onClick={() => setModalOpen(true)}
+          className="flex items-center gap-2 rounded-xl bg-black text-white px-4 py-2 text-sm font-bold shadow-lg transition-all hover:bg-slate-800 active:scale-95">
+          <Plus size={18} />
+          Add Company
+        </button>
       </header>
       
       <section className="grid grid-cols-1 md:grid-cols-3 gap-0 border-t border-l border-[#141414]">
@@ -86,6 +95,12 @@ export default function MasterAdminDashboardPage() {
            </div>
         </div>
       </section>
+
+      <AddCompanyModal 
+        isOpen={isModalOpen} 
+        onClose={() => setModalOpen(false)} 
+        onCompanyAdded={fetchData}
+      />
     </div>
   );
 }
