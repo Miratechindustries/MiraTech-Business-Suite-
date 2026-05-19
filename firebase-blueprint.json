@@ -9,10 +9,13 @@
         "email": { "type": "string" },
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["standard", "business_admin", "master_admin"] },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "accessExpiryDate": { "type": "number" },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" }
       },
-      "required": ["uid", "email"]
+      "required": ["uid", "email", "role", "status"]
     },
     "Business": {
       "title": "Business",
@@ -22,6 +25,7 @@
         "id": { "type": "string" },
         "ownerId": { "type": "string" },
         "name": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "active", "rejected", "suspended"] },
         "email": { "type": "string" },
         "phone": { "type": "string" },
         "address": { "type": "string" },
@@ -29,7 +33,7 @@
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" }
       },
-      "required": ["ownerId", "name"]
+      "required": ["ownerId", "name", "status"]
     },
     "InventoryItem": {
       "title": "Inventory Item",

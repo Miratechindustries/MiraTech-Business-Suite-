@@ -6,23 +6,22 @@ export interface Business {
   email: string;
   phone?: string;
   address?: string;
-  logoUrl?: string;
   currency: string;
-  vatNumber?: string;
   createdAt: number;
   updatedAt: number;
-  status: 'active' | 'suspended' | 'trial';
+  status: 'pending' | 'active' | 'rejected' | 'suspended';
 }
 
 export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
-  businessId: string;
   role: UserRole;
+  status: 'active' | 'suspended';
+  businessId?: string;
   photoURL?: string;
   createdAt: number;
-  isActive: boolean;
+  updatedAt: number;
 }
 
 export interface Product {

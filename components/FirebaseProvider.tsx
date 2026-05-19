@@ -44,9 +44,10 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
               email: user.email || '',
               displayName: user.displayName || 'User',
               businessId: '',
-              role: 'STAFF',
+              role: user.email === 'miratechindustries@gmail.com' ? 'MASTER_ADMIN' : 'STAFF',
+              status: 'active',
               createdAt: Date.now(),
-              isActive: true,
+              updatedAt: Date.now(),
             };
             
             try {

@@ -7,10 +7,13 @@ import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword
 } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { Mail, Lock, LogIn, Chrome, Loader2 } from 'lucide-react';
 import { handleAppError, notifySuccess } from '@/lib/error-handler';
+import { UserProfile } from '@/lib/types';
+import { toast } from 'sonner';
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -25,15 +28,38 @@ export default function LoginPage() {
 
     try {
       if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
         notifySuccess("Welcome back!", "Redirecting to your dashboard...");
+        
+        // Fetch user doc to check role for redirect
+        const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+        const userData = userDoc.data() as UserProfile;
+        
+        if (userData?.role === 'MASTER_ADMIN') {
+          router.push('/admin/dashboard');
+        } else {
+          router.push('/dashboard');
+        }
       } else {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         notifySuccess("Account created!", "Setting up your workspace...");
+        
+        // For new users, they are currently Staff by default (unless bootstrapped in Provider)
+        // Redirect to dashboard where the Provider will handle the profile creation
+        router.push('/dashboard');
       }
-      router.push('/dashboard');
-    } catch (error) {
-      handleAppError(error, isLogin ? "Sign In Failed" : "Sign Up Failed");
+    } catch (error: any) {
+      if (error.code === 'auth/email-already-in-use') {
+        toast.error("Email already in use", {
+          description: "This email is already registered. Please log in instead.",
+          action: {
+            label: "Sign in",
+            onClick: () => setIsLogin(true)
+          }
+        });
+      } else {
+        handleAppError(error, isLogin ? "Sign In Failed" : "Sign Up Failed");
+      }
     } finally {
       setIsLoading(false);
     }
