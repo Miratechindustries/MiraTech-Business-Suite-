@@ -31,6 +31,7 @@ import {
 import { SubscriptionPlan, Subscription, Business } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
 import { toast } from 'sonner';
+import { assignSubscriptionToBusiness } from '@/lib/actions/subscriptions';
 
 export default function SubscriptionManagementPage() {
   const { user } = useAppStore();
@@ -83,37 +84,14 @@ export default function SubscriptionManagementPage() {
 
     setAssignLoading(true);
     try {
-      const startDate = Date.now();
-      const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + assignDuration);
-      
-      const subData = {
-        businessId: selectedBizId,
-        planId: selectedPlanId,
-        status: 'active' as const,
-        startDate: startDate,
-        endDate: endDate.getTime(),
-        currentPeriodEnd: endDate.getTime(),
-        cancelAtPeriodEnd: false,
-        updatedAt: Date.now()
-      };
-
-      // Check if subscription already exists for this business
-      const existingSub = subscriptions.find(s => s.businessId === selectedBizId);
-      
-      if (existingSub) {
-        await updateDoc(doc(db, 'subscriptions', existingSub.id), subData);
-        toast.success("Subscription updated successfully");
-      } else {
-        await addDoc(collection(db, 'subscriptions'), subData);
-        toast.success("Subscription assigned successfully");
-      }
+      await assignSubscriptionToBusiness(selectedBizId, selectedPlanId, assignDuration);
       
       setAssignModalOpen(false);
       fetchData();
+      toast.success("Subscription protocol executed successfully");
     } catch (err) {
       console.error("Error assigning subscription:", err);
-      toast.error("Failed to assign subscription");
+      toast.error("Failed to execute subscription protocol");
     } finally {
       setAssignLoading(false);
     }

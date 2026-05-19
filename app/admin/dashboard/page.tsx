@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
-import { UserProfile, Business, AuditLog, Transaction } from '@/lib/types';
+import { UserProfile, Business, AuditLog, Transaction, Subscription, SubscriptionPlan } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
 import AddCompanyModal from '@/components/AddCompanyModal';
 import { 
@@ -225,7 +225,7 @@ export default function MasterAdminDashboardPage() {
       </div>
 
       {/* KPI Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { 
             label: 'EST. MRR', 
@@ -267,7 +267,7 @@ export default function MasterAdminDashboardPage() {
               </div>
             </div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{kpi.label}</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-1">{kpi.val}</h3>
+            <h3 className="text-xl md:text-2xl font-black text-slate-900 mt-1">{kpi.val}</h3>
           </div>
         ))}
       </div>
@@ -275,18 +275,18 @@ export default function MasterAdminDashboardPage() {
       {/* Primary Analytics Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Growth Chart */}
-        <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-8">
+        <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-200 shadow-sm p-4 md:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
             <div>
               <h3 className="text-lg font-black text-slate-900">Platform Growth & Revenue</h3>
               <p className="text-sm text-slate-500 font-medium">Monthly aggregate performance metrics</p>
             </div>
-            <div className="flex bg-slate-100 p-1 rounded-xl">
+            <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
               <button className="px-3 py-1 text-xs font-bold rounded-lg bg-white shadow-sm">Revenue</button>
               <button className="px-3 py-1 text-xs font-bold text-slate-500 hover:text-slate-900">Traffic</button>
             </div>
           </div>
-          <div className="h-[350px] w-full">
+          <div className="h-[250px] md:h-[350px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={revenueData}>
                 <defs>

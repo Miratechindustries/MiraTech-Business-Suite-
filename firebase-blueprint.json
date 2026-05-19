@@ -116,6 +116,41 @@
         "createdAt": { "type": "number" }
       },
       "required": ["userId", "title", "message", "isRead"]
+    },
+    "SubscriptionPlan": {
+      "title": "Subscription Plan",
+      "description": "Service tier definition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "interval": { "type": "string", "enum": ["monthly", "yearly"] },
+        "features": { "type": "array" },
+        "maxUsers": { "type": "number" },
+        "maxBusinesses": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["name", "price", "interval", "features"]
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "Business subscription instance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "businessId": { "type": "string" },
+        "planId": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "past_due", "cancelled", "expired"] },
+        "startDate": { "type": "number" },
+        "endDate": { "type": "number" },
+        "currentPeriodEnd": { "type": "number" },
+        "cancelAtPeriodEnd": { "type": "boolean" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["businessId", "planId", "status", "startDate", "endDate"]
     }
   },
   "firestore": {
@@ -146,6 +181,14 @@
     "notifications/{notificationId}": {
       "schema": "Notification",
       "description": "User notifications"
+    },
+    "plans/{planId}": {
+      "schema": "SubscriptionPlan",
+      "description": "Available subscription plans"
+    },
+    "subscriptions/{subId}": {
+      "schema": "Subscription",
+      "description": "Business subscriptions"
     }
   }
 }
