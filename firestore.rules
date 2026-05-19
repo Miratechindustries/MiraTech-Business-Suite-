@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ---------------------------------------------------------
+    // GLOBAL HELPERS
+    // ---------------------------------------------------------
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+    
+    function isBusinessOwner(businessId) {
+      return isSignedIn() && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerId == request.auth.uid;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ---------------------------------------------------------
+    // USERS
+    // ---------------------------------------------------------
+    
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && 
+        incoming().keys().hasAll(['uid', 'email']) && 
+        incoming().uid == userId;
+      allow update: if isOwner(userId) && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']);
+    }
+
+    // ---------------------------------------------------------
+    // BUSINESSES
+    // ---------------------------------------------------------
+    
+    match /businesses/{businessId} {
+      allow get: if isSignedIn() && (existing().ownerId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid);
+      allow create: if isSignedIn() && 
+        incoming().ownerId == request.auth.uid &&
+        isValidId(businessId);
+      allow update: if isBusinessOwner(businessId) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'phone', 'address', 'currency', 'updatedAt']);
+    }
+
+    // ---------------------------------------------------------
+    // SUB-COLLECTIONS (Scoped to Business)
+    // ---------------------------------------------------------
+    
+    match /businesses/{businessId}/inventory/{itemId} {
+      allow read, write: if isBusinessOwner(businessId);
+    }
+    
+    match /businesses/{businessId}/customers/{customerId} {
+      allow read, write: if isBusinessOwner(businessId);
+    }
+    
+    match /businesses/{businessId}/invoices/{invoiceId} {
+      allow read, write: if isBusinessOwner(businessId);
+    }
+
+    // ---------------------------------------------------------
+    // AUDIT LOGS
+    // ---------------------------------------------------------
+    
+    match /audit_logs/{logId} {
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      // Audit logs are typically immutable
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || (resource.data.businessId != null && isBusinessOwner(resource.data.businessId)));
+    }
+
+    // ---------------------------------------------------------
+    // NOTIFICATIONS
+    // ---------------------------------------------------------
+    
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

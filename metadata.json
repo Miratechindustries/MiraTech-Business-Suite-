@@ -1,0 +1,8 @@
+{
+  "name": "Mira Business Suite",
+  "description": "Enterprise-grade multi-tenant Business Management SaaS platform featuring Inventory, Invoices, Quotations, and Analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

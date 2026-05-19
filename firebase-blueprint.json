@@ -1,0 +1,147 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Business": {
+      "title": "Business",
+      "description": "Business profile and settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "currency": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["ownerId", "name"]
+    },
+    "InventoryItem": {
+      "title": "Inventory Item",
+      "description": "Product or service in the inventory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "businessId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "sku": { "type": "string" },
+        "price": { "type": "number" },
+        "stock": { "type": "number" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["businessId", "name", "price"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Business customer details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "businessId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["businessId", "name"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Sales invoice",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "businessId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "reference": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "pending", "paid", "overdue", "cancelled"] },
+        "items": { "type": "array" },
+        "total": { "type": "number" },
+        "dueDate": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["businessId", "customerId", "reference", "status", "total"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "System activity log",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "resource": { "type": "string" },
+        "resourceId": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["userId", "action", "resource"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notifications",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "type": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "title", "message", "isRead"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "businesses/{businessId}": {
+      "schema": "Business",
+      "description": "Business settings"
+    },
+    "businesses/{businessId}/inventory/{itemId}": {
+      "schema": "InventoryItem",
+      "description": "Product inventory"
+    },
+    "businesses/{businessId}/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Customer list"
+    },
+    "businesses/{businessId}/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Invoices"
+    },
+    "audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Global activity logs"
+    },
+    "notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User notifications"
+    }
+  }
+}
