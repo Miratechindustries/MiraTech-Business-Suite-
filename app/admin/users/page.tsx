@@ -2,12 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, updateDoc, doc, query, where } from 'firebase/firestore';
-import { UserProfile, AuditLog } from '@/lib/types';
-import { Shield, Clock, AlertTriangle, Activity } from 'lucide-react';
+import { collection, getDocs, updateDoc, doc, query, where, orderBy } from 'firebase/firestore';
+import { UserProfile, AuditLog, Business } from '@/lib/types';
+import { Shield, Clock, AlertTriangle, Activity, Building, UserPlus } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
   const [months, setMonths] = useState<number>(1);
   const [activities, setActivities] = useState<AuditLog[]>([]);
@@ -15,46 +17,65 @@ export default function UserManagementPage() {
   const [filterAction, setFilterAction] = useState<string>('');
   const [filterResource, setFilterResource] = useState<string>('');
 
-  const filteredActivities = activities.filter(act => 
-      (!filterAction || act.action === filterAction) &&
-      (!filterResource || act.resource === filterResource)
-  );
-
   useEffect(() => {
-    const fetchUsers = async () => {
-      const snapshot = await getDocs(query(collection(db, 'users')));
-      setUsers(snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile)));
+    const fetchData = async () => {
+      const [userSnap, bizSnap] = await Promise.all([
+        getDocs(query(collection(db, 'users'))),
+        getDocs(query(collection(db, 'businesses')))
+      ]);
+      
+      setUsers(userSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile)));
+      setBusinesses(bizSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Business)));
       setLoading(false);
     };
-    fetchUsers();
+    fetchData();
   }, []);
 
   const fetchUserActivities = async (uid: string) => {
-    const q = query(collection(db, 'audit_logs'), where('userId', '==', uid));
+    const q = query(collection(db, 'audit_logs'), where('userId', '==', uid), orderBy('timestamp', 'desc'));
     const snapshot = await getDocs(q);
     setActivities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AuditLog)));
     setSelectedUserId(uid);
   };
 
-  const handleUpdateRole = async (uid: string, role: 'standard' | 'business_admin' | 'master_admin') => {
-    if (!window.confirm(`Are you sure you want to promote/demote this user to ${role}?`)) {
-        return;
+  const handleUpdateRole = React.useCallback(async (uid: string, role: 'standard' | 'business_admin' | 'master_admin') => {
+    try {
+      const now = Date.now();
+      await updateDoc(doc(db, 'users', uid), { role, updatedAt: now });
+      setUsers(prev => prev.map(u => u.uid === uid ? { ...u, role } : u));
+      toast.success(`Role updated to ${role}`);
+    } catch (err) {
+      toast.error("Failed to update role");
     }
-    await updateDoc(doc(db, 'users', uid), { role });
-    setUsers(prev => prev.map(u => u.uid === uid ? { ...u, role } : u));
-  };
+  }, []);
 
-  const handleUpdateStatus = async (uid: string, status: 'active' | 'suspended', monthsInput?: number) => {
-
-    const updateData: any = { status };
-    if (monthsInput && monthsInput > 0) {
-      const expiry = new Date().getTime() + (monthsInput * 30 * 24 * 60 * 60 * 1000);
-      updateData.accessExpiryDate = expiry;
+  const handleUpdateBusiness = React.useCallback(async (uid: string, businessId: string) => {
+    try {
+      const now = Date.now();
+      await updateDoc(doc(db, 'users', uid), { businessId, updatedAt: now });
+      setUsers(prev => prev.map(u => u.uid === uid ? { ...u, businessId } : u));
+      toast.success(`Business association updated`);
+    } catch (err) {
+      toast.error("Failed to associate business");
     }
-    
-    await updateDoc(doc(db, 'users', uid), updateData);
-    setUsers(prev => prev.map(u => u.uid === uid ? { ...u, ...updateData } : u));
-  };
+  }, []);
+
+  const handleUpdateStatus = React.useCallback(async (uid: string, status: 'active' | 'suspended', monthsInput?: number) => {
+    try {
+      const now = Date.now();
+      const updateData: any = { status, updatedAt: now };
+      if (monthsInput && monthsInput > 0) {
+        const expiry = now + (monthsInput * 30 * 24 * 60 * 60 * 1000);
+        updateData.accessExpiryDate = expiry;
+      }
+      
+      await updateDoc(doc(db, 'users', uid), updateData);
+      setUsers(prev => prev.map(u => u.uid === uid ? { ...u, ...updateData } : u));
+      toast.success(`User status: ${status}`);
+    } catch (err) {
+      toast.error("Status update failed");
+    }
+  }, []);
 
   if (loading) return <div>Loading...</div>;
 
@@ -67,15 +88,15 @@ export default function UserManagementPage() {
         </div>
       </div>
 
-      <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-2xl">
-        <div className="flex items-center gap-6 mb-6 pb-6 border-b border-white/5">
+      <div className="bg-slate-900 rounded-2xl p-4 md:p-6 border border-slate-800 shadow-2xl overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center gap-6 mb-6 pb-6 border-b border-white/5">
           <div>
             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Protocol_Duration (Months)</label>
             <input 
               type="number" 
               value={months} 
               onChange={(e) => setMonths(Number(e.target.value))}
-              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-mono text-sm w-24 outline-none focus:border-blue-500 transition-all"
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-mono text-sm w-full md:w-24 outline-none focus:border-blue-500 transition-all"
             />
           </div>
           <div className="flex-1">
@@ -84,12 +105,13 @@ export default function UserManagementPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto -mx-4 md:mx-0">
+          <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="border-b border-white/5">
                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Access_Identifier</th>
                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Governance_Role</th>
+                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Business_Association</th>
                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Security_State</th>
                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">System_Commands</th>
               </tr>
@@ -98,18 +120,30 @@ export default function UserManagementPage() {
               {users.map(user => (
                 <tr key={user.uid} className="hover:bg-white/[0.02] transition-colors group">
                   <td className="px-4 py-4">
-                    <p className="font-bold text-slate-200 text-sm truncate max-w-xs">{user.email}</p>
+                    <p className="font-bold text-slate-200 text-sm truncate max-w-[200px]">{user.email}</p>
                     <p className="text-[10px] font-mono text-slate-600 mt-0.5">UID: {user.uid.slice(0, 12).toUpperCase()}</p>
                   </td>
                   <td className="px-4 py-4">
                     <select 
                         value={user.role} 
                         onChange={(e) => handleUpdateRole(user.uid, e.target.value as any)}
-                        className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[10px] font-black text-blue-400 uppercase tracking-widest outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] font-black text-blue-400 uppercase tracking-widest outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
                     >
                         <option value="standard">STANDARD</option>
                         <option value="business_admin">BUSINESS_ADMIN</option>
                         <option value="master_admin">MASTER_ADMIN</option>
+                    </select>
+                  </td>
+                  <td className="px-4 py-4">
+                    <select 
+                        value={user.businessId || ''} 
+                        onChange={(e) => handleUpdateBusiness(user.uid, e.target.value)}
+                        className={`w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-widest outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer ${user.businessId ? 'text-slate-300' : 'text-rose-500 animate-pulse'}`}
+                    >
+                        <option value="">NO_ASSOCIATION</option>
+                        {businesses.map(biz => (
+                          <option key={biz.id} value={biz.id}>{biz.name}</option>
+                        ))}
                     </select>
                   </td>
                   <td className="px-4 py-4">
@@ -119,8 +153,8 @@ export default function UserManagementPage() {
                         }`}>
                             {user.status}
                         </span>
-                        <p className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-tight">
-                            {user.accessExpiryDate ? `Expiry: ${new Date(user.accessExpiryDate).toLocaleDateString()}` : 'Indefinite_Access'}
+                        <p className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-tight">
+                            {user.accessExpiryDate ? `Exp: ${new Date(user.accessExpiryDate).toLocaleDateString()}` : 'No_Expiry'}
                         </p>
                     </div>
                   </td>

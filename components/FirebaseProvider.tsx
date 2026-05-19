@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, query, collection, where, getDocs, updateDoc } from 'firebase/firestore';
 import { auth, db, OperationType, handleFirestoreError } from '@/lib/firebase';
 import { useAppStore } from '@/lib/store';
 import { UserProfile, Business } from '@/lib/types';
@@ -26,11 +26,25 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
           
           if (userDoc.exists()) {
             const userData = userDoc.data() as UserProfile;
-            setUser(userData);
-            localStorage.setItem('mira_user_profile', JSON.stringify(userData));
+            let updatedUserData = { ...userData };
 
-            if (userData.businessId) {
-              const bizDoc = await getDoc(doc(db, 'businesses', userData.businessId));
+            // If businessId is missing, try to find it by adminEmail
+            if (!userData.businessId && user.email) {
+              const bizQuery = query(collection(db, 'businesses'), where('adminEmail', '==', user.email));
+              const bizSnap = await getDocs(bizQuery);
+              if (!bizSnap.empty) {
+                const businessId = bizSnap.docs[0].id;
+                await updateDoc(userDocRef, { businessId, role: 'business_admin', updatedAt: Date.now() });
+                updatedUserData.businessId = businessId;
+                updatedUserData.role = 'business_admin';
+              }
+            }
+
+            setUser(updatedUserData);
+            localStorage.setItem('mira_user_profile', JSON.stringify(updatedUserData));
+
+            if (updatedUserData.businessId) {
+              const bizDoc = await getDoc(doc(db, 'businesses', updatedUserData.businessId));
               if (bizDoc.exists()) {
                 const bizData = bizDoc.data() as Business;
                 setBusiness(bizData);
@@ -39,12 +53,24 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
             }
           } else {
             // New user - create profile in Firestore
+            let businessId = '';
+            let role: UserProfile['role'] = user.email === 'miratechindustries@gmail.com' ? 'MASTER_ADMIN' : 'STAFF';
+
+            // Check if there is a business waiting for this admin email
+            const bizQuery = query(collection(db, 'businesses'), where('adminEmail', '==', user.email));
+            const bizSnap = await getDocs(bizQuery);
+            
+            if (!bizSnap.empty) {
+              businessId = bizSnap.docs[0].id;
+              role = 'business_admin';
+            }
+
             const newUserData: UserProfile = {
               uid: user.uid,
               email: user.email || '',
               displayName: user.displayName || 'User',
-              businessId: '',
-              role: user.email === 'miratechindustries@gmail.com' ? 'MASTER_ADMIN' : 'STAFF',
+              businessId,
+              role,
               status: 'active',
               createdAt: Date.now(),
               updatedAt: Date.now(),
@@ -58,8 +84,13 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
               handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}`);
             }
           }
-        } catch (e) {
-          handleAppError(e, "Account Sync Failed");
+        } catch (e: any) {
+          const msg = (e?.message || '').toLowerCase();
+          if (msg.includes('permission-denied') || msg.includes('insufficient permissions')) {
+            console.warn('[Sync] Permission warning during initial check');
+          } else {
+            handleAppError(e, "Account Sync Failed");
+          }
         }
       } else {
         setUser(null);

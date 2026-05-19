@@ -10,12 +10,13 @@
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
         "role": { "type": "string", "enum": ["standard", "business_admin", "master_admin"] },
+        "businessId": { "type": "string", "description": "Associated business identifier" },
         "status": { "type": "string", "enum": ["active", "suspended"] },
         "accessExpiryDate": { "type": "number" },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" }
       },
-      "required": ["uid", "email", "role", "status"]
+      "required": ["uid", "email", "role", "businessId", "status"]
     },
     "Business": {
       "title": "Business",

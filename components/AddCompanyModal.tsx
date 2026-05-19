@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { db, storage, auth } from '@/lib/firebase';
-import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, query, where, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { toast } from 'sonner';
 
@@ -106,6 +106,20 @@ export default function AddCompanyModal({ isOpen, onClose, onCompanyAdded }: Add
       }
 
       await updateDoc(docRef, updates);
+
+      // Link existing user if they are already registered
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', formData.adminEmail));
+      const userSnap = await getDocs(q);
+      
+      if (!userSnap.empty) {
+        const uDoc = userSnap.docs[0];
+        await updateDoc(uDoc.ref, {
+          businessId: docRef.id,
+          role: 'business_admin',
+          updatedAt: Date.now()
+        });
+      }
 
       toast.success('Company added successfully');
       onCompanyAdded();

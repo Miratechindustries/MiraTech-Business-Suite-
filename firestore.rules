@@ -25,9 +25,24 @@ service cloud.firestore {
     function existing() {
       return resource.data;
     }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getBusinessId() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) ? 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', null) : null;
+    }
     
     function isBusinessOwner(businessId) {
-      return isSignedIn() && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerId == request.auth.uid;
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/businesses/$(businessId)) && 
+        get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerId == request.auth.uid;
+    }
+
+    function isBusinessMember(businessId) {
+      return isSignedIn() && (getBusinessId() == businessId || isBusinessOwner(businessId));
     }
 
     function isMasterAdmin() {
@@ -64,10 +79,10 @@ service cloud.firestore {
       allow list: if isSignedIn() && isMasterAdmin();
       allow get: if isOwner(userId) || isMasterAdmin();
       allow create: if isOwner(userId) && 
-        incoming().keys().hasAll(['uid', 'email']) && 
+        incoming().keys().hasAll(['uid', 'email', 'businessId']) && 
         incoming().uid == userId;
       allow update: if (isOwner(userId) || isMasterAdmin()) && 
-        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt', 'role', 'status', 'accessExpiryDate']);
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt', 'role', 'status', 'accessExpiryDate', 'businessId']);
     }
 
     // ---------------------------------------------------------
@@ -75,8 +90,8 @@ service cloud.firestore {
     // ---------------------------------------------------------
     
     match /businesses/{businessId} {
-      allow get: if isSignedIn() && (existing().ownerId == request.auth.uid || isMasterAdmin());
-      allow list: if isSignedIn() && isMasterAdmin();
+      allow get: if isSignedIn() && (isBusinessMember(businessId) || isMasterAdmin());
+      allow list: if isSignedIn() && (isMasterAdmin() || resource.data.adminEmail == request.auth.token.email);
       allow create: if isSignedIn() && (incoming().ownerId == request.auth.uid || isMasterAdmin());
       allow update: if (isBusinessOwner(businessId) || isMasterAdmin()) &&
         incoming().ownerId == existing().ownerId &&
@@ -87,16 +102,8 @@ service cloud.firestore {
     // SUB-COLLECTIONS (Scoped to Business)
     // ---------------------------------------------------------
     
-    match /businesses/{businessId}/inventory/{itemId} {
-      allow read, write: if (isBusinessOwner(businessId) || isMasterAdmin());
-    }
-    
-    match /businesses/{businessId}/customers/{customerId} {
-      allow read, write: if (isBusinessOwner(businessId) || isMasterAdmin());
-    }
-    
     match /businesses/{businessId}/{allSubcollections=**} {
-      allow read, write: if isBusinessOwner(businessId) || isMasterAdmin();
+      allow read, write: if isBusinessMember(businessId) || isMasterAdmin();
     }
 
     // ---------------------------------------------------------
@@ -105,12 +112,12 @@ service cloud.firestore {
     
     match /audit_logs/{logId} {
       allow create: if isSignedIn();
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isMasterAdmin());
+      allow read: if isSignedIn() && (resource.data.businessId == getBusinessId() || isMasterAdmin());
     }
 
     match /auditLogs/{logId} {
       allow create: if isSignedIn();
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isMasterAdmin());
+      allow read: if isSignedIn() && (resource.data.businessId == getBusinessId() || isMasterAdmin());
     }
 
     // ---------------------------------------------------------
@@ -123,7 +130,7 @@ service cloud.firestore {
     }
 
     match /subscriptions/{subId} {
-      allow read: if isSignedIn() && (resource.data.businessId != null && isBusinessOwner(resource.data.businessId) || isMasterAdmin());
+      allow read: if isSignedIn() && (resource.data.businessId != null && isBusinessMember(resource.data.businessId) || isMasterAdmin());
       allow write: if isMasterAdmin();
     }
 

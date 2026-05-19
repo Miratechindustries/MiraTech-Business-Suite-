@@ -18,10 +18,11 @@ export interface UserProfile {
   displayName: string;
   role: UserRole;
   status: 'active' | 'suspended';
-  businessId?: string;
+  businessId: string;
   photoURL?: string;
   createdAt: number;
   updatedAt: number;
+  accessExpiryDate?: number;
 }
 
 export interface Product {
