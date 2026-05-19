@@ -11,9 +11,10 @@ import {
   RefreshCcw, 
   Zap, 
   ShieldCheck, 
+  Shield,
+  Target,
   Clock,
   Building,
-  Target
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { 
@@ -40,7 +41,12 @@ export default function SubscriptionManagementPage() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPlanModalOpen, setPlanModalOpen] = useState(false);
+  const [isAssignModalOpen, setAssignModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [selectedBizId, setSelectedBizId] = useState<string>('');
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+  const [assignDuration, setAssignDuration] = useState<number>(1);
+  const [assignLoading, setAssignLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!isAuthorized) return;
@@ -67,6 +73,51 @@ export default function SubscriptionManagementPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
+
+  const handleAssignSubscription = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBizId || !selectedPlanId) {
+      toast.error("Please select both business and plan");
+      return;
+    }
+
+    setAssignLoading(true);
+    try {
+      const startDate = Date.now();
+      const endDate = new Date(startDate);
+      endDate.setMonth(endDate.getMonth() + assignDuration);
+      
+      const subData = {
+        businessId: selectedBizId,
+        planId: selectedPlanId,
+        status: 'active' as const,
+        startDate: startDate,
+        endDate: endDate.getTime(),
+        currentPeriodEnd: endDate.getTime(),
+        cancelAtPeriodEnd: false,
+        updatedAt: Date.now()
+      };
+
+      // Check if subscription already exists for this business
+      const existingSub = subscriptions.find(s => s.businessId === selectedBizId);
+      
+      if (existingSub) {
+        await updateDoc(doc(db, 'subscriptions', existingSub.id), subData);
+        toast.success("Subscription updated successfully");
+      } else {
+        await addDoc(collection(db, 'subscriptions'), subData);
+        toast.success("Subscription assigned successfully");
+      }
+      
+      setAssignModalOpen(false);
+      fetchData();
+    } catch (err) {
+      console.error("Error assigning subscription:", err);
+      toast.error("Failed to assign subscription");
+    } finally {
+      setAssignLoading(false);
+    }
+  };
 
   const handleSavePlan = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -260,12 +311,15 @@ export default function SubscriptionManagementPage() {
                     </td>
                     <td className="px-4 py-3">
                        {plan ? (
-                         <div className="flex items-center gap-1.5">
-                           <Target size={12} className="text-blue-500" />
-                           <span className="text-[11px] font-black text-slate-700 uppercase">{plan.name}</span>
+                         <div className="flex items-center gap-1.5 p-1.5 bg-blue-50/50 rounded-lg border border-blue-100 w-fit">
+                           <Target size={12} className="text-blue-600" />
+                           <span className="text-[10px] font-black text-blue-700 uppercase tracking-tight">{plan.name}</span>
                          </div>
                        ) : (
-                         <span className="text-[10px] font-bold text-slate-300 italic uppercase">Unprovisioned</span>
+                         <div className="flex items-center gap-1.5 p-1.5 bg-slate-50 rounded-lg border border-slate-100 w-fit">
+                           <Shield size={12} className="text-slate-300" />
+                           <span className="text-[10px] font-bold text-slate-400 italic uppercase">Unprovisioned</span>
+                         </div>
                        )}
                     </td>
                     <td className="px-4 py-3">
@@ -284,8 +338,17 @@ export default function SubscriptionManagementPage() {
                        </div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                       <button className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-700 transition-colors opacity-0 group-hover:opacity-100">
-                         Re-Assign &rarr;
+                       <button 
+                         onClick={() => {
+                           setSelectedBizId(biz.id);
+                           const sub = subscriptions.find(s => s.businessId === biz.id);
+                           if (sub) setSelectedPlanId(sub.planId);
+                           setAssignModalOpen(true);
+                         }}
+                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-sm hover:shadow-blue-600/20 active:scale-95"
+                        >
+                         <Plus size={10} />
+                         {subscriptions.find(s => s.businessId === biz.id) ? 'Re-Assign' : 'Provision'}
                        </button>
                     </td>
                   </tr>
@@ -295,6 +358,90 @@ export default function SubscriptionManagementPage() {
           </table>
         </div>
       </div>
+
+      {isAssignModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+           <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl p-10 relative border border-white/20">
+              <button 
+                onClick={() => setAssignModalOpen(false)}
+                className="absolute top-8 right-8 text-slate-400 hover:text-slate-900 transition-colors"
+              >
+                <X size={24} />
+              </button>
+              
+              <h2 className="text-3xl font-black text-slate-900 italic tracking-tighter mb-2 uppercase">
+                Provision_Entity_
+              </h2>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-8">Manual service authorization protocol</p>
+              
+              <form onSubmit={handleAssignSubscription} className="space-y-6">
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Target Entity</label>
+                    <select 
+                      value={selectedBizId} 
+                      onChange={e => setSelectedBizId(e.target.value)}
+                      required 
+                      className="w-full px-5 py-4 bg-slate-50 rounded-2xl text-sm font-bold border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all outline-none"
+                    >
+                      <option value="">Select Business...</option>
+                      {businesses.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                 </div>
+
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Service Tier</label>
+                    <div className="grid grid-cols-1 gap-2 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
+                      {plans.map(plan => (
+                        <button
+                          key={plan.id}
+                          type="button"
+                          onClick={() => setSelectedPlanId(plan.id)}
+                          className={`p-4 rounded-2xl border-2 text-left transition-all flex items-center justify-between ${
+                            selectedPlanId === plan.id 
+                            ? 'border-blue-600 bg-blue-50' 
+                            : 'border-slate-50 bg-slate-50 hover:border-slate-200'
+                          }`}
+                        >
+                          <div>
+                            <p className="text-xs font-black uppercase italic tracking-tight">{plan.name}</p>
+                            <p className="text-[10px] font-bold text-slate-400">{plan.interval} cycle</p>
+                          </div>
+                          <span className="text-sm font-black text-blue-600">${plan.price}</span>
+                        </button>
+                      ))}
+                    </div>
+                 </div>
+
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Authorization Interval (Months)</label>
+                    <div className="flex items-center gap-4">
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max="120"
+                        value={assignDuration}
+                        onChange={e => setAssignDuration(Number(e.target.value))}
+                        className="w-24 px-5 py-4 bg-slate-50 rounded-2xl text-sm font-black border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all outline-none"
+                      />
+                      <div className="text-[11px] font-bold text-slate-500 uppercase italic">
+                        Access granted until: {new Date(new Date().setMonth(new Date().getMonth() + assignDuration)).toLocaleDateString()}
+                      </div>
+                    </div>
+                 </div>
+
+                 <button 
+                   type="submit"
+                   disabled={assignLoading}
+                   className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
+                 >
+                    {assignLoading ? 'EXECUTING_PROTOCOL...' : 'EXECUTE_PROVISIONING'}
+                 </button>
+              </form>
+           </div>
+        </div>
+      )}
 
       {isPlanModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -389,6 +536,22 @@ export default function SubscriptionManagementPage() {
            </div>
         </div>
       )}
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #e2e8f0;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #cbd5e1;
+        }
+      `}</style>
     </div>
   );
 }
