@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import { db, storage } from '@/lib/firebase';
+import { db, storage, auth } from '@/lib/firebase';
 import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { toast } from 'sonner';
@@ -67,11 +67,27 @@ export default function AddCompanyModal({ isOpen, onClose, onCompanyAdded }: Add
 
     setLoading(true);
     try {
+      const user = auth.currentUser;
       const docRef = await addDoc(collection(db, 'businesses'), {
         ...formData,
+        ownerId: user?.uid || 'system',
         logo: '',
         letterhead: '',
         createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+
+      // Initialize default trial subscription
+      const trialDuration = 14 * 24 * 60 * 60 * 1000; // 14 days
+      await addDoc(collection(db, 'subscriptions'), {
+        businessId: docRef.id,
+        planId: 'trial_default', // Placeholder until they select a real plan
+        status: 'trialing',
+        startDate: Date.now(),
+        endDate: Date.now() + trialDuration,
+        trialEndDate: Date.now() + trialDuration,
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: Date.now() + trialDuration,
         updatedAt: Date.now()
       });
 
@@ -119,50 +135,166 @@ export default function AddCompanyModal({ isOpen, onClose, onCompanyAdded }: Add
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold">Add New Company</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-900"><X size={20} /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+      <div className="w-full max-w-2xl rounded-3xl bg-white shadow-[0_32px_64px_-16px_rgba(0,0,0,0.2)] dark:bg-slate-900 max-h-[95vh] flex flex-col overflow-hidden border border-slate-200">
+        <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md px-8 py-5 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-black text-slate-900 italic tracking-tight uppercase">Registration_New_Entity</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Corporate business unit deployment</p>
+          </div>
+          <button 
+            onClick={onClose} 
+            className="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-all active:scale-95"
+          >
+            <X size={20} />
+          </button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input type="text" placeholder="Company Name" className="w-full p-2 border rounded-lg" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-          <input type="email" placeholder="Email" className="w-full p-2 border rounded-lg" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
-          <input type="text" placeholder="Currency (e.g., USD)" className="w-full p-2 border rounded-lg" value={formData.currency} onChange={e => setFormData({...formData, currency: e.target.value})} required />
-          <input type="text" placeholder="Phone" className="w-full p-2 border rounded-lg" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-          <input type="text" placeholder="Address" className="w-full p-2 border rounded-lg" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
-          <input type="url" placeholder="Website URL" className="w-full p-2 border rounded-lg" value={formData.website} onChange={e => setFormData({...formData, website: e.target.value})} />
-          <textarea placeholder="Description" className="w-full p-2 border rounded-lg" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Status</label>
-            <select className="w-full p-2 border rounded-lg" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
-              <option value="active">Active</option>
-              <option value="pending">Pending</option>
-              <option value="suspended">Suspended</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Company Logo</label>
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 border rounded-lg flex items-center justify-center overflow-hidden bg-slate-100">
-                {logoPreview ? <img src={logoPreview} alt="Logo preview" className="w-full h-full object-cover" /> : <span className="text-xs text-slate-400">No logo</span>}
+
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 space-y-8 scroll-smooth">
+          {/* Visual Identity Section */}
+          <section className="space-y-4">
+            <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.25em] flex items-center gap-2">
+              <span className="h-1 w-4 bg-blue-600 rounded-full" />
+              Visual_Assets
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="group relative border-2 border-dashed border-slate-200 rounded-2xl p-4 transition-all hover:border-blue-600/30 hover:bg-blue-50/20">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Corporate Logo</label>
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 border border-slate-200 rounded-xl flex items-center justify-center overflow-hidden bg-white shadow-sm ring-4 ring-slate-50 transition-all group-hover:ring-blue-100">
+                    {logoPreview ? (
+                      <img src={logoPreview} alt="Logo preview" className="w-full h-full object-contain p-2" />
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-6 h-6 border-2 border-slate-200 rounded-md border-t-blue-500" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <input 
+                      type="file" 
+                      id="logo-upload"
+                      accept="image/*" 
+                      onChange={e => handleFileChange(e, setLogoFile, setLogoPreview)} 
+                      className="hidden"
+                    />
+                    <label htmlFor="logo-upload" className="inline-block px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg cursor-pointer hover:bg-slate-800 transition-all active:scale-95">
+                      Choose Logo
+                    </label>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">SVG, PNG or JPG (Max 2MB)</p>
+                  </div>
+                </div>
               </div>
-              <input type="file" accept="image/*" onChange={e => handleFileChange(e, setLogoFile, setLogoPreview)} className="w-full p-2 border rounded-lg" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Company Letterhead</label>
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 border rounded-lg flex items-center justify-center overflow-hidden bg-slate-100">
-                {letterheadPreview ? <img src={letterheadPreview} alt="Letterhead preview" className="w-full h-full object-cover" /> : <span className="text-xs text-slate-400">No letter</span>}
+
+              <div className="group relative border-2 border-dashed border-slate-200 rounded-2xl p-4 transition-all hover:border-blue-600/30 hover:bg-blue-50/20">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Letterhead Base</label>
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 border border-slate-200 rounded-xl flex items-center justify-center overflow-hidden bg-white shadow-sm ring-4 ring-slate-50 transition-all group-hover:ring-blue-100">
+                    {letterheadPreview ? (
+                      <img src={letterheadPreview} alt="Letterhead preview" className="w-full h-full object-contain p-2" />
+                    ) : (
+                      <div className="h-full w-full flex flex-col justify-between p-3">
+                         <div className="h-1 w-full bg-slate-200 rounded" />
+                         <div className="h-1 w-2/3 bg-slate-100 rounded" />
+                         <div className="h-1 w-1/2 bg-slate-50 rounded" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <input 
+                      type="file" 
+                      id="letter-upload"
+                      accept="image/*" 
+                      onChange={e => handleFileChange(e, setLetterheadFile, setLetterheadPreview)} 
+                      className="hidden"
+                    />
+                    <label htmlFor="letter-upload" className="inline-block px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg cursor-pointer hover:bg-slate-800 transition-all active:scale-95">
+                      Upload Head
+                    </label>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Minimal Letterhead Overlay</p>
+                  </div>
+                </div>
               </div>
-              <input type="file" accept="image/*" onChange={e => handleFileChange(e, setLetterheadFile, setLetterheadPreview)} className="w-full p-2 border rounded-lg" />
             </div>
-          </div>
-          <input type="email" placeholder="Initial Admin Email" className="w-full p-2 border rounded-lg" value={formData.adminEmail} onChange={e => setFormData({...formData, adminEmail: e.target.value})} />
-          <input type="password" placeholder="Initial Admin Password" className="w-full p-2 border rounded-lg" value={formData.adminPassword} onChange={e => setFormData({...formData, adminPassword: e.target.value})} />
-          <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-lg font-bold" disabled={loading}>
-            {loading ? 'Adding...' : 'Add Company'}
+          </section>
+
+          {/* Primary Details */}
+          <section className="space-y-4">
+            <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.25em] flex items-center gap-2">
+              <span className="h-1 w-4 bg-blue-600 rounded-full" />
+              Core_Identity
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Company Name</label>
+                <input type="text" placeholder="e.g. Miratech Industries" className="w-full px-4 py-3 bg-slate-50 border-2 border-transparent rounded-xl text-sm font-bold focus:border-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-300" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Entity Primary Email</label>
+                <input type="email" placeholder="billing@company.com" className="w-full px-4 py-3 bg-slate-50 border-2 border-transparent rounded-xl text-sm font-bold focus:border-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-300" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Operational Currency</label>
+                <input type="text" placeholder="USD" className="w-full px-4 py-3 bg-slate-50 border-2 border-transparent rounded-xl text-sm font-bold focus:border-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-300" value={formData.currency} onChange={e => setFormData({...formData, currency: e.target.value})} required />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Contact Phone</label>
+                <input type="text" placeholder="+1 (555) 000-0000" className="w-full px-4 py-3 bg-slate-50 border-2 border-transparent rounded-xl text-sm font-bold focus:border-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-300" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+              </div>
+              <div className="col-span-1 md:col-span-2 space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Official Site Reference</label>
+                <input type="url" placeholder="https://www.company.com" className="w-full px-4 py-3 bg-slate-50 border-2 border-transparent rounded-xl text-sm font-bold focus:border-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-300" value={formData.website} onChange={e => setFormData({...formData, website: e.target.value})} />
+              </div>
+              <div className="col-span-1 md:col-span-2 space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Physical Address</label>
+                <input type="text" placeholder="123 Industrial Way, Silicon Valley, CA" className="w-full px-4 py-3 bg-slate-50 border-2 border-transparent rounded-xl text-sm font-bold focus:border-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-300" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+              </div>
+              <div className="col-span-1 md:col-span-2 space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Narrative</label>
+                <textarea rows={3} placeholder="Briefly describe the entity's core operations..." className="w-full px-4 py-3 bg-slate-50 border-2 border-transparent rounded-xl text-sm font-bold focus:border-blue-600 focus:bg-white outline-none transition-all placeholder:text-slate-300 resize-none" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+              </div>
+            </div>
+          </section>
+
+          {/* Authorization & Governance */}
+          <section className="space-y-4">
+            <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.25em] flex items-center gap-2">
+              <span className="h-1 w-4 bg-blue-600 rounded-full" />
+              Security_Deployment
+            </h3>
+            <div className="bg-slate-900 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Master Email</label>
+                <input type="email" placeholder="admin@enterprise.com" className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white focus:border-blue-500 outline-none transition-all placeholder:text-slate-600" value={formData.adminEmail} onChange={e => setFormData({...formData, adminEmail: e.target.value})} required />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Access Protocol (Password)</label>
+                <input type="password" placeholder="••••••••" className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white focus:border-blue-500 outline-none transition-all placeholder:text-slate-600" value={formData.adminPassword} onChange={e => setFormData({...formData, adminPassword: e.target.value})} required />
+              </div>
+              <div className="col-span-1 md:col-span-2 space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Deployment Status</label>
+                <select className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white focus:border-blue-500 outline-none transition-all cursor-pointer appearance-none" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+                  <option value="active">ACTIVE_PROTOCOL</option>
+                  <option value="pending">PENDING_REVIEW</option>
+                  <option value="suspended">SUSPENDED_OPS</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <button 
+            type="submit" 
+            className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-sm uppercase tracking-[0.25em] shadow-2xl shadow-blue-600/30 hover:bg-blue-700 hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center justify-center gap-3"
+            disabled={loading}
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                Initializing...
+              </span>
+            ) : (
+              'Execute_deployment'
+            )}
           </button>
         </form>
       </div>

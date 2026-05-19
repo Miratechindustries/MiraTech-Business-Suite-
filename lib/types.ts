@@ -115,3 +115,29 @@ export interface Invoice {
   createdAt: number;
   paidAmount: number;
 }
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  price: number;
+  interval: 'monthly' | 'yearly';
+  features: string[];
+  maxUsers: number;
+  maxBusinesses: number;
+  status: 'active' | 'archived';
+  createdAt: number;
+}
+
+export interface Subscription {
+  id: string;
+  businessId: string;
+  planId: string;
+  status: 'active' | 'past_due' | 'cancelled' | 'trialing';
+  startDate: number;
+  endDate: number;
+  trialEndDate?: number;
+  cancelAtPeriodEnd: boolean;
+  cancelReason?: string;
+  currentPeriodEnd: number;
+  updatedAt: number;
+}

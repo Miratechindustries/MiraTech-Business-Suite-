@@ -59,87 +59,135 @@ export default function UserManagementPage() {
   if (loading) return <div>Loading...</div>;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">User Management</h1>
-      <div className="bg-white rounded-lg border p-6">
-        <label className="block text-sm font-medium mb-2">Default Duration (Months) for new suspension/activation:</label>
-        <input 
-          type="number" 
-          value={months} 
-          onChange={(e) => setMonths(Number(e.target.value))}
-          className="border p-2 rounded w-20 mb-4"
-        />
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className="text-left p-2">Email</th>
-              <th className="text-left p-2">Role</th>
-              <th className="text-left p-2">Status & Access</th>
-              <th className="text-left p-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(user => (
-              <tr key={user.uid} className="border-t">
-                <td className="p-2">{user.email}</td>
-                <td className="p-2">
+    <div className="space-y-4">
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-blue-600 font-mono text-[10px] uppercase tracking-[0.2em] font-bold mb-1">Personnel / Access Control</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase italic">User_Registry</h1>
+        </div>
+      </div>
+
+      <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-2xl">
+        <div className="flex items-center gap-6 mb-6 pb-6 border-b border-white/5">
+          <div>
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Protocol_Duration (Months)</label>
+            <input 
+              type="number" 
+              value={months} 
+              onChange={(e) => setMonths(Number(e.target.value))}
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-mono text-sm w-24 outline-none focus:border-blue-500 transition-all"
+            />
+          </div>
+          <div className="flex-1">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">System Instruction</p>
+            <p className="text-xs text-slate-400 mt-1 italic">Define the standard interval for access revocation or extension protocols.</p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-white/5">
+                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Access_Identifier</th>
+                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Governance_Role</th>
+                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Security_State</th>
+                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">System_Commands</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {users.map(user => (
+                <tr key={user.uid} className="hover:bg-white/[0.02] transition-colors group">
+                  <td className="px-4 py-4">
+                    <p className="font-bold text-slate-200 text-sm truncate max-w-xs">{user.email}</p>
+                    <p className="text-[10px] font-mono text-slate-600 mt-0.5">UID: {user.uid.slice(0, 12).toUpperCase()}</p>
+                  </td>
+                  <td className="px-4 py-4">
                     <select 
                         value={user.role} 
                         onChange={(e) => handleUpdateRole(user.uid, e.target.value as any)}
-                        className="border rounded p-1 text-xs"
+                        className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[10px] font-black text-blue-400 uppercase tracking-widest outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
                     >
-                        <option value="standard">Standard</option>
-                        <option value="business_admin">Business Admin</option>
-                        <option value="master_admin">Master Admin</option>
+                        <option value="standard">STANDARD</option>
+                        <option value="business_admin">BUSINESS_ADMIN</option>
+                        <option value="master_admin">MASTER_ADMIN</option>
                     </select>
-                </td>
-                <td className="p-2">
-                    <div className="flex flex-col gap-1">
-                        <span className={`px-2 py-1 rounded text-xs w-fit ${
-                            user.status === 'active' ? 'bg-green-100' : 'bg-red-100'
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-col gap-1.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest border w-fit ${
+                            user.status === 'active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
                         }`}>
                             {user.status}
                         </span>
-                        <span className="text-xs text-slate-500">
-                            {user.accessExpiryDate ? `Until: ${new Date(user.accessExpiryDate).toLocaleDateString()}` : 'No limit'}
-                        </span>
+                        <p className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-tight">
+                            {user.accessExpiryDate ? `Expiry: ${new Date(user.accessExpiryDate).toLocaleDateString()}` : 'Indefinite_Access'}
+                        </p>
                     </div>
-                </td>
-                <td className="p-2 flex gap-2">
-                  <button onClick={() => handleUpdateStatus(user.uid, 'active', months)} className="text-green-600" title="Activate">
-                    <Shield className="h-5 w-5" />
-                  </button>
-                  <button onClick={() => handleUpdateStatus(user.uid, 'suspended', months)} className="text-red-600" title="Suspend">
-                    <AlertTriangle className="h-5 w-5" />
-                  </button>
-                  <button onClick={() => fetchUserActivities(user.uid)} className="text-blue-600" title="View Activity">
-                    <Activity className="h-5 w-5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => handleUpdateStatus(user.uid, 'active', months)} 
+                        className="h-8 w-8 flex items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-all active:scale-95 border border-emerald-500/20"
+                        title="Authorize_Access"
+                      >
+                        <Shield size={14} />
+                      </button>
+                      <button 
+                        onClick={() => handleUpdateStatus(user.uid, 'suspended', months)} 
+                        className="h-8 w-8 flex items-center justify-center rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 transition-all active:scale-95 border border-rose-500/20"
+                        title="Revoke_Access"
+                      >
+                        <AlertTriangle size={14} />
+                      </button>
+                      <button 
+                        onClick={() => fetchUserActivities(user.uid)} 
+                        className="h-8 w-8 flex items-center justify-center rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all active:scale-95 border border-blue-500/20"
+                        title="Sync_Activity_Logs"
+                      >
+                        <Activity size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {selectedUserId && (
-        <div className="bg-white rounded-lg border p-6">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">Activity Log for {users.find(u => u.uid === selectedUserId)?.email}</h2>
+        <div className="bg-[#0c0c0e] rounded-2xl border border-slate-800 shadow-2xl flex flex-col h-[400px]">
+            <div className="px-6 py-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-white font-black text-sm uppercase italic tracking-tight flex items-center gap-2">
+                     <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                     Live_Audit_Sync: {users.find(u => u.uid === selectedUserId)?.email}
+                  </h3>
+                </div>
                 <div className="flex gap-2">
-                    <input type="text" placeholder="Filter action..." value={filterAction} onChange={(e) => setFilterAction(e.target.value)} className="border p-2 rounded text-sm"/>
-                    <input type="text" placeholder="Filter resource..." value={filterResource} onChange={(e) => setFilterResource(e.target.value)} className="border p-2 rounded text-sm"/>
+                    <input type="text" placeholder="Filter_action..." value={filterAction} onChange={(e) => setFilterAction(e.target.value)} className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] font-bold text-slate-400 outline-none focus:border-blue-500 transition-all"/>
+                    <input type="text" placeholder="Filter_resource..." value={filterResource} onChange={(e) => setFilterResource(e.target.value)} className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] font-bold text-slate-400 outline-none focus:border-blue-500 transition-all"/>
                 </div>
             </div>
-            <div className="space-y-2">
+            <div className="flex-1 p-6 font-mono text-[11px] leading-relaxed overflow-y-auto space-y-1 text-blue-100/70">
                 {filteredActivities.length > 0 ? (
                     filteredActivities.map(act => (
-                        <div key={act.id} className="border-b pb-2 text-sm">
-                            <span className="font-mono text-gray-500">{new Date(act.timestamp).toLocaleString()}</span> - <strong>{act.action}</strong> on {act.resource} ({act.details})
+                        <div key={act.id} className="hover:bg-blue-500/5 py-1 rounded transition-colors flex items-start gap-3 group">
+                            <span className="text-slate-600 opacity-50 shrink-0">[{new Date(act.timestamp).toLocaleString()}]</span>
+                            <div className="flex-1">
+                              <span className="text-emerald-500 font-black uppercase">{act.action}</span>
+                              <span className="text-slate-500 mx-2">&gt;&gt;</span>
+                              <span className="text-blue-400">{act.resource}</span>
+                              <span className="text-slate-600 ml-2 italic">({act.details})</span>
+                            </div>
                         </div>
                     ))
                 ) : (
-                    <p>No activity found matching filters.</p>
+                    <div className="flex items-center gap-2 text-slate-700 italic">
+                       <Clock size={12} />
+                       Awaiting telemetry data or no records matching filter...
+                    </div>
                 )}
             </div>
         </div>

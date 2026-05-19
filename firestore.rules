@@ -31,12 +31,29 @@ service cloud.firestore {
     }
 
     function isMasterAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MASTER_ADMIN';
+      return isSignedIn() && (
+        request.auth.token.email == 'miratechindustries@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF').upper() == 'MASTER_ADMIN')
+      );
     }
 
     // Default deny
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    // ---------------------------------------------------------
+    // MASTER ADMIN OVERSIGHT
+    // ---------------------------------------------------------
+    match /transactions/{id} {
+      allow read, write: if isMasterAdmin();
+    }
+    match /audit_logs/{id} {
+      allow read, write: if isMasterAdmin();
+    }
+    match /auditLogs/{id} {
+      allow read, write: if isMasterAdmin();
     }
 
     // ---------------------------------------------------------
@@ -50,7 +67,7 @@ service cloud.firestore {
         incoming().keys().hasAll(['uid', 'email']) && 
         incoming().uid == userId;
       allow update: if (isOwner(userId) || isMasterAdmin()) && 
-        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt', 'role']);
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt', 'role', 'status', 'accessExpiryDate']);
     }
 
     // ---------------------------------------------------------
@@ -78,18 +95,36 @@ service cloud.firestore {
       allow read, write: if (isBusinessOwner(businessId) || isMasterAdmin());
     }
     
-    match /businesses/{businessId}/invoices/{invoiceId} {
-      allow read, write: if (isBusinessOwner(businessId) || isMasterAdmin());
+    match /businesses/{businessId}/{allSubcollections=**} {
+      allow read, write: if isBusinessOwner(businessId) || isMasterAdmin();
     }
 
     // ---------------------------------------------------------
-    // AUDIT LOGS
+    // SYSTEM TRACKING
     // ---------------------------------------------------------
     
     match /audit_logs/{logId} {
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      // Audit logs are typically immutable
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || (resource.data.businessId != null && isBusinessOwner(resource.data.businessId)) || isMasterAdmin());
+      allow create: if isSignedIn();
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isMasterAdmin());
+    }
+
+    match /auditLogs/{logId} {
+      allow create: if isSignedIn();
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isMasterAdmin());
+    }
+
+    // ---------------------------------------------------------
+    // SUBSCRIPTIONS & PLANS
+    // ---------------------------------------------------------
+    
+    match /plans/{planId} {
+      allow read: if isSignedIn();
+      allow write: if isMasterAdmin();
+    }
+
+    match /subscriptions/{subId} {
+      allow read: if isSignedIn() && (resource.data.businessId != null && isBusinessOwner(resource.data.businessId) || isMasterAdmin());
+      allow write: if isMasterAdmin();
     }
 
     // ---------------------------------------------------------
@@ -97,7 +132,8 @@ service cloud.firestore {
     // ---------------------------------------------------------
     
     match /notifications/{notificationId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn();
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isMasterAdmin());
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && 
         incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
