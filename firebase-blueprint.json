@@ -1,195 +1,87 @@
 {
   "entities": {
-    "User": {
-      "title": "User",
-      "description": "User profile information",
+    "Company": {
+      "title": "Company Settings",
+      "description": "Information about the registered company including its base64 letterhead logo.",
       "type": "object",
       "properties": {
-        "uid": { "type": "string" },
-        "email": { "type": "string" },
-        "displayName": { "type": "string" },
-        "photoURL": { "type": "string" },
-        "role": { "type": "string", "enum": ["STAFF", "BUSINESS_ADMIN", "MASTER_ADMIN"] },
-        "businessId": { "type": "string", "description": "Associated business identifier" },
-        "status": { "type": "string", "enum": ["active", "suspended"] },
-        "accessExpiryDate": { "type": "number" },
-        "createdAt": { "type": "number" },
-        "updatedAt": { "type": "number" }
+        "ownerId": { "type": "string", "description": "UID of the owner user." },
+        "name": { "type": "string", "description": "Legal company name." },
+        "email": { "type": "string", "description": "Company email address." },
+        "phone": { "type": "string", "description": "Company contact number." },
+        "address": { "type": "string", "description": "Physical company address." },
+        "letterheadLogo": { "type": "string", "description": "Base64 or URL data of the company logo." }
       },
-      "required": ["uid", "email", "role", "businessId", "status"]
+      "required": ["ownerId", "name"]
     },
-    "Business": {
-      "title": "Business",
-      "description": "Business profile and settings",
+    "Quotation": {
+      "title": "Quotation",
+      "description": "Quotation details containing items and client address.",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
         "ownerId": { "type": "string" },
-        "name": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "active", "rejected", "suspended"] },
-        "email": { "type": "string" },
-        "phone": { "type": "string" },
-        "address": { "type": "string" },
-        "currency": { "type": "string" },
-        "createdAt": { "type": "number" },
-        "updatedAt": { "type": "number" }
+        "number": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientEmail": { "type": "string" },
+        "clientAddress": { "type": "string" },
+        "date": { "type": "string" },
+        "validUntil": { "type": "string" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] }
       },
-      "required": ["ownerId", "name", "status"]
-    },
-    "InventoryItem": {
-      "title": "Inventory Item",
-      "description": "Product or service in the inventory",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "businessId": { "type": "string" },
-        "name": { "type": "string" },
-        "description": { "type": "string" },
-        "sku": { "type": "string" },
-        "price": { "type": "number" },
-        "stock": { "type": "number" },
-        "category": { "type": "string" },
-        "createdAt": { "type": "number" },
-        "updatedAt": { "type": "number" }
-      },
-      "required": ["businessId", "name", "price"]
-    },
-    "Customer": {
-      "title": "Customer",
-      "description": "Business customer details",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "businessId": { "type": "string" },
-        "name": { "type": "string" },
-        "email": { "type": "string" },
-        "phone": { "type": "string" },
-        "address": { "type": "string" },
-        "createdAt": { "type": "number" },
-        "updatedAt": { "type": "number" }
-      },
-      "required": ["businessId", "name"]
+      "required": ["ownerId", "number", "clientName", "total", "status"]
     },
     "Invoice": {
       "title": "Invoice",
-      "description": "Sales invoice",
+      "description": "Corporate invoice representing billable items.",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "businessId": { "type": "string" },
-        "customerId": { "type": "string" },
-        "reference": { "type": "string" },
-        "status": { "type": "string", "enum": ["draft", "pending", "paid", "overdue", "cancelled"] },
-        "items": { "type": "array" },
+        "ownerId": { "type": "string" },
+        "number": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientEmail": { "type": "string" },
+        "clientAddress": { "type": "string" },
+        "date": { "type": "string" },
+        "dueDate": { "type": "string" },
         "total": { "type": "number" },
-        "dueDate": { "type": "number" },
-        "createdAt": { "type": "number" },
-        "updatedAt": { "type": "number" }
+        "status": { "type": "string", "enum": ["unpaid", "paid", "overdue"] }
       },
-      "required": ["businessId", "customerId", "reference", "status", "total"]
+      "required": ["ownerId", "number", "clientName", "total", "status"]
     },
-    "AuditLog": {
-      "title": "Audit Log",
-      "description": "System activity log",
+    "Receipt": {
+      "title": "Receipt",
+      "description": "Payment receipt proving invoices were settled.",
       "type": "object",
       "properties": {
-        "businessId": { "type": "string" },
-        "userId": { "type": "string" },
-        "userEmail": { "type": "string" },
-        "action": { "type": "string" },
-        "resource": { "type": "string" },
-        "resourceId": { "type": "string" },
-        "details": { "type": "string" },
-        "timestamp": { "type": "number" }
+        "ownerId": { "type": "string" },
+        "number": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientEmail": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "date": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["completed", "refunded"] }
       },
-      "required": ["userId", "action", "resource"]
-    },
-    "Notification": {
-      "title": "Notification",
-      "description": "User notifications",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "title": { "type": "string" },
-        "message": { "type": "string" },
-        "isRead": { "type": "boolean" },
-        "type": { "type": "string" },
-        "createdAt": { "type": "number" }
-      },
-      "required": ["userId", "title", "message", "isRead"]
-    },
-    "SubscriptionPlan": {
-      "title": "Subscription Plan",
-      "description": "Service tier definition",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "price": { "type": "number" },
-        "interval": { "type": "string", "enum": ["monthly", "yearly"] },
-        "features": { "type": "array" },
-        "maxUsers": { "type": "number" },
-        "maxBusinesses": { "type": "number" },
-        "status": { "type": "string", "enum": ["active", "inactive"] },
-        "createdAt": { "type": "number" },
-        "updatedAt": { "type": "number" }
-      },
-      "required": ["name", "price", "interval", "features"]
-    },
-    "Subscription": {
-      "title": "Subscription",
-      "description": "Business subscription instance",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "businessId": { "type": "string" },
-        "planId": { "type": "string" },
-        "status": { "type": "string", "enum": ["active", "past_due", "cancelled", "expired"] },
-        "startDate": { "type": "number" },
-        "endDate": { "type": "number" },
-        "currentPeriodEnd": { "type": "number" },
-        "cancelAtPeriodEnd": { "type": "boolean" },
-        "updatedAt": { "type": "number" }
-      },
-      "required": ["businessId", "planId", "status", "startDate", "endDate"]
+      "required": ["ownerId", "number", "clientName", "amount", "status"]
     }
   },
   "firestore": {
-    "users/{userId}": {
-      "schema": "User",
-      "description": "User profiles"
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Company registration directory."
     },
-    "businesses/{businessId}": {
-      "schema": "Business",
-      "description": "Business settings"
+    "/companies/{companyId}/quotations/{quotationId}": {
+      "schema": "Quotation",
+      "description": "Quotations sub-directory."
     },
-    "businesses/{businessId}/inventory/{itemId}": {
-      "schema": "InventoryItem",
-      "description": "Product inventory"
-    },
-    "businesses/{businessId}/customers/{customerId}": {
-      "schema": "Customer",
-      "description": "Customer list"
-    },
-    "businesses/{businessId}/invoices/{invoiceId}": {
+    "/companies/{companyId}/invoices/{invoiceId}": {
       "schema": "Invoice",
-      "description": "Invoices"
+      "description": "Invoices sub-directory."
     },
-    "audit_logs/{logId}": {
-      "schema": "AuditLog",
-      "description": "Global activity logs"
-    },
-    "notifications/{notificationId}": {
-      "schema": "Notification",
-      "description": "User notifications"
-    },
-    "plans/{planId}": {
-      "schema": "SubscriptionPlan",
-      "description": "Available subscription plans"
-    },
-    "subscriptions/{subId}": {
-      "schema": "Subscription",
-      "description": "Business subscriptions"
+    "/companies/{companyId}/receipts/{receiptId}": {
+      "schema": "Receipt",
+      "description": "Receipts sub-directory."
     }
   }
 }

@@ -1,8 +1,6 @@
 {
-  "name": "Mira Business Suite",
-  "description": "Enterprise-grade multi-tenant Business Management SaaS platform featuring Inventory, Invoices, Quotations, and Analytics.",
+  "name": "MiraTech Executive Report & Ledger Engine",
+  "description": "Full-stack ledger, invoicing, quotation, and receipt suite with corporate letterhead A4 PDF/CSV exports, and Google Sheets/Drive synchronization.",
   "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

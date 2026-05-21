@@ -1,167 +1,62 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // ---------------------------------------------------------
-    // GLOBAL HELPERS
-    // ---------------------------------------------------------
-    
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-    
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-    
-    function incoming() {
-      return request.resource.data;
-    }
-    
-    function existing() {
-      return resource.data;
-    }
-
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function getBusinessId() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) ? 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', null) : null;
-    }
-    
-    function isBusinessOwner(businessId) {
-      return isSignedIn() && 
-        exists(/databases/$(database)/documents/businesses/$(businessId)) && 
-        get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerId == request.auth.uid;
-    }
-
-    function isBusinessMember(businessId) {
-      return isSignedIn() && (getBusinessId() == businessId || isBusinessOwner(businessId));
-    }
-
-    function isMasterAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == 'miratechindustries@gmail.com' ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF').upper() == 'MASTER_ADMIN')
-      );
-    }
-
-    // Default deny
+    // Default-deny catch-all
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // ---------------------------------------------------------
-    // MASTER ADMIN OVERSIGHT
-    // ---------------------------------------------------------
-    match /transactions/{id} {
-      allow read, write: if isMasterAdmin();
-    }
-    match /audit_logs/{id} {
-      allow read, write: if isMasterAdmin();
-    }
-    match /auditLogs/{id} {
-      allow read, write: if isMasterAdmin();
+    // Common Helpers
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // ---------------------------------------------------------
-    // USERS
-    // ---------------------------------------------------------
-    
-    match /users/{userId} {
-      allow list: if isSignedIn() && isMasterAdmin();
-      allow get: if isOwner(userId) || isMasterAdmin();
-      allow create: if isOwner(userId) && 
-        incoming().keys().hasAll(['uid', 'email', 'businessId']) && 
-        incoming().uid == userId &&
-        (incoming().get('role', 'STAFF') == 'STAFF' ||
-         (incoming().get('role', 'STAFF') == 'BUSINESS_ADMIN' && 
-          incoming().businessId != '' &&
-          exists(/databases/$(database)/documents/businesses/$(incoming().businessId)) &&
-          get(/databases/$(database)/documents/businesses/$(incoming().businessId)).data.adminEmail == incoming().email) ||
-         (incoming().get('role', 'STAFF') == 'MASTER_ADMIN' && incoming().email == 'miratechindustries@gmail.com')
-        ) &&
-        incoming().get('status', 'active') == 'active';
-      allow update: if isMasterAdmin() || (
-        isOwner(userId) && (
-          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']) ||
-          (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt', 'businessId', 'role']) && (
-            (incoming().get('role', 'STAFF') == 'BUSINESS_ADMIN' && 
-             incoming().businessId != '' && 
-             exists(/databases/$(database)/documents/businesses/$(incoming().businessId)) && 
-             get(/databases/$(database)/documents/businesses/$(incoming().businessId)).data.adminEmail == existing().email) ||
-            (incoming().get('role', 'STAFF') == 'MASTER_ADMIN' && existing().email == 'miratechindustries@gmail.com')
-          ))
-        )
-      );
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
     }
 
-    // ---------------------------------------------------------
-    // BUSINESSES
-    // ---------------------------------------------------------
-    
-    match /businesses/{businessId} {
-      allow get: if isSignedIn() && (isBusinessMember(businessId) || isMasterAdmin());
-      allow list: if isSignedIn() && (isMasterAdmin() || resource.data.adminEmail == request.auth.token.email);
-      allow create: if isSignedIn() && (incoming().ownerId == request.auth.uid || isMasterAdmin());
-      allow update: if (isBusinessOwner(businessId) || isMasterAdmin()) &&
-        incoming().ownerId == existing().ownerId &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'phone', 'address', 'currency', 'updatedAt', 'status']);
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // ---------------------------------------------------------
-    // SUB-COLLECTIONS (Scoped to Business)
-    // ---------------------------------------------------------
-    
-    match /businesses/{businessId}/{allSubcollections=**} {
-      allow read, write: if isBusinessMember(businessId) || isMasterAdmin();
+    function incoming() {
+      return request.resource.data;
     }
 
-    // ---------------------------------------------------------
-    // SYSTEM TRACKING
-    // ---------------------------------------------------------
-    
-    match /audit_logs/{logId} {
-      allow create: if isSignedIn();
-      allow read: if isSignedIn() && (resource.data.businessId == getBusinessId() || isMasterAdmin());
+    function existing() {
+      return resource.data;
     }
 
-    match /auditLogs/{logId} {
-      allow create: if isSignedIn();
-      allow read: if isSignedIn() && (resource.data.businessId == getBusinessId() || isMasterAdmin());
-    }
-
-    // ---------------------------------------------------------
-    // SUBSCRIPTIONS & PLANS
-    // ---------------------------------------------------------
-    
-    match /plans/{planId} {
+    // Company registration collection
+    match /companies/{companyId} {
       allow read: if isSignedIn();
-      allow write: if isMasterAdmin();
-    }
+      allow create: if isSignedIn() && isOwner(incoming().ownerId) && isValidId(companyId);
+      allow update: if isSignedIn() && isOwner(existing().ownerId) && isOwner(incoming().ownerId);
+      allow delete: if isSignedIn() && isOwner(existing().ownerId);
 
-    match /subscriptions/{subId} {
-      allow read: if isSignedIn() && (resource.data.businessId != null && isBusinessMember(resource.data.businessId) || isMasterAdmin());
-      allow write: if isMasterAdmin();
-    }
+      // Quotations sub-collection
+      match /quotations/{quotationId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isOwner(incoming().ownerId) && isValidId(quotationId);
+        allow update: if isSignedIn() && isOwner(existing().ownerId) && isOwner(incoming().ownerId);
+        allow delete: if isSignedIn() && isOwner(existing().ownerId);
+      }
 
-    // ---------------------------------------------------------
-    // NOTIFICATIONS
-    // ---------------------------------------------------------
-    
-    match /notifications/{notificationId} {
-      allow create: if isSignedIn();
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isMasterAdmin());
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && 
-        incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Invoices sub-collection
+      match /invoices/{invoiceId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isOwner(incoming().ownerId) && isValidId(invoiceId);
+        allow update: if isSignedIn() && isOwner(existing().ownerId) && isOwner(incoming().ownerId);
+        allow delete: if isSignedIn() && isOwner(existing().ownerId);
+      }
+
+      // Receipts sub-collection
+      match /receipts/{receiptId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isOwner(incoming().ownerId) && isValidId(receiptId);
+        allow update: if isSignedIn() && isOwner(existing().ownerId) && isOwner(incoming().ownerId);
+        allow delete: if isSignedIn() && isOwner(existing().ownerId);
+      }
     }
   }
 }

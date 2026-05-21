@@ -1,24 +1,31 @@
-import './globals.css';
-import { Inter } from 'next/font/google';
-import { cn } from "@/lib/utils";
-import { FirebaseProvider } from '@/components/FirebaseProvider';
-import { Toaster } from 'sonner';
+import type { Metadata } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import "./globals.css";
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
 
-export const metadata = {
-  title: 'Mira Business Suite',
-  description: 'Enterprise-grade multi-tenant Business Management SaaS platform.',
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+});
+
+export const metadata: Metadata = {
+  title: "MiraTech Executive Report & Ledger Engine",
+  description: "Enterprise quotations, invoices, receipts, and Google Sheets/Drive active sync dashboard with letterhead exporting.",
 };
 
-export default function RootLayout({children}: {children: React.ReactNode}) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="en" className={cn("font-sans antialiased", inter.variable)}>
-      <body suppressHydrationWarning>
-        <FirebaseProvider>
-          {children}
-        </FirebaseProvider>
-        <Toaster position="top-right" richColors closeButton />
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+      <body className="antialiased bg-slate-50 text-slate-900 min-h-screen">
+        {children}
       </body>
     </html>
   );
