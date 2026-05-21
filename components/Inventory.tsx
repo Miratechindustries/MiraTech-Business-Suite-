@@ -14,14 +14,64 @@ interface InventoryItem {
   minStock: number;
 }
 
-const CATEGORIES = ["All", "Networking", "Cabling", "Servers", "Power Supply", "Spare Parts"];
+interface CategoryConfig {
+  name: string;
+  color: string;
+  icon: string;
+}
+
+const DEFAULT_CATEGORIES: CategoryConfig[] = [
+  { name: "Networking", color: "bg-blue-100 text-blue-800", icon: "Network" },
+  { name: "Cabling", color: "bg-amber-100 text-amber-800", icon: "Cable" },
+  { name: "Servers", color: "bg-slate-100 text-slate-800", icon: "Server" },
+  { name: "Power Supply", color: "bg-emerald-100 text-emerald-800", icon: "Zap" },
+  { name: "Spare Parts", color: "bg-purple-100 text-purple-800", icon: "Settings" },
+];
+
+// Helper to render icons
+const IconRenderer = ({ name, className }: { name: string; className?: string }) => {
+  const icons: { [key: string]: any } = { Network, Cable: Box, Server, Zap, Settings, Layers }; // Map names to icons
+  const Icon = icons[name] || Box;
+  return <Icon className={className} />;
+};
 
 export default function Inventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [categoryConfigs, setCategoryConfigs] = useState<CategoryConfig[]>(DEFAULT_CATEGORIES);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [isOpen, setIsOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+
+  // ... (rest of the component) ...
+  
+  // Inside return:
+
+  // 1. Filter bar:
+  //    ...
+  //    <button
+  //      key={cat.name}
+  //      onClick={() => setCategoryFilter(cat.name)}
+  //      className={`px-2.5 py-1 border rounded-md text-[10px] sm:text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+  //        categoryFilter === cat.name
+  //          ? `${cat.color} border-current`
+  //          : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+  //      }`}
+  //    >
+  //      <IconRenderer name={cat.icon} className="h-3 w-3 inline mr-1" />
+  //      {cat.name}
+  //    </button>
+
+  // 2. Table row rendering for Category column:
+  //    ...
+  //    const config = categoryConfigs.find(c => c.name === it.category);
+  //    ...
+  //    <td>
+  //      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${config?.color || 'bg-slate-100 text-slate-800'}`}>
+  //        {config && <IconRenderer name={config.icon} className="h-2.5 w-2.5" />}
+  //        {it.category}
+  //      </span>
+  //    </td>
 
   // Form Fields
   const [id, setId] = useState("");
@@ -36,6 +86,9 @@ export default function Inventory() {
     const user = auth.currentUser;
     const cacheKey = user ? `miratech_inventory_${user.uid}` : "miratech_inventory_guest";
     const cached = localStorage.getItem(cacheKey);
+    
+    // Also load/save category configs... (will do later)
+
     if (cached) {
       setItems(JSON.parse(cached));
     } else {
@@ -217,17 +270,18 @@ export default function Inventory() {
         </div>
         
         <div className="flex gap-1 overflow-x-auto w-full sm:w-auto">
-          {CATEGORIES.map((cat) => (
+          {[{ name: "All", color: "bg-slate-100 text-slate-800", icon: "Layers" }, ...categoryConfigs].map((cat) => (
             <button
-              key={cat}
-              onClick={() => setCategoryFilter(cat)}
+              key={cat.name}
+              onClick={() => setCategoryFilter(cat.name)}
               className={`px-2.5 py-1 border rounded-md text-[10px] sm:text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                categoryFilter === cat
-                  ? "bg-blue-50 border-blue-200 text-blue-700"
+                categoryFilter === cat.name
+                  ? `${cat.color} border-current`
                   : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
               }`}
             >
-              {cat}
+              <IconRenderer name={cat.icon} className="h-3 w-3 inline mr-1" />
+              {cat.name}
             </button>
           ))}
         </div>
@@ -282,7 +336,17 @@ export default function Inventory() {
                     <td className="font-mono font-bold text-slate-900">{it.id}</td>
                     <td className="font-mono text-xs text-blue-800 font-bold uppercase">{it.sku}</td>
                     <td className="font-semibold text-slate-800">{it.name}</td>
-                    <td>{it.category}</td>
+                    <td>
+                      {(() => {
+                        const config = categoryConfigs.find(c => c.name === it.category);
+                        return (
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${config?.color || 'bg-slate-100 text-slate-800'}`}>
+                            <IconRenderer name={config?.icon || 'Box'} className="h-2.5 w-2.5" />
+                            {it.category}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="font-mono font-bold">${it.price.toFixed(2)}</td>
                     <td>{statusBadge}</td>
                     <td className="text-right space-x-1.5 py-1">
@@ -366,9 +430,9 @@ export default function Inventory() {
                     onChange={(e) => setCategory(e.target.value)}
                     className="w-full"
                   >
-                    {CATEGORIES.filter((c) => c !== "All").map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
+                    {categoryConfigs.map((cat) => (
+                      <option key={cat.name} value={cat.name}>
+                        {cat.name}
                       </option>
                     ))}
                   </select>

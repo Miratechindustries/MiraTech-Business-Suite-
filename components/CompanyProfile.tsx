@@ -12,6 +12,10 @@ interface CompanyData {
   phone: string;
   address: string;
   letterheadLogo: string;
+  logo: string;
+  favicon: string;
+  primaryColor: string;
+  secondaryColor: string;
 }
 
 interface CompanyProfileProps {
@@ -29,6 +33,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [letterheadLogo, setLetterheadLogo] = useState("");
+  const [logo, setLogo] = useState("");
+  const [favicon, setFavicon] = useState("");
+  const [primaryColor, setPrimaryColor] = useState("#0F172A");
+  const [secondaryColor, setSecondaryColor] = useState("#3B82F6");
 
   useEffect(() => {
     async function fetchCompany() {
@@ -50,6 +58,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
           setPhone(data.phone || "");
           setAddress(data.address || "");
           setLetterheadLogo(data.letterheadLogo || "");
+          setLogo(data.logo || "");
+          setFavicon(data.favicon || "");
+          setPrimaryColor(data.primaryColor || "#0F172A");
+          setSecondaryColor(data.secondaryColor || "#3B82F6");
           localStorage.setItem(`miratech_offline_company_${user.uid}`, JSON.stringify(data));
           if (onCompanyLoaded) onCompanyLoaded(data);
         } else {
@@ -61,6 +73,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             setPhone(data.phone || "");
             setAddress(data.address || "");
             setLetterheadLogo(data.letterheadLogo || "");
+            setLogo(data.logo || "");
+            setFavicon(data.favicon || "");
+            setPrimaryColor(data.primaryColor || "#0F172A");
+            setSecondaryColor(data.secondaryColor || "#3B82F6");
             if (onCompanyLoaded) onCompanyLoaded(data);
           } else {
             if (onCompanyLoaded) onCompanyLoaded(null);
@@ -77,6 +93,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             setPhone(data.phone || "");
             setAddress(data.address || "");
             setLetterheadLogo(data.letterheadLogo || "");
+            setLogo(data.logo || "");
+            setFavicon(data.favicon || "");
+            setPrimaryColor(data.primaryColor || "#0F172A");
+            setSecondaryColor(data.secondaryColor || "#3B82F6");
             if (onCompanyLoaded) onCompanyLoaded(data);
           } else {
             if (onCompanyLoaded) onCompanyLoaded(null);
@@ -92,7 +112,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     fetchCompany();
   }, [onCompanyLoaded]);
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLetterheadLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -104,6 +124,38 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     const reader = new FileReader();
     reader.onloadend = () => {
       setLetterheadLogo(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 800000) {
+      setError("Image budget error: Please upload a lighter logo (under 800KB) to ensure quick synchronizations.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setLogo(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFaviconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 200000) {
+        setError("Image budget error: Favicon must be smaller (under 200KB).");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFavicon(reader.result as string);
     };
     reader.readAsDataURL(file);
   };
@@ -124,6 +176,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
       phone,
       address,
       letterheadLogo,
+      logo,
+      favicon,
+      primaryColor,
+      secondaryColor,
     };
 
     const companyDocPath = `companies/${user.uid}`;
@@ -276,7 +332,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                       <input
                         type="file"
                         accept="image/*"
-                        onChange={handleLogoUpload}
+                        onChange={handleLetterheadLogoUpload}
                         className="hidden"
                       />
                     </label>
@@ -296,13 +352,35 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handleLogoUpload}
+                      onChange={handleLetterheadLogoUpload}
                       className="hidden"
                     />
                   </label>
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Company Logo</label>
+                  <input type="file" accept="image/*" onChange={handleLogoUpload} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100" />
+              </div>
+              <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Favicon</label>
+                  <input type="file" accept="image/*" onChange={handleFaviconUpload} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100" />
+              </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Primary Color</label>
+                  <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="w-full h-10 border border-slate-200 rounded-lg" />
+              </div>
+              <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Secondary Color</label>
+                  <input type="color" value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} className="w-full h-10 border border-slate-200 rounded-lg" />
+              </div>
           </div>
         </div>
 
