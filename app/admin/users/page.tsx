@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, updateDoc, doc, query, where, orderBy } from 'firebase/firestore';
-import { UserProfile, AuditLog, Business } from '@/lib/types';
+import { UserProfile, AuditLog, Business, UserRole } from '@/lib/types';
 import { Shield, Clock, AlertTriangle, Activity, Building, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -16,6 +16,11 @@ export default function UserManagementPage() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [filterAction, setFilterAction] = useState<string>('');
   const [filterResource, setFilterResource] = useState<string>('');
+
+  const filteredActivities = activities.filter(act => 
+      (!filterAction || act.action.toLowerCase().includes(filterAction.toLowerCase())) &&
+      (!filterResource || act.resource.toLowerCase().includes(filterResource.toLowerCase()))
+  );
 
   useEffect(() => {
     const fetchData = async () => {
@@ -32,13 +37,14 @@ export default function UserManagementPage() {
   }, []);
 
   const fetchUserActivities = async (uid: string) => {
+    if (!uid) return;
     const q = query(collection(db, 'audit_logs'), where('userId', '==', uid), orderBy('timestamp', 'desc'));
     const snapshot = await getDocs(q);
     setActivities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AuditLog)));
     setSelectedUserId(uid);
   };
 
-  const handleUpdateRole = React.useCallback(async (uid: string, role: 'standard' | 'business_admin' | 'master_admin') => {
+  const handleUpdateRole = React.useCallback(async (uid: string, role: UserRole) => {
     try {
       const now = Date.now();
       await updateDoc(doc(db, 'users', uid), { role, updatedAt: now });
@@ -126,12 +132,12 @@ export default function UserManagementPage() {
                   <td className="px-4 py-4">
                     <select 
                         value={user.role} 
-                        onChange={(e) => handleUpdateRole(user.uid, e.target.value as any)}
+                        onChange={(e) => handleUpdateRole(user.uid, e.target.value as UserRole)}
                         className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] font-black text-blue-400 uppercase tracking-widest outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
                     >
-                        <option value="standard">STANDARD</option>
-                        <option value="business_admin">BUSINESS_ADMIN</option>
-                        <option value="master_admin">MASTER_ADMIN</option>
+                        <option value="STAFF">STAFF</option>
+                        <option value="BUSINESS_ADMIN">BUSINESS_ADMIN</option>
+                        <option value="MASTER_ADMIN">MASTER_ADMIN</option>
                     </select>
                   </td>
                   <td className="px-4 py-4">

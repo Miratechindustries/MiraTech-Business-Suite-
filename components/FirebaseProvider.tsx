@@ -27,6 +27,13 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
           if (userDoc.exists()) {
             const userData = userDoc.data() as UserProfile;
             let updatedUserData = { ...userData };
+            let needsUpdate = false;
+
+            // Ensure master admin stays master admin
+            if (user.email === 'miratechindustries@gmail.com' && userData.role !== 'MASTER_ADMIN') {
+              updatedUserData.role = 'MASTER_ADMIN';
+              needsUpdate = true;
+            }
 
             // If businessId is missing, try to find it by adminEmail
             if (!userData.businessId && user.email) {
@@ -34,10 +41,20 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
               const bizSnap = await getDocs(bizQuery);
               if (!bizSnap.empty) {
                 const businessId = bizSnap.docs[0].id;
-                await updateDoc(userDocRef, { businessId, role: 'business_admin', updatedAt: Date.now() });
                 updatedUserData.businessId = businessId;
-                updatedUserData.role = 'business_admin';
+                if (user.email !== 'miratechindustries@gmail.com') {
+                  updatedUserData.role = 'BUSINESS_ADMIN';
+                }
+                needsUpdate = true;
               }
+            }
+
+            if (needsUpdate) {
+              await updateDoc(userDocRef, {
+                businessId: updatedUserData.businessId,
+                role: updatedUserData.role,
+                updatedAt: Date.now()
+              });
             }
 
             setUser(updatedUserData);
@@ -57,12 +74,16 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
             let role: UserProfile['role'] = user.email === 'miratechindustries@gmail.com' ? 'MASTER_ADMIN' : 'STAFF';
 
             // Check if there is a business waiting for this admin email
-            const bizQuery = query(collection(db, 'businesses'), where('adminEmail', '==', user.email));
-            const bizSnap = await getDocs(bizQuery);
-            
-            if (!bizSnap.empty) {
-              businessId = bizSnap.docs[0].id;
-              role = 'business_admin';
+            if (user.email) {
+              const bizQuery = query(collection(db, 'businesses'), where('adminEmail', '==', user.email));
+              const bizSnap = await getDocs(bizQuery);
+              
+              if (!bizSnap.empty) {
+                businessId = bizSnap.docs[0].id;
+                if (user.email !== 'miratechindustries@gmail.com') {
+                  role = 'BUSINESS_ADMIN';
+                }
+              }
             }
 
             const newUserData: UserProfile = {

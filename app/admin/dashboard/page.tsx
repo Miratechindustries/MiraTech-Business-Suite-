@@ -43,7 +43,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 export default function MasterAdminDashboardPage() {
   const { user } = useAppStore();
-  const isAuthorized = user?.role === 'MASTER_ADMIN' || user?.role === 'master_admin';
+  const isAuthorized = user?.role === 'MASTER_ADMIN';
   
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);

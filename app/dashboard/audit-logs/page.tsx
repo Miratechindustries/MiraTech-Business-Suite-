@@ -21,7 +21,10 @@ export default function AuditLogsPage() {
 
   useEffect(() => {
     const fetchLogs = async () => {
-      if (!business) return;
+      if (!business || !business.id) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       
       try {

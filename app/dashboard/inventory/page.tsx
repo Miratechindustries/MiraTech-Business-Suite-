@@ -15,7 +15,10 @@ export default function InventoryPage() {
   const [isModalOpen, setModalOpen] = useState(false);
 
   const fetchProducts = useCallback(async () => {
-    if (!business) return;
+    if (!business || !business.id) {
+      setLoading(false);
+      return;
+    }
     const q = query(collection(db, 'businesses', business.id, 'inventory'));
     const snap = await getDocs(q);
     setProducts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
@@ -79,7 +82,7 @@ export default function InventoryPage() {
         </div>
       )}
       
-      {business && (
+      {business && business.id && (
         <AddProductModal 
           isOpen={isModalOpen} 
           onClose={() => setModalOpen(false)} 

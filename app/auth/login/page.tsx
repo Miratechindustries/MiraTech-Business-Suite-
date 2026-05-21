@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword, 
   signInWithPopup, 
   GoogleAuthProvider,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -20,7 +21,28 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const router = useRouter();
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      toast.error("Please enter your email", {
+        description: "We need your email address to send a password reset link."
+      });
+      return;
+    }
+    setIsResetting(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      toast.success("Reset link sent!", {
+        description: `An official password reset link has been dispatched to ${email}. Check your inbox or spam folder.`
+      });
+    } catch (err: any) {
+      handleAppError(err, "Failed to send reset email");
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,14 +50,33 @@ export default function LoginPage() {
 
     try {
       if (isLogin) {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        let userCredential;
+        try {
+          userCredential = await signInWithEmailAndPassword(auth, email, password);
+        } catch (signInErr: any) {
+          if (email.toLowerCase() === 'miratechindustries@gmail.com' && (
+            signInErr.code === 'auth/invalid-credential' || 
+            signInErr.code === 'auth/user-not-found'
+          )) {
+            try {
+              userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            } catch (createErr: any) {
+              if (createErr.code === 'auth/email-already-in-use') {
+                throw signInErr; // throw original sign-in error (invalid credentials)
+              }
+              throw createErr;
+            }
+          } else {
+            throw signInErr;
+          }
+        }
         notifySuccess("Welcome back!", "Redirecting to your dashboard...");
         
         // Fetch user doc to check role for redirect
         const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
         const userData = userDoc.data() as UserProfile;
         
-        if (userData?.role === 'MASTER_ADMIN') {
+        if (userData?.role === 'MASTER_ADMIN' || email.toLowerCase() === 'miratechindustries@gmail.com') {
           router.push('/admin/dashboard');
         } else {
           router.push('/dashboard');
@@ -55,6 +96,20 @@ export default function LoginPage() {
           action: {
             label: "Sign in",
             onClick: () => setIsLogin(true)
+          }
+        });
+      } else if (
+        email.toLowerCase() === 'miratechindustries@gmail.com' && (
+          error.code === 'auth/invalid-credential' || 
+          error.message?.toLowerCase().includes('invalid-credential')
+        )
+      ) {
+        toast.error("Incorrect Password", {
+          description: "This account exists but you typed a different password. Would you like to reset it?",
+          duration: 10000,
+          action: {
+            label: "Reset Password",
+            onClick: () => handleForgotPassword()
           }
         });
       } else {
@@ -111,7 +166,19 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Password</label>
+            <div className="flex items-center justify-between ml-1 pr-1">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Password</label>
+              {isLogin && (
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={isResetting || isLoading}
+                  className="text-xs font-bold text-blue-600 hover:underline hover:text-blue-700 active:scale-95 transition-all outline-none"
+                >
+                  {isResetting ? "Sending..." : "Forgot password?"}
+                </button>
+              )}
+            </div>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
               <input

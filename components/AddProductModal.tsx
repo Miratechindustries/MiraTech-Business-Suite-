@@ -29,6 +29,10 @@ export default function AddProductModal({ isOpen, onClose, businessId, onProduct
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!businessId) {
+      toast.error('Business ID is missing');
+      return;
+    }
     setLoading(true);
     try {
       await addDoc(collection(db, 'businesses', businessId, 'inventory'), {

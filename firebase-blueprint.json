@@ -9,7 +9,7 @@
         "email": { "type": "string" },
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
-        "role": { "type": "string", "enum": ["standard", "business_admin", "master_admin"] },
+        "role": { "type": "string", "enum": ["STAFF", "BUSINESS_ADMIN", "MASTER_ADMIN"] },
         "businessId": { "type": "string", "description": "Associated business identifier" },
         "status": { "type": "string", "enum": ["active", "suspended"] },
         "accessExpiryDate": { "type": "number" },

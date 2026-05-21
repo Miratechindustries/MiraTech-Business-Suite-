@@ -49,6 +49,9 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
  */
 export async function assignSubscriptionToBusiness(businessId: string, planId: string, durationMonths: number) {
   const path = 'subscriptions';
+  if (!businessId) {
+    throw new Error('businessId is required to assign subscription');
+  }
   try {
     const startDate = Date.now();
     const endDate = new Date(startDate);

@@ -33,6 +33,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async (businessId: string) => {
+      if (!businessId) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
 
       // Fetch stats
@@ -63,7 +67,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (isLoading) return;
-    if (!business) {
+    if (!business || !business.id) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;

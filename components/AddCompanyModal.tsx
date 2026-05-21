@@ -108,17 +108,19 @@ export default function AddCompanyModal({ isOpen, onClose, onCompanyAdded }: Add
       await updateDoc(docRef, updates);
 
       // Link existing user if they are already registered
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('email', '==', formData.adminEmail));
-      const userSnap = await getDocs(q);
-      
-      if (!userSnap.empty) {
-        const uDoc = userSnap.docs[0];
-        await updateDoc(uDoc.ref, {
-          businessId: docRef.id,
-          role: 'business_admin',
-          updatedAt: Date.now()
-        });
+      if (formData.adminEmail) {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('email', '==', formData.adminEmail));
+        const userSnap = await getDocs(q);
+        
+        if (!userSnap.empty) {
+          const uDoc = userSnap.docs[0];
+          await updateDoc(uDoc.ref, {
+            businessId: docRef.id,
+            role: 'BUSINESS_ADMIN',
+            updatedAt: Date.now()
+          });
+        }
       }
 
       toast.success('Company added successfully');

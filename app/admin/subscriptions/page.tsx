@@ -35,7 +35,7 @@ import { assignSubscriptionToBusiness } from '@/lib/actions/subscriptions';
 
 export default function SubscriptionManagementPage() {
   const { user } = useAppStore();
-  const isAuthorized = user?.role === 'MASTER_ADMIN' || user?.role === 'master_admin';
+  const isAuthorized = user?.role === 'MASTER_ADMIN';
 
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);

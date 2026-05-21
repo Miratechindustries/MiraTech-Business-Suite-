@@ -10,14 +10,24 @@ export const handleAppError = (error: any, title?: string) => {
 
   let message = 'An unexpected error occurred. Please try again.';
   
-  if (error?.code === 'auth/invalid-credential') {
-    message = 'Authentication failed. Please verify your credentials.';
+  const errorCode = error?.code || '';
+  const errorMessage = (error?.message || '').toLowerCase();
+  
+  if (errorCode === 'auth/invalid-credential' || errorMessage.includes('invalid-credential') || errorMessage.includes('auth/invalid-credential')) {
+    message = 'Authentication failed. Please verify your email and password.';
   } else if (
-    error?.code === 'permission-denied' || 
-    error?.message?.toLowerCase().includes('permission-denied') || 
-    error?.message?.toLowerCase().includes('insufficient permissions')
+    errorCode === 'auth/network-request-failed' || 
+    errorMessage.includes('network-request-failed') || 
+    errorMessage.includes('network_request_failed')
   ) {
-    message = 'Security protocol prevents this action. Please check your access level.';
+    message = 'Network connection failed. Please ensure you are connected to the internet and not blocking identity endpoints.';
+  } else if (
+    errorCode === 'permission-denied' || 
+    errorCode === 'firestore/permission-denied' ||
+    errorMessage.includes('permission-denied') || 
+    errorMessage.includes('insufficient permissions')
+  ) {
+    message = 'Access Denied: You do not have the required permissions for this action.';
   } else if (error instanceof Error) {
     message = error.message;
   } else if (typeof error === 'string') {

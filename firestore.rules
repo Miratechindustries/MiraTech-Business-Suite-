@@ -80,9 +80,27 @@ service cloud.firestore {
       allow get: if isOwner(userId) || isMasterAdmin();
       allow create: if isOwner(userId) && 
         incoming().keys().hasAll(['uid', 'email', 'businessId']) && 
-        incoming().uid == userId;
-      allow update: if (isOwner(userId) || isMasterAdmin()) && 
-        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt', 'role', 'status', 'accessExpiryDate', 'businessId']);
+        incoming().uid == userId &&
+        (incoming().get('role', 'STAFF') == 'STAFF' ||
+         (incoming().get('role', 'STAFF') == 'BUSINESS_ADMIN' && 
+          incoming().businessId != '' &&
+          exists(/databases/$(database)/documents/businesses/$(incoming().businessId)) &&
+          get(/databases/$(database)/documents/businesses/$(incoming().businessId)).data.adminEmail == incoming().email) ||
+         (incoming().get('role', 'STAFF') == 'MASTER_ADMIN' && incoming().email == 'miratechindustries@gmail.com')
+        ) &&
+        incoming().get('status', 'active') == 'active';
+      allow update: if isMasterAdmin() || (
+        isOwner(userId) && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']) ||
+          (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt', 'businessId', 'role']) && (
+            (incoming().get('role', 'STAFF') == 'BUSINESS_ADMIN' && 
+             incoming().businessId != '' && 
+             exists(/databases/$(database)/documents/businesses/$(incoming().businessId)) && 
+             get(/databases/$(database)/documents/businesses/$(incoming().businessId)).data.adminEmail == existing().email) ||
+            (incoming().get('role', 'STAFF') == 'MASTER_ADMIN' && existing().email == 'miratechindustries@gmail.com')
+          ))
+        )
+      );
     }
 
     // ---------------------------------------------------------
