@@ -7,6 +7,7 @@ import { syncToGoogleSheets, uploadToGoogleDrive, LedgerMetric } from "../lib/go
 import { BarChart3, TrendingUp, DollarSign, Wallet2, FileSpreadsheet, Download, CloudLightning, Loader2, CheckSquare, ShieldCheck, AlertCircle } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import LoadingSkeleton from "./LoadingSkeleton";
 
 interface Invoice {
   total: number;
@@ -227,8 +228,8 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      <div className="py-4">
+        <LoadingSkeleton />
       </div>
     );
   }

@@ -30,7 +30,7 @@ service cloud.firestore {
     // Company registration collection
     match /companies/{companyId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isOwner(incoming().ownerId) && isValidId(companyId);
+      allow create: if isSignedIn();
       allow update: if isSignedIn() && isOwner(existing().ownerId) && isOwner(incoming().ownerId);
       allow delete: if isSignedIn() && isOwner(existing().ownerId);
 
@@ -57,6 +57,13 @@ service cloud.firestore {
         allow update: if isSignedIn() && isOwner(existing().ownerId) && isOwner(incoming().ownerId);
         allow delete: if isSignedIn() && isOwner(existing().ownerId);
       }
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
     }
   }
 }

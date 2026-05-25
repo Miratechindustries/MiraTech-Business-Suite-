@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { collection, doc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc } from "firebase/firestore";
 import { db, auth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { uploadToDrive } from "../lib/drive";
 import { FileCheck, Search, Trash, Download, Loader2, Eye, X } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -18,6 +19,7 @@ interface Receipt {
   date: string;
   amount: number;
   status: "completed" | "refunded";
+  driveFileId?: string;
 }
 
 interface CompanyDetails {
@@ -133,9 +135,24 @@ export default function Receipts() {
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
       pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-      pdf.save(`Receipt_${previewReceipt.number}.pdf`);
+      
+      const pdfBlob = pdf.output('blob');
+      const fileName = `Receipt_${previewReceipt.number}.pdf`;
+      const fileId = await uploadToDrive(pdfBlob, fileName);
+      
+      const user = auth.currentUser;
+      if (user && previewReceipt.id) {
+          await updateDoc(doc(db, "companies", user.uid, "receipts", previewReceipt.id), {
+              driveFileId: fileId
+          });
+          fetchReceiptsAndCompany();
+          alert("Receipt backed up to Google Drive successfully!");
+      }
+
+      pdf.save(fileName);
     } catch (err) {
-      console.error("PDF printing failed:", err);
+      console.error("PDF printing/upload failed:", err);
+      alert("PDF generation or upload failed.");
     }
   };
 

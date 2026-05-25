@@ -3,9 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc } from "firebase/firestore";
 import { db, auth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { uploadToDrive } from "../lib/drive";
 import { FileText, Plus, Search, Trash, Edit, Download, Loader2, Eye, X, Check, CheckCircle2 } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import LoadingSkeleton from "./LoadingSkeleton";
 
 interface Item {
   description: string;
@@ -25,6 +27,7 @@ interface Quotation {
   items: Item[];
   total: number;
   status: "pending" | "accepted" | "declined";
+  driveFileId?: string;
 }
 
 interface CompanyDetails {
@@ -299,9 +302,25 @@ export default function Quotations() {
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
       pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-      pdf.save(`Quotation_${previewQuotation.number}.pdf`);
+      
+      const pdfBlob = pdf.output('blob');
+      const fileName = `Quotation_${previewQuotation.number}.pdf`;
+      const fileId = await uploadToDrive(pdfBlob, fileName);
+      
+      const user = auth.currentUser;
+      if (user && previewQuotation.id) {
+          await updateDoc(doc(db, "companies", user.uid, "quotations", previewQuotation.id), {
+              driveFileId: fileId
+          });
+          // Optimistically update local state if needed - skipping for now for simplicity as fetchQuotationsAndCompany re-fetches
+          fetchQuotationsAndCompany();
+          alert("Quotation backed up to Google Drive successfully!");
+      }
+
+      pdf.save(fileName);
     } catch (err) {
-      console.error("PDF printing failed:", err);
+      console.error("PDF printing/upload failed:", err);
+      alert("PDF generation or upload failed.");
     }
   };
 
@@ -366,8 +385,8 @@ export default function Quotations() {
       </div>
 
       {loading ? (
-        <div className="flex h-48 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-550" />
+        <div className="py-4">
+          <LoadingSkeleton />
         </div>
       ) : filteredQuots.length === 0 ? (
         <div className="border border-dashed border-slate-250 rounded-lg p-6 text-center text-slate-400">

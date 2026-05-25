@@ -43,6 +43,7 @@ import Transactions from "./Transactions";
 import ReportsAnalytics from "./ReportsAnalytics";
 import AuditLogs from "./AuditLogs";
 import MasterAdminDashboard from "./MasterAdminDashboard";
+import MasterAdminLayout from "./MasterAdminLayout";
 
 interface CompanyData {
   ownerId: string;
@@ -83,10 +84,14 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
               ? userDoc.data()
               : { id: currentUser.uid, email: currentUser.email || '', role: 'STAFF', companyId: '' };
             
-            if (currentUser.email === 'miratechindustries@gmail.com') {
+            if (currentUser.email?.toLowerCase() === 'miratechindustries@gmail.com') {
               userData = { ...userData, role: 'MASTER_ADMIN' };
+              console.log("DEBUG: Email matched, role updated to MASTER_ADMIN:", userData);
+            } else {
+              console.log("DEBUG: Email did not match, role remains:", userData.role);
             }
             setCurrentUser(userData);
+            console.log("DEBUG: setCurrentUser called with:", userData);
           } catch (err) {
             handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`);
             // Fallback user data in case of error
@@ -241,6 +246,11 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     );
   }
 
+  if (currentUser?.role === 'MASTER_ADMIN' || user?.email?.toLowerCase() === 'miratechindustries@gmail.com') {
+    return <MasterAdminLayout />;
+  }
+
+  console.log("DEBUG: Rendering Business Dashboard, currentUser:", currentUser);
   return (
     <div className="flex min-h-screen bg-[#F8FAFC] text-slate-800">
       {/* Sidebar Navigation */}

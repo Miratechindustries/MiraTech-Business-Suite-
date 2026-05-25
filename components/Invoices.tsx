@@ -3,9 +3,12 @@
 import { useState, useEffect, useRef } from "react";
 import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc } from "firebase/firestore";
 import { db, auth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
-import { FileText, Plus, Search, Trash, Edit, Download, Loader2, Eye, X, Check, Wallet } from "lucide-react";
+import { uploadToDrive } from "../lib/drive";
+import { FileText, Plus, Search, Trash, Edit, Download, Loader2, Eye, X, Check, Wallet, FileSpreadsheet } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import * as XLSX from "xlsx";
+import LoadingSkeleton from "./LoadingSkeleton";
 
 interface Item {
   description: string;
@@ -25,6 +28,7 @@ interface Invoice {
   items: Item[];
   total: number;
   status: "unpaid" | "paid" | "overdue";
+  driveFileId?: string;
 }
 
 interface CompanyDetails {
@@ -320,6 +324,27 @@ export default function Invoices() {
     }
   };
 
+  const exportInvoicesToExcel = () => {
+    const data = invoices.flatMap(inv => 
+      inv.items.map(item => ({
+        "Invoice No.": inv.number,
+        "Date": inv.date,
+        "Customer": inv.clientName,
+        "Item": item.description,
+        "Quantity": item.quantity,
+        "Unit Price": item.price,
+        "Line Total": item.quantity * item.price,
+        "Invoice Total": inv.total,
+        "Status": inv.status
+      }))
+    );
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Invoices");
+    XLSX.writeFile(workbook, "All_Invoices.xlsx");
+  };
+
   const handleExportPDF = async () => {
     if (!pdfAreaRef.current || !previewInvoice) return;
 
@@ -328,13 +353,28 @@ export default function Invoices() {
       const canvas = await html2canvas(element, { scale: 2, useCORS: true });
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
-      const imgWidth = 210;
+      const imgWidth = 210; // A4 dimensions
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
       pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-      pdf.save(`Invoice_${previewInvoice.number}.pdf`);
+      
+      const pdfBlob = pdf.output('blob');
+      const fileName = `Invoice_${previewInvoice.number}.pdf`;
+      const fileId = await uploadToDrive(pdfBlob, fileName);
+      
+      const user = auth.currentUser;
+      if (user && previewInvoice.id) {
+          await updateDoc(doc(db, "companies", user.uid, "invoices", previewInvoice.id), {
+              driveFileId: fileId
+          });
+          fetchInvoicesAndCompany();
+          alert("Invoice backed up to Google Drive successfully!");
+      }
+
+      pdf.save(fileName);
     } catch (err) {
-      console.error("PDF printing failed:", err);
+      console.error("PDF printing/upload failed:", err);
+      alert("PDF generation or upload failed.");
     }
   };
 
@@ -358,12 +398,20 @@ export default function Invoices() {
             Please fill in your <strong>Company Profile</strong> tab before creating documents to populate the corporate letterhead details!
           </div>
         ) : (
-          <button
-            onClick={() => setIsOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold cursor-pointer shadow-3xs transition"
-          >
-            <Plus className="h-3.5 w-3.5" /> Create Invoice
-          </button>
+          <div className="flex gap-2">
+            <button
+               onClick={exportInvoicesToExcel}
+               className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-xs font-bold cursor-pointer shadow-3xs transition"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" /> Export Excel
+            </button>
+            <button
+              onClick={() => setIsOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold cursor-pointer shadow-3xs transition"
+            >
+              <Plus className="h-3.5 w-3.5" /> Create Invoice
+            </button>
+          </div>
         )}
       </div>
 
@@ -399,8 +447,8 @@ export default function Invoices() {
       </div>
 
       {loading ? (
-        <div className="flex h-48 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-550" />
+        <div className="py-4">
+          <LoadingSkeleton />
         </div>
       ) : filteredInvoices.length === 0 ? (
         <div className="border border-dashed border-slate-250 rounded-lg p-6 text-center text-slate-400">

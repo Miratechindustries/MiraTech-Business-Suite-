@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { BarChart3, TrendingUp, DollarSign, PieChart, Percent, ArrowUpRight, ArrowDownLeft, FileCheck, Landmark, Printer, Download } from "lucide-react";
 import { auth } from "../lib/firebase";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface MetricRow {
   quarter: string;
@@ -15,12 +16,17 @@ interface MetricRow {
 export default function ReportsAnalytics() {
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
   const [selectedYear, setSelectedYear] = useState("2026");
+  const [chartData, setChartData] = useState<{ month: string; revenue: number }[]>([]);
 
   useEffect(() => {
     // Dynamically retrieve values or seed corporate metrics
     const user = auth.currentUser;
     const cacheKey = user ? `miratech_financials_${user.uid}` : "miratech_financials_guest";
+    const txKey = user ? `miratech_transactions_${user.uid}` : "miratech_transactions_guest";
+    
     const cached = localStorage.getItem(cacheKey);
+    const txCache = JSON.parse(localStorage.getItem(txKey) || "[]");
+
     if (cached) {
       setMetrics(JSON.parse(cached));
     } else {
@@ -33,6 +39,19 @@ export default function ReportsAnalytics() {
       setMetrics(initial);
       localStorage.setItem(cacheKey, JSON.stringify(initial));
     }
+
+    // Process Transaction Data for Chart
+    const monthlyData: Record<string, number> = {};
+    txCache.forEach((t: any) => {
+        if (t.type === 'Inflow') {
+            const month = t.date.substring(0, 7); // YYYY-MM
+            monthlyData[month] = (monthlyData[month] || 0) + t.amount;
+        }
+    });
+    
+    const sortedMonths = Object.keys(monthlyData).sort();
+    setChartData(sortedMonths.map(month => ({ month, revenue: monthlyData[month] })));
+    
   }, []);
 
   const totalBillings = metrics.reduce((sum, r) => sum + r.billings, 0);
@@ -125,72 +144,17 @@ export default function ReportsAnalytics() {
             </div>
           </div>
 
-          {/* Inline Pure-HTML SVG Charting Board */}
-          <div className="relative pt-2">
-            <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full overflow-visible">
-              {/* Grid Lines */}
-              {[0, 0.25, 0.5, 0.75, 1].map((p, idx) => {
-                const y = chartHeight - (p * chartHeight);
-                return (
-                  <g key={idx}>
-                    <line x1="0" y1={y} x2={chartWidth} y2={y} stroke="#F1F5F9" strokeWidth="1" strokeDasharray="3,3" />
-                    <text x="-5" y={y + 3} className="text-[7.5px] font-mono fill-slate-400 text-right" textAnchor="end">
-                      {Math.round((p * maxVal) / 1000)}k
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* Data Blocks */}
-              {metrics.map((m, idx) => {
-                // Compute bar positioning
-                const colWidth = 50;
-                const spacing = 85;
-                const xBase = 30 + (idx * spacing);
-
-                // Compute heights
-                const billHeight = (m.billings / maxVal) * chartHeight;
-                const invHeight = (m.invoices / maxVal) * chartHeight;
-                const expHeight = (m.expenses / maxVal) * chartHeight;
-
-                return (
-                  <g key={m.quarter}>
-                    {/* Billings Bar */}
-                    <rect
-                      x={xBase}
-                      y={chartHeight - billHeight}
-                      width="10"
-                      height={billHeight}
-                      fill="#3B82F6"
-                      rx="2"
-                      className="transition duration-300 hover:fill-blue-600"
-                    />
-                    {/* Invoices Bar */}
-                    <rect
-                      x={xBase + 12}
-                      y={chartHeight - invHeight}
-                      width="10"
-                      height={invHeight}
-                      fill="#10B981"
-                      rx="2"
-                    />
-                    {/* Expenses Bar */}
-                    <rect
-                      x={xBase + 24}
-                      y={chartHeight - expHeight}
-                      width="10"
-                      height={expHeight}
-                      fill="#FB7185"
-                      rx="2"
-                    />
-                    {/* Label */}
-                    <text x={xBase + 17} y={chartHeight + 11} className="text-[8px] font-bold fill-slate-500" textAnchor="middle">
-                      {m.quarter.split(" - ")[0]}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
+          {/* Recharts Monthly Revenue Trend */}
+          <div className="relative pt-2 h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value / 1000}k`} />
+                <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{fontSize: '10px'}} />
+                <Bar dataKey="revenue" fill="#10B981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
           <div className="pt-2 text-[9px] text-slate-400 flex items-center gap-1.5 bg-slate-50 px-2 py-1.5 rounded-md border border-slate-100">
             <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse"></span>

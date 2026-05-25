@@ -27,6 +27,7 @@ export const initAuth = (
   onAuthFailure?: () => void
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
+    console.log("DEBUG: onAuthStateChanged triggered with user:", user?.email);
     if (user) {
       if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
     } else {
@@ -55,7 +56,14 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const emailSignIn = async (email: string, password: string) => {
+  try {
     return await signInWithEmailAndPassword(auth, email, password);
+  } catch (error: any) {
+    if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+      throw new Error('Invalid email or password. Please check your credentials and try again.');
+    }
+    throw new Error('Failed to sign in. Please try again later.');
+  }
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
