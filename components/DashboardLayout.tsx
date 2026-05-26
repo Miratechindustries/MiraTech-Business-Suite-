@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { User } from "firebase/auth";
 import { googleSignIn, logout, auth, initAuth, emailSignIn, handleFirestoreError, OperationType } from "../lib/firebase";
 import { getDoc, doc } from "firebase/firestore";
@@ -108,7 +109,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
       }
     );
     return () => unsubscribe();
-  }, []);
+  }, [setCurrentUser]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -301,7 +302,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
         <div className="p-3 border-t border-slate-200 bg-slate-50/45 space-y-2">
           <div className="flex items-center gap-2 overflow-hidden">
             {user.photoURL ? (
-              <img src={user.photoURL} alt="User profile symbol" className="h-7 w-7 rounded-full border border-slate-200" />
+              <Image src={user.photoURL} alt="User profile symbol" width={28} height={28} className="h-7 w-7 rounded-full border border-slate-200" referrerPolicy="no-referrer" />
             ) : (
               <div className="h-7 w-7 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center border border-blue-200/50">
                 {(user.displayName || "M").charAt(0).toUpperCase()}
@@ -453,7 +454,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
               <div className="p-3 border-t border-slate-200 bg-slate-50/45 space-y-2">
                 <div className="flex items-center gap-2 overflow-hidden">
                   {user.photoURL ? (
-                    <img src={user.photoURL} alt="User profile" className="h-7 w-7 rounded-full border border-slate-200" />
+                    <Image src={user.photoURL} alt="User profile" width={28} height={28} className="h-7 w-7 rounded-full border border-slate-200" referrerPolicy="no-referrer" />
                   ) : (
                     <div className="h-7 w-7 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center border border-blue-200/50">
                       {(user.displayName || "M").charAt(0).toUpperCase()}

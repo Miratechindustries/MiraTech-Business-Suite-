@@ -5,6 +5,7 @@ import { collection, getDocs, query, orderBy, getDoc, doc } from "firebase/fires
 import { db, auth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
 import { syncToGoogleSheets, uploadToGoogleDrive, LedgerMetric } from "../lib/googleApi";
 import { BarChart3, TrendingUp, DollarSign, Wallet2, FileSpreadsheet, Download, CloudLightning, Loader2, CheckSquare, ShieldCheck, AlertCircle } from "lucide-react";
+import Image from "next/image";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import LoadingSkeleton from "./LoadingSkeleton";
@@ -444,10 +445,13 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-8">
             <div>
               {company?.letterheadLogo ? (
-                <img
+                <Image
                   src={company.letterheadLogo}
                   alt="Corporate Letterhead Logo"
+                  width={200}
+                  height={80}
                   className="max-h-20 object-contain mb-2"
+                  referrerPolicy="no-referrer"
                 />
               ) : (
                 <span className="text-lg font-extrabold text-slate-900 uppercase tracking-tight">

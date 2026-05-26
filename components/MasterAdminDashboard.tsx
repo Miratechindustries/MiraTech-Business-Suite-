@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react';
 import { collection, getCountFromServer } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useUserStore } from '../lib/store';
-import { LayoutDashboard, Users, Building2, ShieldAlert } from "lucide-react";
+import { LogOut, LayoutDashboard, Users, Building2, ShieldAlert } from "lucide-react";
+import { logout } from '../lib/firebase';
+
 
 export default function MasterAdminDashboard() {
   const { currentUser } = useUserStore();
@@ -42,6 +44,13 @@ export default function MasterAdminDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">System Overview</h1>
+        <button 
+          onClick={logout}
+          className="flex items-center gap-2 text-slate-600 hover:text-red-600 font-medium transition"
+        >
+          <LogOut className="w-4 h-4" />
+          Logout
+        </button>
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

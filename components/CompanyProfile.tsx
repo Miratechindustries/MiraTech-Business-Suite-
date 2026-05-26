@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { db, auth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
 import { Building, Mail, Phone, MapPin, Image as ImageIcon, Loader2, CheckCircle } from "lucide-react";
+import Image from "next/image";
 
 interface CompanyData {
   ownerId: string;
@@ -321,10 +322,13 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             <div className="border border-dashed border-slate-200 rounded-lg p-4 bg-slate-50/30 flex flex-col items-center justify-center text-center">
               {letterheadLogo ? (
                 <div className="space-y-2">
-                  <img
+                  <Image
                     src={letterheadLogo}
                     alt="Uploaded Logo Preview"
+                    width={100}
+                    height={100}
                     className="max-h-24 mx-auto rounded-md object-contain border border-slate-100 bg-white p-2"
+                    referrerPolicy="no-referrer"
                   />
                   <div className="flex gap-2 justify-center">
                     <label className="cursor-pointer text-xs font-medium text-slate-600 hover:text-slate-800 underline">
