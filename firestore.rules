@@ -100,6 +100,21 @@ service cloud.firestore {
     }
 
     // 4. Multi-tenant flat collections (Expenses, Customers, Products, Audit Logs, etc.)
+    
+    match /audit_logs/{logId} {
+      allow read: if isSignedIn() && (
+        isMasterAdmin() ||
+        resource.data.get('businessId', '') == getUserBusinessId() ||
+        resource.data.get('companyId', '') == getUserBusinessId() ||
+        resource.data.get('businessId', '') == request.auth.uid ||
+        resource.data.get('companyId', '') == request.auth.uid ||
+        resource.data.get('ownerId', '') == request.auth.uid
+      );
+      
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && isMasterAdmin();
+    }
+
     match /{collectionName}/{docId} {
       allow read: if isSignedIn() && (
         isMasterAdmin() ||

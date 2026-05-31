@@ -869,7 +869,12 @@ export default function Invoices() {
             <div className="p-6 bg-slate-100 overflow-x-auto max-h-[70vh]">
               <div
                 ref={pdfAreaRef}
-                style={{ width: "210mm", minHeight: "297mm" }}
+                style={{ 
+                    width: "210mm", 
+                    minHeight: "297mm",
+                    backgroundColor: "#ffffff",
+                    color: "#1f2937"
+                }}
                 className="mx-auto bg-white p-[20mm] border border-slate-200 shadow-sm relative text-slate-800 font-sans"
               >
                 {/* Letterhead Header */}

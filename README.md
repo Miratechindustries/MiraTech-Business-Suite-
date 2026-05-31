@@ -1,20 +1,15 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="" />
-</div>
+# Mira Admin Dashboard
 
-# Run and deploy your AI Studio app
+![Miratech Industries](logo.png)
 
-This contains everything you need to run your app locally.
+This application is the central Master Admin Dashboard for **Miratech Industries**. It provides administrators with a comprehensive interface to manage company entities, oversee registered users, monitor system security, and analyze user activity trends.
 
-View your app in AI Studio: https://ai.studio/apps/70feb629-4714-4b74-93eb-853bab2b9254
+## Core Features
 
-## Run Locally
+- **Company Management**: Track and manage all active business entities within the system.
+- **User Management**: Comprehensive user administration and access control.
+- **Security Monitoring**: Centralized view of system events and security alerts.
+- **Activity Analytics**: Visualize and monitor user engagement trends with interactive charts.
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+---
+*Innovating Today, Building Tomorrow*

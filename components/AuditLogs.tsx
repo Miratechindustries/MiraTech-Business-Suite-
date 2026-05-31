@@ -18,7 +18,11 @@ interface AuditLog {
   userId?: string;
 }
 
-export default function AuditLogs() {
+interface AuditLogsProps {
+  userLogsOnly?: boolean;
+}
+
+export default function AuditLogs({ userLogsOnly = false }: AuditLogsProps = {}) {
   const { currentUser } = useUserStore();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [search, setSearch] = useState("");
@@ -116,7 +120,9 @@ export default function AuditLogs() {
     const ipMatch = (log.ip || "").toLowerCase().includes(search.toLowerCase());
     const matchesSearch = actionMatch || detailMatch || userMatch || ipMatch;
     
-    const matchesActiveUser = !activeUserOnly || log.user === auth.currentUser?.email;
+    const matchesActiveUser = userLogsOnly 
+      ? log.user === auth.currentUser?.email 
+      : (!activeUserOnly || log.user === auth.currentUser?.email);
     return matchesSearch && matchesActiveUser;
   });
 
@@ -125,8 +131,15 @@ export default function AuditLogs() {
       {/* Upper Status Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-lg font-extrabold tracking-tight text-slate-900">Security & Operational Logs</h1>
-          <p className="text-[11px] text-slate-500">Track data sync events, auth processes, and executive actions.</p>
+          <h1 className="text-lg font-extrabold tracking-tight text-slate-900 font-sans">
+            {userLogsOnly ? "My Session Action Ledger" : "Security & Operational Logs"}
+          </h1>
+          <p className="text-[11px] text-slate-500 font-sans">
+            {userLogsOnly 
+              ? "Private trace of operational choices recorded during your active authentication." 
+              : "Track data sync events, auth processes, and executive actions."
+            }
+          </p>
         </div>
         <button
           onClick={handleRefresh}
@@ -158,9 +171,15 @@ export default function AuditLogs() {
         </div>
 
         <div className="bg-white border border-slate-200/50 p-3.5 rounded-lg shadow-3xs">
-          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Total Recorded Logs</p>
-          <h3 className="text-sm font-extrabold text-slate-800 mt-1 font-mono">{logs.length}</h3>
-          <p className="text-[8px] text-slate-400 mt-0.5">Total events indexed</p>
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+            {userLogsOnly ? "My Session Events" : "Total Recorded Logs"}
+          </p>
+          <h3 className="text-sm font-extrabold text-slate-800 mt-1 font-mono">
+            {userLogsOnly ? logs.filter(log => log.user === auth.currentUser?.email).length : logs.length}
+          </h3>
+          <p className="text-[8px] text-slate-400 mt-0.5">
+            {userLogsOnly ? "Private filtered entries" : "Total events indexed"}
+          </p>
         </div>
 
         <div className="bg-white border border-slate-200/50 p-3.5 rounded-lg shadow-3xs">
@@ -185,17 +204,19 @@ export default function AuditLogs() {
             className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-semibold placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition shadow-3xs"
           />
         </div>
-        <div className="flex items-center">
-          <label className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-md text-xs font-bold text-slate-600 cursor-pointer hover:bg-slate-50 transition shadow-3xs select-none">
-            <input
-              type="checkbox"
-              checked={activeUserOnly}
-              onChange={(e) => setActiveUserOnly(e.target.checked)}
-              className="rounded-sm text-blue-600 focus:ring-blue-500 border-slate-300 h-3.5 w-3.5 cursor-pointer"
-            />
-            My Actions Only
-          </label>
-        </div>
+        {!userLogsOnly && (
+          <div className="flex items-center">
+            <label className="flex items-center gap-2 bg-white px-3 py-1.5 border border-slate-200 rounded-md text-xs font-bold text-slate-600 cursor-pointer hover:bg-slate-50 transition shadow-3xs select-none">
+              <input
+                type="checkbox"
+                checked={activeUserOnly}
+                onChange={(e) => setActiveUserOnly(e.target.checked)}
+                className="rounded-sm text-blue-600 focus:ring-blue-500 border-slate-300 h-3.5 w-3.5 cursor-pointer"
+              />
+              My Actions Only
+            </label>
+          </div>
+        )}
       </div>
       
       {/* High-density grid table */}

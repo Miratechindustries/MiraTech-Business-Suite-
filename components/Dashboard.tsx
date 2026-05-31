@@ -10,7 +10,9 @@ import Image from "next/image";
 import jsPDF from "jspdf";
 import safeHtml2Canvas from "../lib/safeHtml2canvas";
 import LoadingSkeleton from "./LoadingSkeleton";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend } from "recharts";
+import { motion } from "motion/react";
+import AuditLogs from "./AuditLogs";
 
 interface Invoice {
   total: number;
@@ -69,6 +71,8 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
   // Expense controller for dynamically calculating net profit margins
   const [expenses, setExpenses] = useState<number>(1500);
+
+  const [activeChartTab, setActiveChartTab] = useState<"collections" | "pipeline">("collections");
 
   const pdfDashboardRef = useRef<HTMLDivElement>(null);
 
@@ -189,6 +193,68 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
     });
 
     return months;
+  })();
+
+  // Computed values for collections pie chart
+  const isCollectionsEmpty = invoices.length === 0 || invoices.reduce((acc, i) => acc + (i.total || 0), 0) === 0;
+  
+  const collectionsData = (() => {
+    if (isCollectionsEmpty) {
+      return [
+        { name: "Paid", value: 38400, color: "#10B981", percent: "60.0%" },
+        { name: "Unpaid", value: 16000, color: company?.primaryColor || "#3B82F6", percent: "25.0%" },
+        { name: "Overdue", value: 9600, color: "#F43F5E", percent: "15.0%" },
+      ];
+    }
+    
+    const paidSum = invoices.filter(i => i.status === "paid").reduce((acc, i) => acc + (i.total || 0), 0);
+    const unpaidSum = invoices.filter(i => i.status === "unpaid").reduce((acc, i) => acc + (i.total || 0), 0);
+    const overdueSum = invoices.filter(i => i.status === "overdue").reduce((acc, i) => acc + (i.total || 0), 0);
+    const totalSelected = paidSum + unpaidSum + overdueSum;
+    
+    return [
+      { 
+        name: "Paid", 
+        value: paidSum, 
+        color: "#10B981", 
+        percent: totalSelected > 0 ? `${((paidSum / totalSelected) * 100).toFixed(1)}%` : "0.0%" 
+      },
+      { 
+        name: "Unpaid", 
+        value: unpaidSum, 
+        color: company?.primaryColor || "#3B82F6", 
+        percent: totalSelected > 0 ? `${((unpaidSum / totalSelected) * 100).toFixed(1)}%` : "0.0%" 
+      },
+      { 
+        name: "Overdue", 
+        value: overdueSum, 
+        color: "#F43F5E", 
+        percent: totalSelected > 0 ? `${((overdueSum / totalSelected) * 100).toFixed(1)}%` : "0.0%" 
+      },
+    ];
+  })();
+
+  // Computed values for pipeline performance bar chart
+  const isPipelineEmpty = quotations.length === 0 || quotations.reduce((acc, q) => acc + (q.total || 0), 0) === 0;
+  
+  const pipelineData = (() => {
+    if (isPipelineEmpty) {
+      return [
+        { name: "Accepted", value: 58000, color: "#10B981" },
+        { name: "Pending", value: 34000, color: company?.primaryColor || "#3B82F6" },
+        { name: "Declined", value: 12000, color: "#F43F5E" },
+      ];
+    }
+    
+    const acceptedSum = quotations.filter(q => q.status === "accepted").reduce((acc, q) => acc + (q.total || 0), 0);
+    const pendingSum = quotations.filter(q => q.status === "pending").reduce((acc, q) => acc + (q.total || 0), 0);
+    const declinedSum = quotations.filter(q => q.status === "declined").reduce((acc, q) => acc + (q.total || 0), 0);
+    
+    return [
+      { name: "Accepted", value: acceptedSum, color: "#10B981" },
+      { name: "Pending", value: pendingSum, color: company?.primaryColor || "#3B82F6" },
+      { name: "Declined", value: declinedSum, color: "#F43F5E" },
+    ];
   })();
 
   const getMetricsList = (): LedgerMetric[] => {
@@ -318,7 +384,12 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
   return (
     <div className="space-y-4">
       {/* Upper Status Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+      <motion.div
+        initial={{ y: -50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.6, ease: "easeOut", delay: 0.0 }}
+        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
+      >
         <div>
           <h1 className="text-lg font-extrabold tracking-tight text-slate-800">C-Suite Executive Dashboard</h1>
           <p className="text-[11px] text-slate-500">Real-time enterprise balance spreadsheets, expenses, and Google Sync.</p>
@@ -356,7 +427,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
             Backup Active PDF
           </button>
         </div>
-      </div>
+      </motion.div>
 
       {errorWord && (
         <div className="p-2.5 text-[11px] bg-red-50 text-red-600 border border-red-100 rounded-lg flex items-center gap-2">
@@ -396,7 +467,13 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
       {/* Primary KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition">
+        {/* Gross Billings Metric Card */}
+        <motion.div
+          initial={{ x: -150, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
+          className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition"
+        >
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Gross Billings Drafted</span>
             <span className="p-1.5 bg-blue-50 text-blue-600 rounded-md border border-blue-100/40">
@@ -405,9 +482,15 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           </div>
           <h2 className="text-lg font-extrabold font-mono text-slate-800">${totalQuotationsVal.toLocaleString()}</h2>
           <p className="text-[9px] text-slate-400">Quotations listed scope</p>
-        </div>
+        </motion.div>
 
-        <div className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition">
+        {/* Invoiced Receivables Metric Card */}
+        <motion.div
+          initial={{ scale: 0.4, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", damping: 12, stiffness: 100, delay: 0.2 }}
+          className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition"
+        >
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Invoiced Receivables</span>
             <span className="p-1.5 bg-blue-50 text-blue-600 rounded-md border border-blue-100/40">
@@ -416,9 +499,15 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           </div>
           <h2 className="text-lg font-extrabold font-mono text-slate-800">${totalInvoicesVal.toLocaleString()}</h2>
           <p className="text-[9px] text-slate-400">Across issued invoices</p>
-        </div>
+        </motion.div>
 
-        <div className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition">
+        {/* Operating Revenue Metric Card */}
+        <motion.div
+          initial={{ y: -50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.3 }}
+          className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition"
+        >
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Operating Revenue</span>
             <span className="p-1.5 bg-emerald-50 text-emerald-600 rounded-md border border-emerald-100/40">
@@ -427,9 +516,15 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           </div>
           <h2 className="text-lg font-extrabold font-mono text-emerald-700">${collectedRevenue.toLocaleString()}</h2>
           <p className="text-[9px] text-emerald-500">Cash collected via invoices</p>
-        </div>
+        </motion.div>
 
-        <div className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition">
+        {/* Operating Profit Margin Metric Card */}
+        <motion.div
+          initial={{ x: 150, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.4 }}
+          className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition"
+        >
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Operating Profit Margin</span>
             <span className="p-1.5 bg-blue-50 text-blue-600 rounded-md border border-blue-100/40">
@@ -438,86 +533,269 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           </div>
           <h2 className="text-lg font-extrabold font-mono text-blue-700">{profitMargin}%</h2>
           <p className="text-[9px] text-blue-500">Adjusted dynamically below</p>
-        </div>
+        </motion.div>
       </div>
 
-      {/* Monthly Revenue Trend Line Chart */}
-      <div className="bg-white border border-blue-100/70 p-5 rounded-lg shadow-3xs hover:border-blue-200 transition">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+      {/* Charts Display Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Revenue Trend Line Chart */}
+        <motion.div
+          initial={{ x: -100, y: 100, opacity: 0 }}
+          animate={{ x: 0, y: 0, opacity: 1 }}
+          transition={{ duration: 0.7, ease: "easeOut", delay: 0.5 }}
+          className="bg-white border border-blue-100/70 p-5 rounded-lg shadow-3xs hover:border-blue-200 transition lg:col-span-7 flex flex-col justify-between"
+        >
           <div>
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5" style={{ color: company?.primaryColor || '#1E293B' }}>
-              <TrendingUp className="h-4 w-4" style={{ color: company?.primaryColor || '#3B82F6' }} />
-              Monthly Revenue Performance & Receivables Trend
-            </h3>
-            <p className="text-[10px] text-slate-400 mt-0.5">Cleared cash collections vs. total invoiced targets over the past 12 months.</p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+              <div>
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5" style={{ color: company?.primaryColor || '#1E293B' }}>
+                  <TrendingUp className="h-4 w-4" style={{ color: company?.primaryColor || '#3B82F6' }} />
+                  Monthly Performance Trend
+                </h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">Cleared cash collections vs. total invoiced targets over the past 12 months.</p>
+              </div>
+              <div className="flex items-center gap-4 text-[10px] font-bold">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: company?.primaryColor || '#3b82f6' }}></span> 
+                  Cleared Cash
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: company?.secondaryColor || '#10b981' }}></span> 
+                  Invoiced Receivables
+                </span>
+              </div>
+            </div>
+            <div className="h-60 pt-2 text-xs">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                  <XAxis 
+                    dataKey="month" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    stroke="#64748B"
+                    dy={6}
+                  />
+                  <YAxis 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    stroke="#64748B"
+                    tickFormatter={(val) => `$${val.toLocaleString()}`}
+                    dx={-6}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      fontSize: '11px', 
+                      borderRadius: '8px', 
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E2E8F0', 
+                      boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)' 
+                    }} 
+                    formatter={(value: any) => [`$${Number(value).toLocaleString()}`]}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="revenue" 
+                    name="Cleared Cash Revenue"
+                    stroke={company?.primaryColor || "#3b82f6"} 
+                    strokeWidth={2.5}
+                    activeDot={{ r: 6 }} 
+                    dot={{ r: 3, strokeWidth: 1.5 }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="invoiced" 
+                    name="Invoiced Receivables"
+                    stroke={company?.secondaryColor || "#10b981"} 
+                    strokeWidth={1.5}
+                    strokeDasharray="4 4"
+                    dot={{ r: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="flex items-center gap-4 text-[10px] font-bold">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: company?.primaryColor || '#3b82f6' }}></span> 
-              Cleared Cash Revenue
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: company?.secondaryColor || '#10b981' }}></span> 
-              Invoiced Receivables
-            </span>
+        </motion.div>
+
+        {/* Fulfillment & Pipeline Graphs */}
+        <motion.div
+          initial={{ x: 100, y: 100, rotate: 6, opacity: 0 }}
+          animate={{ x: 0, y: 0, rotate: 0, opacity: 1 }}
+          transition={{ duration: 0.7, ease: "easeOut", delay: 0.6 }}
+          className="bg-white border border-blue-100/70 p-5 rounded-lg shadow-3xs hover:border-blue-200 transition lg:col-span-5 flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <div>
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider" style={{ color: company?.primaryColor || '#1E293B' }}>
+                  Fulfillment & Pipeline
+                </h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {activeChartTab === "collections" 
+                    ? "Invoiced balance settlement ratios" 
+                    : "Lead opportunities status funnel"}
+                </p>
+              </div>
+              {/* Empirical Fallbacks Badge Indicator */}
+              {((activeChartTab === "collections" && isCollectionsEmpty) || (activeChartTab === "pipeline" && isPipelineEmpty)) && (
+                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded text-[9px] font-bold uppercase tracking-wider animate-pulse">
+                  Illustrative Demo
+                </span>
+              )}
+            </div>
+
+            {/* Inner Switcher Toggle */}
+            <div className="flex bg-slate-100 p-1 rounded-md text-[11px] font-bold mb-4">
+              <button
+                onClick={() => setActiveChartTab("collections")}
+                className={`flex-1 py-1 rounded text-center transition cursor-pointer font-bold ${
+                  activeChartTab === "collections"
+                    ? "bg-white text-slate-800 shadow-3xs"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Collections Fulfillment
+              </button>
+              <button
+                onClick={() => setActiveChartTab("pipeline")}
+                className={`flex-1 py-1 rounded text-center transition cursor-pointer font-bold ${
+                  activeChartTab === "pipeline"
+                    ? "bg-white text-slate-800 shadow-3xs"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Lead Pipeline
+              </button>
+            </div>
+
+            {/* Render Tab Contents */}
+            <div className="h-60 flex flex-col justify-center">
+              {activeChartTab === "collections" ? (
+                <div className="relative h-full flex flex-col justify-between pb-1">
+                  <div className="h-44">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={collectionsData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={45}
+                          outerRadius={65}
+                          paddingAngle={4}
+                          dataKey="value"
+                        >
+                          {collectionsData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            fontSize: '11px',
+                            borderRadius: '8px',
+                            backgroundColor: '#FFFFFF',
+                            border: '1px solid #E2E8F0',
+                            boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)'
+                          }}
+                          formatter={(value: any, name: any, rawItem: any) => [
+                            `$${Number(value).toLocaleString()} (${rawItem.payload?.percent || ""})`,
+                            name
+                          ]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1 pt-2.5 border-t border-slate-100/80 text-[10px] font-bold text-center">
+                    {collectionsData.map((item, index) => (
+                      <div key={index} className="space-y-0.5">
+                        <span className="flex items-center justify-center gap-1 text-slate-400 font-semibold">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.color }}></span>
+                          {item.name}
+                        </span>
+                        <strong className="block text-slate-850 font-mono text-[9px] truncate">
+                          ${item.value.toLocaleString()}
+                        </strong>
+                        <span className="bg-slate-50 text-slate-500 border border-slate-200/50 py-0.5 px-1 rounded block text-[8px] font-mono">
+                          {item.percent}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="relative h-full flex flex-col justify-between pb-1">
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={pipelineData} margin={{ top: 12, right: 10, left: -22, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="name"
+                          fontSize={10}
+                          tickLine={false}
+                          axisLine={false}
+                          stroke="#64748B"
+                        />
+                        <YAxis
+                          fontSize={10}
+                          tickLine={false}
+                          axisLine={false}
+                          stroke="#64748B"
+                          tickFormatter={(val) => `$${val.toLocaleString()}`}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            fontSize: '11px',
+                            borderRadius: '8px',
+                            backgroundColor: '#FFFFFF',
+                            border: '1px solid #E2E8F0',
+                            boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)'
+                          }}
+                          formatter={(value: any) => [`$${Number(value).toLocaleString()}`]}
+                        />
+                        <Bar 
+                          dataKey="value" 
+                          radius={[4, 4, 0, 0]}
+                          maxBarSize={30}
+                        >
+                          {pipelineData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1 pt-2 border-t border-slate-100/80 text-[10px] font-bold text-center">
+                    {pipelineData.map((item, index) => (
+                      <div key={index} className="space-y-0.5">
+                        <span className="flex items-center justify-center gap-1 text-slate-400 font-semibold">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.color }}></span>
+                          {item.name}
+                        </span>
+                        <strong className="block text-slate-850 font-mono text-[9px] truncate">
+                          ${item.value.toLocaleString()}
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="h-60 pt-2 text-xs">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trendData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-              <XAxis 
-                dataKey="month" 
-                fontSize={10} 
-                tickLine={false} 
-                axisLine={false} 
-                stroke="#64748B"
-                dy={6}
-              />
-              <YAxis 
-                fontSize={10} 
-                tickLine={false} 
-                axisLine={false} 
-                stroke="#64748B"
-                tickFormatter={(val) => `$${val.toLocaleString()}`}
-                dx={-6}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  fontSize: '11px', 
-                  borderRadius: '8px', 
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #E2E8F0', 
-                  boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)' 
-                }} 
-                formatter={(value: any) => [`$${Number(value).toLocaleString()}`]}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="revenue" 
-                name="Cleared Cash Revenue"
-                stroke={company?.primaryColor || "#3b82f6"} 
-                strokeWidth={2.5}
-                activeDot={{ r: 6 }} 
-                dot={{ r: 3, strokeWidth: 1.5 }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="invoiced" 
-                name="Invoiced Receivables"
-                stroke={company?.secondaryColor || "#10b981"} 
-                strokeWidth={1.5}
-                strokeDasharray="4 4"
-                dot={{ r: 2 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        </motion.div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-1">
-        {/* Dynamic Profit Adjuster Tool */}
-        <div className="bg-white border border-blue-100 rounded-lg p-4 shadow-3xs lg:col-span-4 flex flex-col justify-between space-y-3">
+        {/* Profitability Config Panel */}
+        <motion.div
+          initial={{ rotateX: 90, opacity: 0 }}
+          animate={{ rotateX: 0, opacity: 1 }}
+          transition={{ duration: 0.6, ease: "easeOut", delay: 0.7 }}
+          style={{ transformPerspective: 1000 }}
+          className="bg-white border border-blue-100 rounded-lg p-4 shadow-3xs lg:col-span-4 flex flex-col justify-between space-y-3"
+        >
           <div>
             <h3 className="text-xs font-bold text-blue-900 uppercase tracking-wider mb-1.5">
               Profitability Margin Config
@@ -560,10 +838,15 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           <div className="pt-2 text-[9px] text-slate-400 font-semibold uppercase tracking-wider">
             * Local cache secure sync
           </div>
-        </div>
+        </motion.div>
 
-        {/* Ledgers metrics data list / previewer target */}
-        <div className="bg-white border border-blue-100 rounded-lg p-4 shadow-3xs lg:col-span-8 space-y-3">
+        {/* Report Metrics Summary Spreadsheet */}
+        <motion.div
+          initial={{ y: 80, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.6, ease: "easeOut", delay: 0.8 }}
+          className="bg-white border border-blue-100 rounded-lg p-4 shadow-3xs lg:col-span-8 space-y-3"
+        >
           <h3 className="text-xs font-bold text-blue-900 uppercase tracking-wider">Report Metrics Summary Table</h3>
           <div className="overflow-x-auto border border-blue-50/70 rounded-md">
             <table className="high-density-table w-full text-left text-xs text-slate-600">
@@ -585,8 +868,24 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
               </tbody>
             </table>
           </div>
-        </div>
+        </motion.div>
       </div>
+
+      {/* Operator Session Security Trace Logs (System Session Audit Logs) */}
+      <motion.div
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: "spring", damping: 18, stiffness: 80, delay: 0.9 }}
+        className="mt-4 space-y-2 bg-white border border-slate-205 p-5 rounded-lg shadow-3xs hover:border-slate-300 transition"
+      >
+        <div className="flex items-center gap-1.5 border-b border-slate-100 pb-2.5 mb-2.5">
+          <ShieldCheck className="h-4 w-4 text-blue-600" />
+          <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-widest text-[9px]">
+            Operator Security Console (Private Session Embed Only)
+          </h3>
+        </div>
+        <AuditLogs userLogsOnly={true} />
+      </motion.div>
 
       {/* OFFSCREEN PRINTABLE A4 REPORT CONTAINER - EXTREMELY HIGH FIDELITY DESIGN */}
       <div style={{ position: "absolute", left: "-9999px", top: "-9999px" }}>
