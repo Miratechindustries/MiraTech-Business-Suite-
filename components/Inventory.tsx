@@ -37,6 +37,25 @@ const IconRenderer = ({ name, className }: { name: string; className?: string })
   return <Icon className={className} />;
 };
 
+// Automatic SKU generation suggestion helper from item/description name
+const suggestSku = (itemName: string): string => {
+  if (!itemName) return "";
+  const words = itemName
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s-]/g, "")
+    .split(/[\s-]+/)
+    .filter(Boolean);
+
+  if (words.length === 0) return "";
+  if (words.length === 1) {
+    return words[0].substring(0, 6);
+  }
+  return words
+    .slice(0, 3)
+    .map((w) => w.substring(0, 3))
+    .join("-");
+};
+
 export default function Inventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [categoryConfigs, setCategoryConfigs] = useState<CategoryConfig[]>(DEFAULT_CATEGORIES);
@@ -79,6 +98,7 @@ export default function Inventory() {
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [sku, setSku] = useState("");
+  const [skuManuallyEdited, setSkuManuallyEdited] = useState(false);
   const [category, setCategory] = useState("Networking");
   const [price, setPrice] = useState(0);
   const [stock, setStock] = useState(0);
@@ -128,12 +148,18 @@ export default function Inventory() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !sku || !businessId) return;
+    if (!name || !businessId) return;
+
+    const finalSku = (sku.trim() ? sku.trim() : suggestSku(name)).toUpperCase();
+    if (!finalSku) {
+      alert("Please specify a SKU Unique Code.");
+      return;
+    }
 
     const newItem = {
       businessId,
       name,
-      sku: sku.toUpperCase(),
+      sku: finalSku,
       category,
       price: Number(price),
       stock: Number(stock),
@@ -145,7 +171,7 @@ export default function Inventory() {
     // Log database audit trail
     await logAction(
       "Inventory Item Logged",
-      `Created stock ledger entry for product '${name}' [SKU: ${sku.toUpperCase()}]`,
+      `Created stock ledger entry for product '${name}' [SKU: ${finalSku}]`,
       businessId,
       Number(price) * Number(stock)
     );
@@ -159,6 +185,7 @@ export default function Inventory() {
     setId("");
     setName("");
     setSku("");
+    setSkuManuallyEdited(false);
     setCategory("Networking");
     setPrice(0);
     setStock(0);
@@ -171,6 +198,7 @@ export default function Inventory() {
     setId(item.id);
     setName(item.name);
     setSku(item.sku);
+    setSkuManuallyEdited(true);
     setCategory(item.category);
     setPrice(item.price);
     setStock(item.stock);
@@ -182,10 +210,16 @@ export default function Inventory() {
     e.preventDefault();
     if (!editingItem || !businessId) return;
 
+    const finalSku = (sku.trim() ? sku.trim() : suggestSku(name)).toUpperCase();
+    if (!finalSku) {
+      alert("Please specify a SKU Unique Code.");
+      return;
+    }
+
     const updatedItem = {
       ...editingItem,
       name,
-      sku: sku.toUpperCase(),
+      sku: finalSku,
       category,
       price: Number(price),
       stock: Number(stock),
@@ -197,7 +231,7 @@ export default function Inventory() {
     // Log database audit trail
     await logAction(
       "Inventory Item Updated",
-      `Updated product details of '${name}' [SKU: ${sku.toUpperCase()}]. Stock: ${stock}`,
+      `Updated product details of '${name}' [SKU: ${finalSku}]. Stock: ${stock}`,
       businessId,
       Number(price) * Number(stock)
     );
@@ -429,10 +463,17 @@ export default function Inventory() {
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">SKU Unique Code</label>
                   <input
                     type="text"
-                    required
-                    placeholder="NET-SW-24"
+                    placeholder="e.g. NET-SW-24 (suggested)"
                     value={sku}
-                    onChange={(e) => setSku(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSku(val);
+                      if (val.trim() === "") {
+                        setSkuManuallyEdited(false);
+                      } else {
+                        setSkuManuallyEdited(true);
+                      }
+                    }}
                     className="w-full"
                   />
                 </div>
@@ -445,7 +486,13 @@ export default function Inventory() {
                   required
                   placeholder="e.g. Server Switch 48-port POE"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setName(val);
+                    if (!skuManuallyEdited || !sku) {
+                      setSku(suggestSku(val));
+                    }
+                  }}
                   className="w-full"
                 />
               </div>

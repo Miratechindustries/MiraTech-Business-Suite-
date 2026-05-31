@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc } from "firebase/firestore";
+import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc, where } from "firebase/firestore";
 import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
 import { logAction } from "../lib/audit";
@@ -102,33 +102,46 @@ export default function Invoices() {
     if (!user || !currentUser) return;
 
     setLoading(true);
-    const invoicesPath = `companies/${user.uid}/invoices`;
+    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
+    const invoicesPath = `companies/${businessId}/invoices`;
     try {
       // Fetch settings
-      const compSnap = await getDoc(doc(db, "companies", user.uid));
+      const compSnap = await getDoc(doc(db, "companies", businessId));
       if (compSnap.exists()) {
         const compData = compSnap.data() as CompanyDetails;
         setCompany(compData);
-        localStorage.setItem(`miratech_offline_company_${user.uid}`, JSON.stringify(compData));
+        localStorage.setItem(`miratech_offline_company_${businessId}`, JSON.stringify(compData));
       } else {
-        const cachedCompany = localStorage.getItem(`miratech_offline_company_${user.uid}`);
+        const cachedCompany = localStorage.getItem(`miratech_offline_company_${businessId}`);
         if (cachedCompany) setCompany(JSON.parse(cachedCompany));
       }
 
       // Fetch invoices
-      const iRef = collection(db, "companies", user.uid, "invoices");
+      const iRef = collection(db, "companies", businessId, "invoices");
       const querySnap = await getDocs(query(iRef, orderBy("number", "desc")));
       const itemsList: Invoice[] = [];
       querySnap.forEach((docSnap) => {
         itemsList.push({ id: docSnap.id, ...docSnap.data() } as Invoice);
       });
       setInvoices(itemsList);
-      localStorage.setItem(`miratech_offline_invoices_${user.uid}`, JSON.stringify(itemsList));
+      localStorage.setItem(`miratech_offline_invoices_${businessId}`, JSON.stringify(itemsList));
       
-      // Load clients
-      const cacheKey = user ? `miratech_customers_${user.uid}` : "miratech_customers_guest";
-      const cachedClients = localStorage.getItem(cacheKey);
-      if (cachedClients) setClients(JSON.parse(cachedClients));
+      // Load clients from Firestore collection 'customers' filtered by businessId
+      try {
+        const qCustomers = query(collection(db, "customers"), where("businessId", "==", businessId));
+        const customerSnap = await getDocs(qCustomers);
+        const customersList: Customer[] = [];
+        customerSnap.forEach((dSnap) => {
+          customersList.push({ id: dSnap.id, ...dSnap.data() } as Customer);
+        });
+        setClients(customersList);
+        localStorage.setItem(`miratech_customers_${user.uid}`, JSON.stringify(customersList));
+      } catch (custErr) {
+        console.warn("Failed to fetch customers from Firestore, relying on cache.", custErr);
+        const cacheKey = user ? `miratech_customers_${user.uid}` : "miratech_customers_guest";
+        const cachedClients = localStorage.getItem(cacheKey);
+        if (cachedClients) setClients(JSON.parse(cachedClients));
+      }
     } catch (err) {
       if (isOfflineError(err)) {
         console.warn("[Invoices Offline Fallback] Loading data from local cache.");
@@ -394,12 +407,12 @@ export default function Invoices() {
     try {
       const element = pdfAreaRef.current;
       const canvas = await safeHtml2Canvas(element, { scale: 2, useCORS: true });
-      const imgData = canvas.toDataURL("image/png");
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210; // A4 dimensions
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+      pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, imgHeight);
       
       const pdfBlob = pdf.output('blob');
       const fileName = `Invoice_${previewInvoice.number}.pdf`;

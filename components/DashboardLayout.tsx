@@ -94,6 +94,22 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             }
             setCurrentUser(userData);
             console.log("DEBUG: setCurrentUser called with:", userData);
+
+            // Dynamically load company profile to populate sidebar / branding
+            const targetCompanyId = userData.companyId || userData.businessId || currentUser.uid;
+            if (targetCompanyId) {
+              const compSnap = await getDoc(doc(db, "companies", targetCompanyId));
+              if (compSnap.exists()) {
+                setCompany(compSnap.data() as CompanyData);
+              } else {
+                const bizSnap = await getDoc(doc(db, "businesses", targetCompanyId));
+                if (bizSnap.exists()) {
+                  setCompany(bizSnap.data() as CompanyData);
+                } else {
+                  setCompany(null);
+                }
+              }
+            }
           } catch (err) {
             handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`);
             // Fallback user data in case of error
@@ -101,6 +117,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
           }
         } else {
           setCurrentUser(null);
+          setCompany(null);
         }
         setAuthLoading(false);
       },

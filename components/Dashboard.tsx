@@ -233,12 +233,12 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
     try {
       const element = pdfDashboardRef.current;
       const canvas = await safeHtml2Canvas(element, { scale: 2, useCORS: true });
-      const imgData = canvas.toDataURL("image/png");
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+      pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, imgHeight);
       pdf.save(`Ledger_Executive_Report_${company?.name || "Company"}.pdf`);
     } catch (err) {
       console.error("PDF generation failed:", err);
@@ -283,11 +283,11 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
       if (!pdfDashboardRef.current) throw new Error("A4 Element target missing");
       const element = pdfDashboardRef.current;
       const canvas = await safeHtml2Canvas(element, { scale: 1.5, useCORS: true });
-      const imgData = canvas.toDataURL("image/png");
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+      pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, imgHeight);
 
       // 2. Create raw base64 data matching sheets API format
       const rawPdfString = pdf.output("datauristring").split(",")[1];

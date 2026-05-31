@@ -73,6 +73,13 @@ export default async function safeHtml2Canvas(element: HTMLElement, options: any
   // Intercept cssRules AND rules to hide "oklch" (and any case variations) from html2canvas
   const originalDescriptor = Object.getOwnPropertyDescriptor(CSSStyleSheet.prototype, "cssRules");
   const originalRulesDescriptor = Object.getOwnPropertyDescriptor(CSSStyleSheet.prototype, "rules");
+  const originalGroupingDescriptor = typeof CSSGroupingRule !== "undefined"
+    ? Object.getOwnPropertyDescriptor(CSSGroupingRule.prototype, "cssRules")
+    : null;
+  const originalMediaDescriptor = typeof CSSMediaRule !== "undefined"
+    ? Object.getOwnPropertyDescriptor(CSSMediaRule.prototype, "cssRules")
+    : null;
+
   let interceptActive = true;
 
   const sanitizeRules = (rules: any) => {
@@ -81,7 +88,9 @@ export default async function safeHtml2Canvas(element: HTMLElement, options: any
     for (let i = 0; i < rules.length; i++) {
       const rule = rules[i];
       if (rule && rule.cssText && /oklch/i.test(rule.cssText)) {
-        continue; // Skip rules with oklch to prevent html2canvas crashing
+        // If it's a style rule, we let it through if we can convert its cssText dynamically,
+        // but if we are not converting cssText globally or if it's an unsupported block, we filter it.
+        // To be absolutely safe, we will rewrite cssText via the CSSRule.prototype interceptor.
       }
       filtered.push(rule);
     }
@@ -128,6 +137,82 @@ export default async function safeHtml2Canvas(element: HTMLElement, options: any
       });
     } catch (e) {
       // Ignored if rules does not exist
+    }
+  }
+
+  if (originalGroupingDescriptor && originalGroupingDescriptor.get) {
+    try {
+      Object.defineProperty(CSSGroupingRule.prototype, "cssRules", {
+        get() {
+          try {
+            const rules = originalGroupingDescriptor.get!.call(this);
+            if (!rules || !interceptActive) return rules;
+            return sanitizeRules(rules);
+          } catch (e) {
+            return null;
+          }
+        },
+        configurable: true
+      });
+    } catch (e) {
+      // Ignored
+    }
+  }
+
+  if (originalMediaDescriptor && originalMediaDescriptor.get) {
+    try {
+      Object.defineProperty(CSSMediaRule.prototype, "cssRules", {
+        get() {
+          try {
+            const rules = originalMediaDescriptor.get!.call(this);
+            if (!rules || !interceptActive) return rules;
+            return sanitizeRules(rules);
+          } catch (e) {
+            return null;
+          }
+        },
+        configurable: true
+      });
+    } catch (e) {
+      // Ignored
+    }
+  }
+
+  // Intercept CSSRule.prototype.cssText dynamically to convert oklch to rgb/rgba
+  const originalRuleCssTextDescriptor = Object.getOwnPropertyDescriptor(CSSRule.prototype, "cssText");
+  if (originalRuleCssTextDescriptor && originalRuleCssTextDescriptor.get) {
+    try {
+      Object.defineProperty(CSSRule.prototype, "cssText", {
+        get() {
+          const val = originalRuleCssTextDescriptor.get!.call(this);
+          if (typeof val === "string" && /oklch/i.test(val)) {
+            return convertOklchToRgb(val);
+          }
+          return val;
+        },
+        configurable: true
+      });
+    } catch (e) {
+      // Ignored
+    }
+  }
+
+  // Intercept CSSStyleDeclaration.prototype.cssText dynamically to convert oklch to rgb/rgba
+  const originalDeclCssTextDescriptor = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, "cssText");
+  if (originalDeclCssTextDescriptor && originalDeclCssTextDescriptor.get) {
+    try {
+      Object.defineProperty(CSSStyleDeclaration.prototype, "cssText", {
+        get() {
+          const val = originalDeclCssTextDescriptor.get!.call(this);
+          if (typeof val === "string" && /oklch/i.test(val)) {
+            return convertOklchToRgb(val);
+          }
+          return val;
+        },
+        configurable: true
+      });
+    } catch (e) {
+      // Ignored
     }
   }
 
@@ -186,6 +271,34 @@ export default async function safeHtml2Canvas(element: HTMLElement, options: any
     if (originalRulesDescriptor) {
       try {
         Object.defineProperty(CSSStyleSheet.prototype, "rules", originalRulesDescriptor);
+      } catch (e) {
+        // Ignored
+      }
+    }
+    if (originalGroupingDescriptor) {
+      try {
+        Object.defineProperty(CSSGroupingRule.prototype, "cssRules", originalGroupingDescriptor);
+      } catch (e) {
+        // Ignored
+      }
+    }
+    if (originalMediaDescriptor) {
+      try {
+        Object.defineProperty(CSSMediaRule.prototype, "cssRules", originalMediaDescriptor);
+      } catch (e) {
+        // Ignored
+      }
+    }
+    if (originalRuleCssTextDescriptor) {
+      try {
+        Object.defineProperty(CSSRule.prototype, "cssText", originalRuleCssTextDescriptor);
+      } catch (e) {
+        // Ignored
+      }
+    }
+    if (originalDeclCssTextDescriptor) {
+      try {
+        Object.defineProperty(CSSStyleDeclaration.prototype, "cssText", originalDeclCssTextDescriptor);
       } catch (e) {
         // Ignored
       }

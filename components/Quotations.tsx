@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc } from "firebase/firestore";
+import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc, where } from "firebase/firestore";
 import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
 import { logAction } from "../lib/audit";
@@ -91,39 +91,53 @@ export default function Quotations() {
   // Preview & Export Modal
   const [previewQuotation, setPreviewQuotation] = useState<Quotation | null>(null);
   const pdfAreaRef = useRef<HTMLDivElement>(null);
+  const [convertingId, setConvertingId] = useState<string | null>(null);
 
   const fetchQuotationsAndCompany = async () => {
     const user = auth.currentUser;
     if (!user || !currentUser) return;
 
     setLoading(true);
-    const quotsPath = `companies/${user.uid}/quotations`;
+    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
+    const quotsPath = `companies/${businessId}/quotations`;
     try {
       // Fetch settings
-      const compSnap = await getDoc(doc(db, "companies", user.uid));
+      const compSnap = await getDoc(doc(db, "companies", businessId));
       if (compSnap.exists()) {
         const compData = compSnap.data() as CompanyDetails;
         setCompany(compData);
-        localStorage.setItem(`miratech_offline_company_${user.uid}`, JSON.stringify(compData));
+        localStorage.setItem(`miratech_offline_company_${businessId}`, JSON.stringify(compData));
       } else {
-        const cachedCompany = localStorage.getItem(`miratech_offline_company_${user.uid}`);
+        const cachedCompany = localStorage.getItem(`miratech_offline_company_${businessId}`);
         if (cachedCompany) setCompany(JSON.parse(cachedCompany));
       }
 
       // Fetch quotations
-      const qRef = collection(db, "companies", user.uid, "quotations");
+      const qRef = collection(db, "companies", businessId, "quotations");
       const querySnap = await getDocs(query(qRef, orderBy("number", "desc")));
       const itemsList: Quotation[] = [];
       querySnap.forEach((docSnap) => {
         itemsList.push({ id: docSnap.id, ...docSnap.data() } as Quotation);
       });
       setQuotations(itemsList);
-      localStorage.setItem(`miratech_offline_quotations_${user.uid}`, JSON.stringify(itemsList));
+      localStorage.setItem(`miratech_offline_quotations_${businessId}`, JSON.stringify(itemsList));
       
-      // Load clients
-      const cacheKey = user ? `miratech_customers_${user.uid}` : "miratech_customers_guest";
-      const cachedClients = localStorage.getItem(cacheKey);
-      if (cachedClients) setClients(JSON.parse(cachedClients));
+      // Load clients from Firestore collection 'customers' filtered by businessId
+      try {
+        const qCustomers = query(collection(db, "customers"), where("businessId", "==", businessId));
+        const customerSnap = await getDocs(qCustomers);
+        const customersList: Customer[] = [];
+        customerSnap.forEach((dSnap) => {
+          customersList.push({ id: dSnap.id, ...dSnap.data() } as Customer);
+        });
+        setClients(customersList);
+        localStorage.setItem(`miratech_customers_${user.uid}`, JSON.stringify(customersList));
+      } catch (custErr) {
+        console.warn("Failed to fetch customers from Firestore, relying on cache.", custErr);
+        const cacheKey = user ? `miratech_customers_${user.uid}` : "miratech_customers_guest";
+        const cachedClients = localStorage.getItem(cacheKey);
+        if (cachedClients) setClients(JSON.parse(cachedClients));
+      }
 
     } catch (err) {
       if (isOfflineError(err)) {
@@ -285,6 +299,68 @@ export default function Quotations() {
     }
   };
 
+  const handleConvertToInvoice = async (q: Quotation) => {
+    const user = auth.currentUser;
+    if (!user || !currentUser) return;
+
+    const confirmConvert = window.confirm(`Convert Quotation #${q.number} into a corporate billing Invoice?`);
+    if (!confirmConvert) return;
+
+    setConvertingId(q.id || null);
+    const businessId = currentUser.companyId || currentUser.businessId || user.uid;
+    const prefixRemoved = q.number.replace(/^(QT|QUOT|Q|qt|quot|q)-/i, "");
+    const generatedInvNumber = `INV-${prefixRemoved}`;
+
+    const invoicePayload: any = {
+      ownerId: user.uid,
+      number: generatedInvNumber,
+      clientName: q.clientName,
+      clientEmail: q.clientEmail,
+      clientAddress: q.clientAddress,
+      date: new Date().toISOString().split("T")[0],
+      dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      items: q.items,
+      total: q.total,
+      status: "unpaid",
+      convertedFromQuotation: q.number
+    };
+
+    try {
+      // 1. Save new Invoice doc to Firestore subcollection
+      const colRef = collection(db, "companies", businessId, "invoices");
+      const addedDoc = await addDoc(colRef, invoicePayload);
+      const newInvoiceId = addedDoc.id;
+
+      // 2. Save to local storage offline invoices cache
+      const cachedInvsKey = `miratech_offline_invoices_${user.uid}`;
+      const cachedInvs = localStorage.getItem(cachedInvsKey);
+      const invsList = cachedInvs ? JSON.parse(cachedInvs) : [];
+      invsList.unshift({ id: newInvoiceId, ...invoicePayload });
+      localStorage.setItem(cachedInvsKey, JSON.stringify(invsList));
+
+      // 3. Log audit trail entry
+      await logAction(
+        "Invoice Created from Quotation",
+        `Converted Quotation #${q.number} to Corporate Invoice #${generatedInvNumber} for '${q.clientName}'. Amount: $${q.total}`,
+        user.uid,
+        q.total
+      );
+
+      // 4. Update the source Quotation with custom reference info
+      await updateDoc(doc(db, "companies", businessId, "quotations", q.id!), { 
+        invoiceReference: generatedInvNumber
+      });
+      
+      alert(`Quotation successfully converted to Invoice #${generatedInvNumber}! You can view and download it under the Invoices tab.`);
+      fetchQuotationsAndCompany();
+    } catch (err) {
+      console.error("Failed to convert quotation to invoice:", err);
+      alert("Failed to convert quotation to invoice.");
+    } finally {
+      setConvertingId(null);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     const user = auth.currentUser;
     if (!user) return;
@@ -331,12 +407,12 @@ export default function Quotations() {
     try {
       const element = pdfAreaRef.current;
       const canvas = await safeHtml2Canvas(element, { scale: 2, useCORS: true });
-      const imgData = canvas.toDataURL("image/png");
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210; // A4 dimensions
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+      pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, imgHeight);
       
       const pdfBlob = pdf.output('blob');
       const fileName = `Quotation_${previewQuotation.number}.pdf`;
@@ -488,6 +564,20 @@ export default function Quotations() {
                           <X className="h-3.5 w-3.5" />
                         </button>
                       </>
+                    )}
+                    {q.status === "accepted" && (
+                      <button
+                        onClick={() => handleConvertToInvoice(q)}
+                        disabled={convertingId !== null}
+                        title="Convert to Corporate Invoice"
+                        className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-md cursor-pointer inline-flex border border-emerald-100"
+                      >
+                        {convertingId === q.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <FileText className="h-3.5 w-3.5" />
+                        )}
+                      </button>
                     )}
                     <button
                       onClick={() => setPreviewQuotation(q)}
