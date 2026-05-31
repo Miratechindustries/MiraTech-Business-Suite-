@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
-import { db, auth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { doc, getDoc, setDoc, updateDoc, collection, addDoc } from "firebase/firestore";
+import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { useUserStore } from "../lib/store";
 import { Building, Mail, Phone, MapPin, Image as ImageIcon, Loader2, CheckCircle } from "lucide-react";
 import Image from "next/image";
 
@@ -24,6 +25,24 @@ interface CompanyProfileProps {
 }
 
 export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps) {
+  const { currentUser } = useUserStore();
+
+  // Local auth shadowing to redirect all queries to the correct shared company workspace
+  const auth = {
+    ...importAuth,
+    get currentUser() {
+      const liveUser = importAuth.currentUser;
+      if (!liveUser) return null;
+      const companyId = currentUser?.companyId || currentUser?.businessId || liveUser.uid;
+      return {
+        ...liveUser,
+        uid: companyId,
+        getIdToken: (forceRefresh?: boolean) => liveUser.getIdToken(forceRefresh),
+        getIdTokenResult: (forceRefresh?: boolean) => liveUser.getIdTokenResult(forceRefresh),
+      } as any;
+    }
+  };
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -42,8 +61,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
   useEffect(() => {
     async function fetchCompany() {
       const user = auth.currentUser;
-      if (!user) {
-        setLoading(false);
+      if (!user || !currentUser) {
+        if (!user) {
+          setLoading(false);
+        }
         return;
       }
 
@@ -111,7 +132,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     }
 
     fetchCompany();
-  }, [onCompanyLoaded]);
+  }, [onCompanyLoaded, currentUser]);
 
   const handleLetterheadLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -186,20 +207,46 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     const companyDocPath = `companies/${user.uid}`;
     try {
       try {
-        const docRef = doc(db, "companies", user.uid);
-        await setDoc(docRef, payload, { merge: true });
+        const compRef = doc(db, "companies", user.uid);
+        await setDoc(compRef, payload, { merge: true });
+
+        const bizRef = doc(db, "businesses", user.uid);
+        await setDoc(bizRef, payload, { merge: true });
+
+        // Log audit trail for Company Profile update
+        await addDoc(collection(db, "audit_logs"), {
+          action: "Company Profile Updated",
+          detail: `Company profile and brand assets saved. Primary Color: ${primaryColor}, Email: ${email}`,
+          timestamp: new Date(),
+          user: importAuth.currentUser?.email || "Manager",
+          businessId: user.uid
+        });
+
       } catch (err) {
         if (!isOfflineError(err)) throw err;
         console.warn("[CompanyProfile Offline Save] Saving profile locally to local storage.");
       }
 
-      // Save to local cache
+      // Save to local cache for both companyId and user.uid
       localStorage.setItem(`miratech_offline_company_${user.uid}`, JSON.stringify(payload));
       setSuccess(true);
       if (onCompanyLoaded) onCompanyLoaded(payload);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, companyDocPath);
+      // Let success notification persist a bit longer or fade
+    } catch (err: any) {
+      try {
+        handleFirestoreError(err, OperationType.WRITE, companyDocPath);
+      } catch (firestoreErr: any) {
+        let msg = firestoreErr.message;
+        if (msg.includes("Missing or insufficient permissions")) {
+          msg = "Permission Denied: You do not have sufficient permissions to modify the central company profile. Only the Administration level accounts can update this shared workspace.";
+        } else {
+          try {
+            const parsed = JSON.parse(msg);
+            msg = parsed.error || msg;
+          } catch (_) {}
+        }
+        setError(msg);
+      }
     } finally {
       setSaving(false);
     }

@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import { collection, doc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc } from "firebase/firestore";
-import { db, auth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { useUserStore } from "../lib/store";
+import { logAction } from "../lib/audit";
 import { uploadToDrive } from "../lib/drive";
 import { FileCheck, Search, Trash, Download, Loader2, Eye, X } from "lucide-react";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import safeHtml2Canvas from "../lib/safeHtml2canvas";
 
 interface Receipt {
   id?: string;
@@ -31,6 +33,24 @@ interface CompanyDetails {
 }
 
 export default function Receipts() {
+  const { currentUser } = useUserStore();
+
+  // Local auth shadowing to redirect all queries to the correct shared company workspace
+  const auth = {
+    ...importAuth,
+    get currentUser() {
+      const liveUser = importAuth.currentUser;
+      if (!liveUser) return null;
+      const companyId = currentUser?.companyId || currentUser?.businessId || liveUser.uid;
+      return {
+        ...liveUser,
+        uid: companyId,
+        getIdToken: (forceRefresh?: boolean) => liveUser.getIdToken(forceRefresh),
+        getIdTokenResult: (forceRefresh?: boolean) => liveUser.getIdTokenResult(forceRefresh),
+      } as any;
+    }
+  };
+
   const [loading, setLoading] = useState(true);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [company, setCompany] = useState<CompanyDetails | null>(null);
@@ -42,7 +62,7 @@ export default function Receipts() {
 
   const fetchReceiptsAndCompany = async () => {
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user || !currentUser) return;
 
     setLoading(true);
     const receiptsPath = `companies/${user.uid}/receipts`;
@@ -88,7 +108,7 @@ export default function Receipts() {
 
   useEffect(() => {
     fetchReceiptsAndCompany();
-  }, []);
+  }, [currentUser]);
 
   const handleDelete = async (id: string) => {
     const user = auth.currentUser;
@@ -98,6 +118,13 @@ export default function Receipts() {
     let isOffline = false;
     try {
       await deleteDoc(doc(db, "companies", user.uid, "receipts", id));
+
+      // Log database audit trail
+      await logAction(
+        "Receipt Extinguished",
+        `Permanently deleted receipt ID: ${id}`,
+        user.uid
+      );
     } catch (err) {
       if (!isOfflineError(err)) {
         handleFirestoreError(err, OperationType.DELETE, receiptPath);
@@ -128,7 +155,7 @@ export default function Receipts() {
 
     try {
       const element = pdfAreaRef.current;
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+      const canvas = await safeHtml2Canvas(element, { scale: 2, useCORS: true });
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210;
@@ -138,21 +165,27 @@ export default function Receipts() {
       
       const pdfBlob = pdf.output('blob');
       const fileName = `Receipt_${previewReceipt.number}.pdf`;
-      const fileId = await uploadToDrive(pdfBlob, fileName);
       
-      const user = auth.currentUser;
-      if (user && previewReceipt.id) {
+      // Save PDF locally first to ensure of physical download success
+      pdf.save(fileName);
+
+      // Attempt background Google Drive backup gracefully
+      try {
+        const fileId = await uploadToDrive(pdfBlob, fileName);
+        const user = auth.currentUser;
+        if (user && previewReceipt.id) {
           await updateDoc(doc(db, "companies", user.uid, "receipts", previewReceipt.id), {
-              driveFileId: fileId
+            driveFileId: fileId
           });
           fetchReceiptsAndCompany();
-          alert("Receipt backed up to Google Drive successfully!");
+          console.log("Receipt backed up to Google Drive successfully!");
+        }
+      } catch (driveErr: any) {
+        console.warn("Google Drive skip/backup failed:", driveErr.message);
       }
-
-      pdf.save(fileName);
     } catch (err) {
-      console.error("PDF printing/upload failed:", err);
-      alert("PDF generation or upload failed.");
+      console.error("PDF printing failed:", err);
+      alert("PDF generation failed.");
     }
   };
 

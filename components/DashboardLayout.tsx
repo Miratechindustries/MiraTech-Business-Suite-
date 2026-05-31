@@ -77,7 +77,8 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     const unsubscribe = initAuth(
       async (currentUser, token) => {
         setUser(currentUser);
-        setGoogleToken(token);
+        const cachedToken = typeof window !== "undefined" ? sessionStorage.getItem("google_access_token") : null;
+        setGoogleToken(token || cachedToken);
         if (currentUser) {
           try {
             const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
@@ -256,9 +257,11 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     <div className="flex min-h-screen bg-[#F8FAFC] text-slate-800">
       {/* Sidebar Navigation */}
       <aside className="w-60 bg-white border-r border-slate-200 hidden md:flex flex-col flex-shrink-0 z-10">
-        <div className="p-4 border-b border-slate-200 bg-white flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-extrabold text-slate-900 tracking-wider uppercase font-sans">Mira Suite</span>
+        <div className="p-4 border-b border-slate-200 bg-white flex items-center justify-between max-w-full overflow-hidden">
+          <div className="flex items-center gap-2 min-w-0 font-sans">
+            <span className="text-xs font-extrabold text-slate-900 tracking-wider uppercase truncate" style={{ color: company?.primaryColor || '#0F172A' }}>
+              {company?.name || "Mira Suite"}
+            </span>
           </div>
           <button className="p-1 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-md transition cursor-pointer">
             <ChevronLeft className="h-4 w-4" />
@@ -287,11 +290,15 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-bold tracking-wide transition capitalize cursor-pointer ${
                   isActive
-                    ? "bg-slate-100 text-[#0F172A] border-l-2 border-blue-605"
+                    ? "bg-slate-100"
                     : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/70"
                 }`}
+                style={isActive ? { 
+                  borderLeft: `2.5px solid ${company?.primaryColor || '#2563EB'}`, 
+                  color: company?.primaryColor || '#0F172A' 
+                } : {}}
               >
-                <Icon className={`h-4 w-4 ${isActive ? "text-blue-600" : "text-slate-400"}`} />
+                <Icon className="h-4 w-4" style={{ color: isActive ? (company?.primaryColor || '#2563EB') : '#94A3B8' }} />
                 {tab.label}
               </button>
             );
@@ -339,21 +346,24 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
           {/* Right identity layout */}
           <div className="flex items-center gap-3">
-            <div className="text-right flex flex-col justify-center">
-              <span className="text-xs font-extrabold text-slate-800 tracking-wide font-sans leading-tight">MIRA SUITE</span>
+            <div className="text-right flex flex-col justify-center items-end max-w-[150px] overflow-hidden">
+              <span className="text-xs font-extrabold text-slate-800 tracking-wide font-sans leading-tight uppercase truncate w-full" style={{ color: company?.primaryColor || '#1E293B' }}>
+                {company?.name || "MIRA SUITE"}
+              </span>
               <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">STAFF ACCESS</span>
             </div>
 
             {/* Notification Icon */}
             <button className="relative p-1.5 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition cursor-pointer">
               <Bell className="h-4 w-4 animate-none" />
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 bg-blue-600 rounded-full border border-white"></span>
+              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full border border-white" style={{ backgroundColor: company?.primaryColor || '#2563EB' }}></span>
             </button>
 
             {/* User Profile circle */}
             <div 
               onClick={() => setActiveTab("settings")}
-              className="h-8 w-8 rounded-full bg-[#0066FF] hover:bg-blue-600 text-white font-extrabold text-xs flex items-center justify-center cursor-pointer shadow-3xs transition"
+              className="h-8 w-8 rounded-full text-white font-extrabold text-xs flex items-center justify-center cursor-pointer shadow-3xs transition hover:opacity-90"
+              style={{ backgroundColor: company?.primaryColor || '#0066FF' }}
               title={user.displayName || "Manager"}
             >
               {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
@@ -363,24 +373,27 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
         {/* Mobile Header navigation bar with Hamburger */}
         <header className="bg-white border-b border-slate-200 py-3 px-4 flex items-center justify-between md:hidden flex-shrink-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="p-1 px-2 border border-slate-200 text-slate-605 rounded-md hover:bg-slate-50 transition cursor-pointer"
+              className="p-1 px-2 border border-slate-200 text-slate-605 rounded-md hover:bg-slate-50 transition cursor-pointer flex-shrink-0"
               aria-label="Toggle Navigation drawer"
             >
               <Menu className="h-4 w-4" />
             </button>
-            <div className="flex items-center gap-1.5 ml-1">
-              <Landmark className="h-4 w-4 text-blue-600" />
-              <span className="text-xs font-extrabold text-[#0B1329] uppercase tracking-wider">MIRA SUITE</span>
+            <div className="flex items-center gap-1.5 ml-1 min-w-0">
+              <Landmark className="h-4 w-4 flex-shrink-0" style={{ color: company?.primaryColor || '#2563EB' }} />
+              <span className="text-xs font-extrabold text-[#0B1329] uppercase tracking-wider truncate" style={{ color: company?.primaryColor || '#0B1329' }}>
+                {company?.name || "MIRA SUITE"}
+              </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5">
             <div 
               onClick={() => setActiveTab("settings")}
-              className="h-7 w-7 rounded-full bg-[#0066FF] hover:bg-blue-600 text-white font-extrabold text-[10px] flex items-center justify-center cursor-pointer shadow-3xs transition"
+              className="h-7 w-7 rounded-full text-white font-extrabold text-[10px] flex items-center justify-center cursor-pointer shadow-3xs transition hover:opacity-90"
+              style={{ backgroundColor: company?.primaryColor || '#0066FF' }}
               title={user.displayName || "Manager"}
             >
               {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
@@ -439,11 +452,15 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                       }}
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-bold tracking-wide transition capitalize cursor-pointer ${
                         isActive
-                          ? "bg-slate-100 text-[#0F172A] border-l-2 border-blue-605"
+                          ? "bg-slate-100"
                           : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/70"
                       }`}
+                      style={isActive ? { 
+                        borderLeft: `2.5px solid ${company?.primaryColor || '#2563EB'}`, 
+                        color: company?.primaryColor || '#0F172A' 
+                      } : {}}
                     >
-                      <Icon className={`h-4 w-4 ${isActive ? "text-blue-600" : "text-slate-400"}`} />
+                      <Icon className="h-4 w-4" style={{ color: isActive ? (company?.primaryColor || '#2563EB') : '#94A3B8' }} />
                       {tab.label}
                     </button>
                   );

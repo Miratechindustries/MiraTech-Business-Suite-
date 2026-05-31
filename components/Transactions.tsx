@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { Search, Plus, Trash2, Edit, X, ArrowUpRight, ArrowDownLeft, FileSpreadsheet, Download, Calendar, Settings, DollarSign, Wallet2, CheckCircle, AlertCircle } from "lucide-react";
-import { auth } from "../lib/firebase";
+import { auth, db, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { collection, doc, addDoc, getDocs, deleteDoc, getDoc, query, setDoc } from "firebase/firestore";
+import { useUserStore } from "../lib/store";
+import { logAction } from "../lib/audit";
 
 interface Transaction {
   id: string;
@@ -16,10 +19,13 @@ interface Transaction {
 }
 
 export default function Transactions() {
+  const { currentUser } = useUserStore();
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [businessId, setBusinessId] = useState<string | null>(null);
 
   // Form Fields
   const [id, setId] = useState("");
@@ -32,47 +38,71 @@ export default function Transactions() {
   const [status, setStatus] = useState<"Settled" | "Pending">("Settled");
 
   useEffect(() => {
-    const user = auth.currentUser;
-    const cacheKey = user ? `miratech_transactions_${user.uid}` : "miratech_transactions_guest";
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      setTxns(JSON.parse(cached));
-    } else {
-      const initial: Transaction[] = [
-        { id: "TXN-101", date: "2026-05-18", description: "Invoice Settlement Apex Systems", type: "Inflow", reference: "INV-0128", method: "Bank Transfer", amount: 4750.00, status: "Settled" },
-        { id: "TXN-102", date: "2026-05-19", description: "Office Space Outlay & Sublets", type: "Outflow", reference: "EXP-9501", method: "ACH Direct Debit", amount: 1500.00, status: "Settled" },
-        { id: "TXN-103", date: "2026-05-20", description: "Deposit Core Hardware Sales Innovate", type: "Inflow", reference: "INV-0129", method: "Credit Card", amount: 8500.00, status: "Settled" },
-        { id: "TXN-104", date: "2026-05-20", description: "Broadband Optical Subscriptions", type: "Outflow", reference: "EXP-9502", method: "Credit Card", amount: 115.00, status: "Settled" },
-        { id: "TXN-105", date: "2026-05-21", description: "Deposit NextGen Quotation Escrow", type: "Inflow", reference: "QTY-5082", method: "Bank Transfer", amount: 350.00, status: "Pending" },
-      ];
-      setTxns(initial);
-      localStorage.setItem(cacheKey, JSON.stringify(initial));
+    async function loadBusiness() {
+      const user = auth.currentUser;
+      if (!user) return;
+      const cached = currentUser?.companyId || currentUser?.businessId;
+      if (cached) {
+        setBusinessId(cached);
+      } else {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        setBusinessId(userDoc.data()?.businessId || userDoc.data()?.companyId || user.uid);
+      }
     }
-  }, []);
+    loadBusiness();
+  }, [currentUser]);
 
-  const saveToLocal = (updatedList: Transaction[]) => {
-    setTxns(updatedList);
-    const user = auth.currentUser;
-    const cacheKey = user ? `miratech_transactions_${user.uid}` : "miratech_transactions_guest";
-    localStorage.setItem(cacheKey, JSON.stringify(updatedList));
+  const loadTransactions = async () => {
+    if (!businessId) return;
+    setLoading(true);
+    const colRef = collection(db, "companies", businessId, "transactions");
+    try {
+      const snapshot = await getDocs(colRef);
+      let data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+      
+      if (data.length === 0) {
+        // Seed initial transactions in FireStore database so it does not start blank
+        const initial: Transaction[] = [
+          { id: "TXN-101", date: "2026-05-18", description: "Invoice Settlement Apex Systems", type: "Inflow", reference: "INV-0128", method: "Bank Transfer", amount: 4750.00, status: "Settled" },
+          { id: "TXN-102", date: "2026-05-19", description: "Office Space Outlay & Sublets", type: "Outflow", reference: "EXP-9501", method: "ACH Direct Debit", amount: 1500.00, status: "Settled" },
+          { id: "TXN-103", date: "2026-05-20", description: "Deposit Core Hardware Sales Innovate", type: "Inflow", reference: "INV-0129", method: "Credit Card", amount: 8500.00, status: "Settled" },
+          { id: "TXN-104", date: "2026-05-20", description: "Broadband Optical Subscriptions", type: "Outflow", reference: "EXP-9502", method: "Credit Card", amount: 115.00, status: "Settled" },
+          { id: "TXN-105", date: "2026-05-21", description: "Deposit NextGen Quotation Escrow", type: "Inflow", reference: "QTY-5082", method: "Bank Transfer", amount: 350.00, status: "Pending" },
+        ];
+        
+        for (const tx of initial) {
+          await setDoc(doc(db, "companies", businessId, "transactions", tx.id), tx);
+        }
+        data = initial;
+      }
 
-    // Audit log update
-    const auditKey = user ? `miratech_audit_logs_${user.uid}` : "miratech_audit_logs_guest";
-    const oldLogs = JSON.parse(localStorage.getItem(auditKey) || "[]");
-    localStorage.setItem(auditKey, JSON.stringify([{
-      action: "Ledger Synced",
-      detail: `Ledger transaction registry reconciled. Value assets: $${updatedList.length}`,
-      timestamp: new Date().toISOString(),
-      user: user?.email || "Manager",
-      ip: "127.0.0.1"
-    }, ...oldLogs]));
+      setTxns(data);
+      localStorage.setItem(`miratech_transactions_${businessId}`, JSON.stringify(data));
+    } catch (err) {
+      if (isOfflineError(err)) {
+        console.warn("[Transactions Workspace Cache Mode] Error loading, loading from local cache fallback.");
+        const cached = localStorage.getItem(`miratech_transactions_${businessId}`);
+        if (cached) setTxns(JSON.parse(cached));
+      } else {
+        handleFirestoreError(err, OperationType.LIST, `companies/${businessId}/transactions`);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleCreate = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (businessId) {
+      loadTransactions();
+    }
+  }, [businessId]);
+
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description || amount <= 0) return alert("Please specify description and positive amount.");
+    if (!businessId) return;
 
-    const newTxKey = id || `TXN-${String(txns.length + 101)}`;
+    const newTxKey = id || `TXN-${String(Date.now()).substring(7)}`;
     const newTx: Transaction = {
       id: newTxKey,
       date: date || new Date().toISOString().split("T")[0],
@@ -84,9 +114,24 @@ export default function Transactions() {
       status,
     };
 
-    saveToLocal([newTx, ...txns]);
-    resetForm();
-    setIsOpen(false);
+    try {
+      // 1. Save to Firestore
+      await setDoc(doc(db, "companies", businessId, "transactions", newTxKey), newTx);
+
+      // 2. Audit Trail logging
+      await logAction(
+        "Ledger Transaction Logged",
+        `Created transaction ${newTxKey} of type ${type} with value $${amount}. Ref: ${reference || "N/A"}.`,
+        businessId,
+        amount
+      );
+
+      resetForm();
+      setIsOpen(false);
+      await loadTransactions();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `companies/${businessId}/transactions/${newTxKey}`);
+    }
   };
 
   const resetForm = () => {
@@ -100,10 +145,23 @@ export default function Transactions() {
     setStatus("Settled");
   };
 
-  const handleDelete = (txid: string) => {
-    if (confirm("Remove this transaction row from secure local audits?")) {
-      const updated = txns.filter((t) => t.id !== txid);
-      saveToLocal(updated);
+  const handleDelete = async (txid: string) => {
+    if (!businessId) return;
+    if (confirm("Remove this transaction row from secure database audits?")) {
+      try {
+        await deleteDoc(doc(db, "companies", businessId, "transactions", txid));
+        
+        // Audit log
+        await logAction(
+          "Ledger Transaction Extinguished",
+          `Removed transaction record ID ${txid}.`,
+          businessId
+        );
+
+        await loadTransactions();
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `companies/${businessId}/transactions/${txid}`);
+      }
     }
   };
 

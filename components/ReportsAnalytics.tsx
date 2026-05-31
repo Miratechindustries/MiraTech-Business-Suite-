@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { BarChart3, TrendingUp, DollarSign, PieChart, Percent, ArrowUpRight, ArrowDownLeft, FileCheck, Landmark, Printer, Download } from "lucide-react";
-import { auth } from "../lib/firebase";
+import { BarChart3, TrendingUp, DollarSign, PieChart, Percent, ArrowUpRight, ArrowDownLeft, FileCheck, Landmark, Printer, Download, Loader2 } from "lucide-react";
+import { auth, db, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { useUserStore } from "../lib/store";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface MetricRow {
@@ -14,45 +16,121 @@ interface MetricRow {
 }
 
 export default function ReportsAnalytics() {
+  const { currentUser } = useUserStore();
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
   const [selectedYear, setSelectedYear] = useState("2026");
   const [chartData, setChartData] = useState<{ month: string; revenue: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [businessId, setBusinessId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Dynamically retrieve values or seed corporate metrics
-    const user = auth.currentUser;
-    const cacheKey = user ? `miratech_financials_${user.uid}` : "miratech_financials_guest";
-    const txKey = user ? `miratech_transactions_${user.uid}` : "miratech_transactions_guest";
-    
-    const cached = localStorage.getItem(cacheKey);
-    const txCache = JSON.parse(localStorage.getItem(txKey) || "[]");
+    async function loadBusiness() {
+      const user = auth.currentUser;
+      if (!user) return;
+      const cached = currentUser?.companyId || currentUser?.businessId;
+      if (cached) {
+        setBusinessId(cached);
+      } else {
+        try {
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          setBusinessId(userDoc.data()?.businessId || userDoc.data()?.companyId || user.uid);
+        } catch (e) {
+          console.error(e);
+          setBusinessId(user.uid);
+        }
+      }
+    }
+    loadBusiness();
+  }, [currentUser]);
 
-    if (cached) {
-      setMetrics(JSON.parse(cached));
-    } else {
-      const initial: MetricRow[] = [
-        { quarter: "Q1 - Winter", billings: 45000, invoices: 32000, expenses: 14000, netProfit: 18000 },
-        { quarter: "Q2 - Spring", billings: 58000, invoices: 40500, expenses: 18500, netProfit: 22000 },
-        { quarter: "Q3 - Summer", billings: 69000, invoices: 48000, expenses: 21000, netProfit: 27000 },
-        { quarter: "Q4 - Autumn", billings: 81000, invoices: 59000, expenses: 25000, netProfit: 34000 },
-      ];
-      setMetrics(initial);
-      localStorage.setItem(cacheKey, JSON.stringify(initial));
+  useEffect(() => {
+    if (!businessId) return;
+
+    async function fetchAnalytics() {
+      setLoading(true);
+      try {
+        // Fetch all collections in parallel for optimal responsiveness
+        const [quotsSnap, invsSnap, txnsSnap] = await Promise.all([
+          getDocs(collection(db, "companies", businessId!, "quotations")),
+          getDocs(collection(db, "companies", businessId!, "invoices")),
+          getDocs(collection(db, "companies", businessId!, "transactions")),
+        ]);
+
+        const quots = quotsSnap.docs.map(doc => doc.data());
+        const invs = invsSnap.docs.map(doc => doc.data());
+        const txns = txnsSnap.docs.map(doc => doc.data());
+
+        const quarters: MetricRow[] = [
+          { quarter: "Q1 - Winter", billings: 0, invoices: 0, expenses: 0, netProfit: 0 },
+          { quarter: "Q2 - Spring", billings: 0, invoices: 0, expenses: 0, netProfit: 0 },
+          { quarter: "Q3 - Summer", billings: 0, invoices: 0, expenses: 0, netProfit: 0 },
+          { quarter: "Q4 - Autumn", billings: 0, invoices: 0, expenses: 0, netProfit: 0 },
+        ];
+
+        function getQuarterIndex(dateStr: string | undefined): number {
+          if (!dateStr) return 1; // Default Q2
+          const month = parseInt(dateStr.split("-")[1], 10);
+          if (isNaN(month)) return 1;
+          if (month >= 1 && month <= 3) return 0;
+          if (month >= 4 && month <= 6) return 1;
+          if (month >= 7 && month <= 9) return 2;
+          if (month >= 10 && month <= 12) return 3;
+          return 1;
+        }
+
+        // 1. Process Quotations (Billings)
+        quots.forEach(q => {
+          const idx = getQuarterIndex(q.date);
+          quarters[idx].billings += Number(q.total || 0);
+        });
+
+        // 2. Process Invoices (Operating Income)
+        invs.forEach(i => {
+          const idx = getQuarterIndex(i.date);
+          quarters[idx].invoices += Number(i.total || 0);
+        });
+
+        // 3. Process Transactions Outlays (Expenses)
+        txns.forEach(t => {
+          const idx = getQuarterIndex(t.date);
+          if (t.type === "Outflow") {
+            quarters[idx].expenses += Number(t.amount || 0);
+          }
+        });
+
+        // 4. Calculate Net Profit
+        quarters.forEach(q => {
+          q.netProfit = q.invoices - q.expenses;
+        });
+
+        setMetrics(quarters);
+
+        // Process monthly revenue charts
+        const monthlyData: Record<string, number> = {};
+        txns.forEach((t: any) => {
+          if (t.type === 'Inflow') {
+            const month = (t.date || "2026-05").substring(0, 7); // YYYY-MM
+            monthlyData[month] = (monthlyData[month] || 0) + Number(t.amount || 0);
+          }
+        });
+
+        const sortedMonths = Object.keys(monthlyData).sort();
+        if (sortedMonths.length === 0) {
+          // Add default month if empty for visualization
+          setChartData([{ month: "2026-05", revenue: 5000 }]);
+        } else {
+          setChartData(sortedMonths.map(month => ({ month, revenue: monthlyData[month] })));
+        }
+
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, `companies/${businessId}/analytics`);
+      } finally {
+        setLoading(false);
+      }
     }
 
-    // Process Transaction Data for Chart
-    const monthlyData: Record<string, number> = {};
-    txCache.forEach((t: any) => {
-        if (t.type === 'Inflow') {
-            const month = t.date.substring(0, 7); // YYYY-MM
-            monthlyData[month] = (monthlyData[month] || 0) + t.amount;
-        }
-    });
-    
-    const sortedMonths = Object.keys(monthlyData).sort();
-    setChartData(sortedMonths.map(month => ({ month, revenue: monthlyData[month] })));
-    
-  }, []);
+    fetchAnalytics();
+  }, [businessId]);
 
   const totalBillings = metrics.reduce((sum, r) => sum + r.billings, 0);
   const totalInvoices = metrics.reduce((sum, r) => sum + r.invoices, 0);
@@ -68,6 +146,15 @@ export default function ReportsAnalytics() {
   const handlePrint = () => {
     window.print();
   };
+
+  if (loading) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-2 bg-white border border-slate-100 rounded-lg">
+        <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
+        <span className="text-[10px] text-slate-400 font-medium">Aggregating database profiles...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

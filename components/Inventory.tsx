@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Plus, Filter, AlertTriangle, ArrowUpDown, ChevronDown, Trash2, Edit, Save, X, Layers, Box, TrendingUp, CheckCircle2 } from "lucide-react";
-import { auth } from "../lib/firebase";
+import { Search, Plus, Filter, AlertTriangle, ArrowUpDown, ChevronDown, Trash2, Edit, Save, X, Layers, Box, Zap, Settings, Network, Server, Cable, CheckCircle2 } from "lucide-react";
+import { auth, db } from "../lib/firebase";
+import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc } from "firebase/firestore";
+import { logAction } from "../lib/audit";
 
 interface InventoryItem {
   id: string;
@@ -82,27 +84,28 @@ export default function Inventory() {
   const [stock, setStock] = useState(0);
   const [minStock, setMinStock] = useState(5);
 
-  useEffect(() => {
-    const user = auth.currentUser;
-    const cacheKey = user ? `miratech_inventory_${user.uid}` : "miratech_inventory_guest";
-    const cached = localStorage.getItem(cacheKey);
-    
-    // Also load/save category configs... (will do later)
+  const [businessId, setBusinessId] = useState<string | null>(null);
 
-    if (cached) {
-      setItems(JSON.parse(cached));
-    } else {
-      const initial: InventoryItem[] = [
-        { id: "INV-001", name: "Core Switch 24-Port", sku: "NET-SW-24", category: "Networking", price: 350.00, stock: 15, minStock: 5 },
-        { id: "INV-002", name: "SFP+ Fiber Module 10G", sku: "NET-SFP-10G", category: "Networking", price: 45.00, stock: 42, minStock: 10 },
-        { id: "INV-003", name: "Cat6A Shielded Cable (305m)", sku: "CAB-C6A-S", category: "Cabling", price: 180.00, stock: 4, minStock: 5 },
-        { id: "INV-004", name: "Pro Rack Server 1U", sku: "SRV-1U-SYS", category: "Servers", price: 1250.00, stock: 3, minStock: 2 },
-        { id: "INV-005", name: "Smart UPS 1500VA", sku: "PWR-UPS-1500", category: "Power Supply", price: 290.00, stock: 0, minStock: 3 },
-      ];
-      setItems(initial);
-      localStorage.setItem(cacheKey, JSON.stringify(initial));
+  useEffect(() => {
+    async function loadBusiness() {
+        if (!auth.currentUser) return;
+        const userSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
+        setBusinessId(userSnap.data()?.businessId || null);
     }
+    loadBusiness();
   }, []);
+
+  useEffect(() => {
+    if (!businessId) return;
+    
+    async function fetchInventory() {
+        const q = query(collection(db, "products"), where("businessId", "==", businessId));
+        const snapshot = await getDocs(q);
+        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as InventoryItem));
+        setItems(data);
+    }
+    fetchInventory();
+  }, [businessId]);
 
   const saveToLocal = (updatedList: InventoryItem[]) => {
     setItems(updatedList);
@@ -123,13 +126,12 @@ export default function Inventory() {
     localStorage.setItem(auditKey, JSON.stringify([newLog, ...oldLogs]));
   };
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !sku) return alert("Please fill details");
+    if (!name || !sku || !businessId) return;
 
-    const newItemId = id || `INV-${String(items.length + 101)}`;
-    const newItem: InventoryItem = {
-      id: newItemId,
+    const newItem = {
+      businessId,
       name,
       sku: sku.toUpperCase(),
       category,
@@ -138,8 +140,17 @@ export default function Inventory() {
       minStock: Number(minStock),
     };
 
-    const updated = [...items, newItem];
-    saveToLocal(updated);
+    const docRef = await addDoc(collection(db, "products"), newItem);
+
+    // Log database audit trail
+    await logAction(
+      "Inventory Item Logged",
+      `Created stock ledger entry for product '${name}' [SKU: ${sku.toUpperCase()}]`,
+      businessId,
+      Number(price) * Number(stock)
+    );
+
+    setItems([...items, { id: docRef.id, ...newItem }]);
     resetForm();
     setIsOpen(false);
   };
@@ -167,32 +178,49 @@ export default function Inventory() {
     setIsOpen(true);
   };
 
-  const handleUpdate = (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name) return;
+    if (!editingItem || !businessId) return;
 
-    const updated = items.map((it) =>
-      it.id === id
-        ? {
-            ...it,
-            name,
-            sku: sku.toUpperCase(),
-            category,
-            price: Number(price),
-            stock: Number(stock),
-            minStock: Number(minStock),
-          }
-        : it
+    const updatedItem = {
+      ...editingItem,
+      name,
+      sku: sku.toUpperCase(),
+      category,
+      price: Number(price),
+      stock: Number(stock),
+      minStock: Number(minStock),
+    };
+    
+    await updateDoc(doc(db, "products", editingItem.id), updatedItem);
+
+    // Log database audit trail
+    await logAction(
+      "Inventory Item Updated",
+      `Updated product details of '${name}' [SKU: ${sku.toUpperCase()}]. Stock: ${stock}`,
+      businessId,
+      Number(price) * Number(stock)
     );
-    saveToLocal(updated);
+
+    setItems(items.map((it) => it.id === editingItem.id ? updatedItem : it));
     resetForm();
     setIsOpen(false);
   };
 
-  const handleDelete = (itemId: string) => {
+  const handleDelete = async (itemId: string) => {
     if (confirm("Are you sure you want to delete this core stock item?")) {
-      const updated = items.filter((it) => it.id !== itemId);
-      saveToLocal(updated);
+      await deleteDoc(doc(db, "products", itemId));
+
+      // Log database audit trail
+      if (businessId) {
+        await logAction(
+          "Inventory Item Extinguished",
+          `Permanently deleted product log ID: ${itemId}`,
+          businessId
+        );
+      }
+
+      setItems(items.filter((it) => it.id !== itemId));
     }
   };
 

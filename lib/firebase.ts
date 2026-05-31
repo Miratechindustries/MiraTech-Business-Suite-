@@ -1,11 +1,11 @@
 import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
   onAuthStateChanged, 
   User, 
-  signInWithEmailAndPassword 
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
@@ -14,14 +14,6 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
 export const auth = getAuth(app);
 
-// Add required Google Workspace scopes
-export const provider = new GoogleAuthProvider();
-provider.addScope("https://www.googleapis.com/auth/spreadsheets");
-provider.addScope("https://www.googleapis.com/auth/drive");
-
-let cachedAccessToken: string | null = null;
-let isSigningIn = false;
-
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string | null) => void,
   onAuthFailure?: () => void
@@ -29,30 +21,57 @@ export const initAuth = (
   return onAuthStateChanged(auth, async (user: User | null) => {
     console.log("DEBUG: onAuthStateChanged triggered with user:", user?.email);
     if (user) {
-      if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
+      if (onAuthSuccess) onAuthSuccess(user, null);
     } else {
-      cachedAccessToken = null;
       if (onAuthFailure) onAuthFailure();
     }
   });
 };
 
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
-  try {
-    isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error("Failed to get Google Access Token from Firebase Auth.");
+let cachedAccessToken: string | null = null;
+
+// Retrieve from sessionStorage on client load if available
+if (typeof window !== "undefined") {
+  cachedAccessToken = sessionStorage.getItem("google_access_token");
+}
+
+export function setAccessToken(token: string | null) {
+  cachedAccessToken = token;
+  if (typeof window !== "undefined") {
+    if (token) {
+      sessionStorage.setItem("google_access_token", token);
+    } else {
+      sessionStorage.removeItem("google_access_token");
     }
-    cachedAccessToken = credential.accessToken;
-    return { user: result.user, accessToken: cachedAccessToken };
-  } catch (error) {
-    console.error("Authentication Error:", error);
-    throw error;
-  } finally {
-    isSigningIn = false;
   }
+}
+
+export async function getAccessToken(): Promise<string | null> {
+  if (cachedAccessToken) return cachedAccessToken;
+  if (typeof window !== "undefined") {
+    const token = sessionStorage.getItem("google_access_token");
+    if (token) {
+      cachedAccessToken = token;
+      return token;
+    }
+  }
+  return null;
+}
+
+export const googleSignIn = async () => {
+  const provider = new GoogleAuthProvider();
+  provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+  provider.addScope('https://www.googleapis.com/auth/drive.file');
+  const result = await signInWithPopup(auth, provider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  const accessToken = credential?.accessToken || null;
+  if (accessToken) {
+    setAccessToken(accessToken);
+  }
+  return {
+    user: result.user,
+    accessToken,
+  };
 };
 
 export const emailSignIn = async (email: string, password: string) => {
@@ -66,13 +85,9 @@ export const emailSignIn = async (email: string, password: string) => {
   }
 };
 
-export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken;
-};
-
 export const logout = async () => {
   await auth.signOut();
-  cachedAccessToken = null;
+  setAccessToken(null);
 };
 
 // Error Handling

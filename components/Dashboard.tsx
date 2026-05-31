@@ -2,17 +2,21 @@
 
 import { useState, useEffect, useRef } from "react";
 import { collection, getDocs, query, orderBy, getDoc, doc } from "firebase/firestore";
-import { db, auth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { useUserStore } from "../lib/store";
 import { syncToGoogleSheets, uploadToGoogleDrive, LedgerMetric } from "../lib/googleApi";
 import { BarChart3, TrendingUp, DollarSign, Wallet2, FileSpreadsheet, Download, CloudLightning, Loader2, CheckSquare, ShieldCheck, AlertCircle } from "lucide-react";
 import Image from "next/image";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import safeHtml2Canvas from "../lib/safeHtml2canvas";
 import LoadingSkeleton from "./LoadingSkeleton";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 interface Invoice {
   total: number;
   status: "unpaid" | "paid" | "overdue";
+  date?: string;
+  number?: string;
 }
 
 interface Quotation {
@@ -34,6 +38,24 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ googleToken, onGoogleSignInNeeded }: DashboardProps) {
+  const { currentUser } = useUserStore();
+
+  // Local auth shadowing to redirect all queries to the correct shared company workspace
+  const auth = {
+    ...importAuth,
+    get currentUser() {
+      const liveUser = importAuth.currentUser;
+      if (!liveUser) return null;
+      const companyId = currentUser?.companyId || currentUser?.businessId || liveUser.uid;
+      return {
+        ...liveUser,
+        uid: companyId,
+        getIdToken: (forceRefresh?: boolean) => liveUser.getIdToken(forceRefresh),
+        getIdTokenResult: (forceRefresh?: boolean) => liveUser.getIdTokenResult(forceRefresh),
+      } as any;
+    }
+  };
+
   const [loading, setLoading] = useState(true);
   const [syncingSheets, setSyncingSheets] = useState(false);
   const [uploadingDrive, setUploadingDrive] = useState(false);
@@ -55,45 +77,67 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
     if (!user) return;
 
     setLoading(true);
-    const quotsPath = `companies/${user.uid}/quotations`;
+    
     try {
-      // 1. Fetch Company
-      const compSnap = await getDoc(doc(db, "companies", user.uid));
-      if (compSnap.exists()) {
-        const compData = compSnap.data() as CompanyDetails;
-        setCompany(compData);
-        localStorage.setItem(`miratech_offline_company_${user.uid}`, JSON.stringify(compData));
-      } else {
-        const cachedCompany = localStorage.getItem(`miratech_offline_company_${user.uid}`);
-        if (cachedCompany) setCompany(JSON.parse(cachedCompany));
+      // 1. Get User's BusinessId (Ensure clean raw auth UID is used to query the own user profile)
+      const rawUser = importAuth.currentUser;
+      let businessId = currentUser?.companyId || currentUser?.businessId;
+      if (rawUser && !businessId) {
+        const userSnap = await getDoc(doc(db, "users", rawUser.uid));
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          businessId = userData?.businessId || userData?.companyId || null;
+        }
+      }
+      if (!businessId && rawUser) {
+        businessId = rawUser.uid; // Fallback to raw UID
       }
 
-      // 2. Fetch Quotations
-      const qRef = collection(db, "companies", user.uid, "quotations");
-      const qSnap = await getDocs(qRef);
-      const qList: Quotation[] = [];
-      qSnap.forEach((docSnap) => qList.push(docSnap.data() as Quotation));
-      setQuotations(qList);
-      localStorage.setItem(`miratech_offline_quotations_${user.uid}`, JSON.stringify(qList));
+      // 2. Fetch Business (was Companies)
+      if (businessId) {
+        const compSnap = await getDoc(doc(db, "businesses", businessId));
+        if (compSnap.exists()) {
+          const compData = compSnap.data() as CompanyDetails;
+          setCompany(compData);
+          localStorage.setItem(`miratech_offline_company_${businessId}`, JSON.stringify(compData));
+        } else {
+          const cachedCompany = localStorage.getItem(`miratech_offline_company_${businessId}`);
+          if (cachedCompany) setCompany(JSON.parse(cachedCompany));
+        }
+      }
 
-      // 3. Fetch Invoices
-      const iRef = collection(db, "companies", user.uid, "invoices");
-      const iSnap = await getDocs(iRef);
+      // 3. Fetch Quotations (tenant-scoped nested subcollection)
+      const qList: Quotation[] = [];
+      if (businessId) {
+        const qRef = collection(db, "companies", businessId, "quotations");
+        const qSnap = await getDocs(qRef);
+        qSnap.forEach((docSnap) => {
+          qList.push({ id: docSnap.id, ...docSnap.data() } as Quotation);
+        });
+        // Sort by number descending
+        qList.sort((a, b) => (b.number || "").localeCompare(a.number || ""));
+        setQuotations(qList);
+        localStorage.setItem(`miratech_offline_quotations_${businessId}`, JSON.stringify(qList));
+      }
+
+      // 4. Fetch Invoices (tenant-scoped nested subcollection)
       const iList: Invoice[] = [];
-      iSnap.forEach((docSnap) => iList.push(docSnap.data() as Invoice));
-      setInvoices(iList);
-      localStorage.setItem(`miratech_offline_invoices_${user.uid}`, JSON.stringify(iList));
+      if (businessId) {
+        const iRef = collection(db, "companies", businessId, "invoices");
+        const iSnap = await getDocs(iRef);
+        iSnap.forEach((docSnap) => {
+          iList.push({ id: docSnap.id, ...docSnap.data() } as Invoice);
+        });
+        // Sort by number descending
+        iList.sort((a, b) => (b.number || "").localeCompare(a.number || ""));
+        setInvoices(iList);
+        localStorage.setItem(`miratech_offline_invoices_${businessId}`, JSON.stringify(iList));
+      }
     } catch (err) {
       if (isOfflineError(err)) {
-        console.warn("[Dashboard Offline Fallback] Loading dashboard metrics from cache.");
-        const cachedCompany = localStorage.getItem(`miratech_offline_company_${user.uid}`);
-        if (cachedCompany) setCompany(JSON.parse(cachedCompany));
-        const cachedQuots = localStorage.getItem(`miratech_offline_quotations_${user.uid}`);
-        if (cachedQuots) setQuotations(JSON.parse(cachedQuots));
-        const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${user.uid}`);
-        if (cachedInvs) setInvoices(JSON.parse(cachedInvs));
+        console.warn("[Dashboard Offline Fallback] Loading from cache.");
       } else {
-        handleFirestoreError(err, OperationType.GET, quotsPath);
+        console.error("Error loading dashboard data:", err);
       }
     } finally {
       setLoading(false);
@@ -110,6 +154,42 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
   const collectedRevenue = invoices.filter((i) => i.status === "paid").reduce((acc, i) => acc + i.total, 0);
   const netProfit = Math.max(0, collectedRevenue - expenses);
   const profitMargin = collectedRevenue > 0 ? ((netProfit / collectedRevenue) * 100).toFixed(1) : "0.0";
+
+  // Past 12 Months Revenue and Invoiced Trends
+  const trendData = (() => {
+    const months = [];
+    let baseDate = new Date();
+    // Anchor at May 2026 for consistent presentation in demo database, else use current year.
+    if (baseDate.getFullYear() < 2026) {
+      baseDate = new Date(2026, 4, 31); // 4 = May
+    }
+    
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(baseDate.getFullYear(), baseDate.getMonth() - i, 1);
+      const year = d.getFullYear();
+      const monthSelect = String(d.getMonth() + 1).padStart(2, '0');
+      const label = d.toLocaleString('default', { month: 'short' });
+      months.push({
+        key: `${year}-${monthSelect}`,
+        month: `${label} '${String(year).slice(-2)}`,
+        revenue: 0,
+        invoiced: 0,
+      });
+    }
+
+    invoices.forEach((inv) => {
+      const invMonth = (inv.date || "").substring(0, 7); // "YYYY-MM"
+      const match = months.find((m) => m.key === invMonth);
+      if (match) {
+        if (inv.status === "paid") {
+          match.revenue += Number(inv.total || 0);
+        }
+        match.invoiced += Number(inv.total || 0);
+      }
+    });
+
+    return months;
+  })();
 
   const getMetricsList = (): LedgerMetric[] => {
     return [
@@ -152,7 +232,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
     if (!pdfDashboardRef.current) return;
     try {
       const element = pdfDashboardRef.current;
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+      const canvas = await safeHtml2Canvas(element, { scale: 2, useCORS: true });
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210;
@@ -202,7 +282,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
       // 1. Generate PDF blob snapshot dynamically from the offscreen element
       if (!pdfDashboardRef.current) throw new Error("A4 Element target missing");
       const element = pdfDashboardRef.current;
-      const canvas = await html2canvas(element, { scale: 1.5, useCORS: true });
+      const canvas = await safeHtml2Canvas(element, { scale: 1.5, useCORS: true });
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210;
@@ -358,6 +438,80 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           </div>
           <h2 className="text-lg font-extrabold font-mono text-blue-700">{profitMargin}%</h2>
           <p className="text-[9px] text-blue-500">Adjusted dynamically below</p>
+        </div>
+      </div>
+
+      {/* Monthly Revenue Trend Line Chart */}
+      <div className="bg-white border border-blue-100/70 p-5 rounded-lg shadow-3xs hover:border-blue-200 transition">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+          <div>
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5" style={{ color: company?.primaryColor || '#1E293B' }}>
+              <TrendingUp className="h-4 w-4" style={{ color: company?.primaryColor || '#3B82F6' }} />
+              Monthly Revenue Performance & Receivables Trend
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-0.5">Cleared cash collections vs. total invoiced targets over the past 12 months.</p>
+          </div>
+          <div className="flex items-center gap-4 text-[10px] font-bold">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: company?.primaryColor || '#3b82f6' }}></span> 
+              Cleared Cash Revenue
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: company?.secondaryColor || '#10b981' }}></span> 
+              Invoiced Receivables
+            </span>
+          </div>
+        </div>
+        <div className="h-60 pt-2 text-xs">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trendData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+              <XAxis 
+                dataKey="month" 
+                fontSize={10} 
+                tickLine={false} 
+                axisLine={false} 
+                stroke="#64748B"
+                dy={6}
+              />
+              <YAxis 
+                fontSize={10} 
+                tickLine={false} 
+                axisLine={false} 
+                stroke="#64748B"
+                tickFormatter={(val) => `$${val.toLocaleString()}`}
+                dx={-6}
+              />
+              <Tooltip 
+                contentStyle={{ 
+                  fontSize: '11px', 
+                  borderRadius: '8px', 
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E8F0', 
+                  boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)' 
+                }} 
+                formatter={(value: any) => [`$${Number(value).toLocaleString()}`]}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="revenue" 
+                name="Cleared Cash Revenue"
+                stroke={company?.primaryColor || "#3b82f6"} 
+                strokeWidth={2.5}
+                activeDot={{ r: 6 }} 
+                dot={{ r: 3, strokeWidth: 1.5 }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="invoiced" 
+                name="Invoiced Receivables"
+                stroke={company?.secondaryColor || "#10b981"} 
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+                dot={{ r: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 

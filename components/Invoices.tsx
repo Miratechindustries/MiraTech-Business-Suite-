@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc } from "firebase/firestore";
-import { db, auth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { useUserStore } from "../lib/store";
+import { logAction } from "../lib/audit";
 import { uploadToDrive } from "../lib/drive";
 import { FileText, Plus, Search, Trash, Edit, Download, Loader2, Eye, X, Check, Wallet, FileSpreadsheet } from "lucide-react";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import safeHtml2Canvas from "../lib/safeHtml2canvas";
 import * as XLSX from "xlsx";
 import LoadingSkeleton from "./LoadingSkeleton";
 
@@ -51,6 +53,24 @@ interface Customer {
 }
 
 export default function Invoices() {
+  const { currentUser } = useUserStore();
+  
+  // Local auth shadowing to redirect all queries to the correct shared company workspace
+  const auth = {
+    ...importAuth,
+    get currentUser() {
+      const liveUser = importAuth.currentUser;
+      if (!liveUser) return null;
+      const companyId = currentUser?.companyId || currentUser?.businessId || liveUser.uid;
+      return {
+        ...liveUser,
+        uid: companyId,
+        getIdToken: (forceRefresh?: boolean) => liveUser.getIdToken(forceRefresh),
+        getIdTokenResult: (forceRefresh?: boolean) => liveUser.getIdTokenResult(forceRefresh),
+      } as any;
+    }
+  };
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -79,7 +99,7 @@ export default function Invoices() {
 
   const fetchInvoicesAndCompany = async () => {
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user || !currentUser) return;
 
     setLoading(true);
     const invoicesPath = `companies/${user.uid}/invoices`;
@@ -134,7 +154,7 @@ export default function Invoices() {
 
   useEffect(() => {
     fetchInvoicesAndCompany();
-  }, []);
+  }, [currentUser]);
 
   const handleClientSelect = (clientId: string) => {
     const selectedClient = clients.find((c) => c.id === clientId);
@@ -200,6 +220,14 @@ export default function Invoices() {
         const colRef = collection(db, "companies", user.uid, "invoices");
         const addedDoc = await addDoc(colRef, payload);
         newId = addedDoc.id;
+
+        // Log database audit trail
+        await logAction(
+          "Invoice Created",
+          `Billed invoice #${payload.number} to client '${payload.clientName}'. Total amount: $${payload.total}`,
+          user.uid,
+          payload.total
+        );
       } catch (err) {
         if (!isOfflineError(err)) throw err;
         console.warn("[Invoices Offline Submit] Saving invoice locally to local storage.");
@@ -259,6 +287,14 @@ export default function Invoices() {
       // 2. Automatically generate Receipt
       const recColRef = collection(db, "companies", user.uid, "receipts");
       await addDoc(recColRef, receiptPayload);
+
+      // Log database audit trail
+      await logAction(
+        "Payment Processed",
+        `Acquired full payment for invoice #${payingInvoice.number}. Generated official receipt #${receiptPayload.number} automatically.`,
+        user.uid,
+        payingInvoice.total
+      );
     } catch (err) {
       if (!isOfflineError(err)) {
         handleFirestoreError(err, OperationType.WRITE, receiptsPath);
@@ -299,6 +335,13 @@ export default function Invoices() {
     let isOffline = false;
     try {
       await deleteDoc(doc(db, "companies", user.uid, "invoices", id));
+
+      // Log database audit trail
+      await logAction(
+        "Invoice Abolished",
+        `Permanently extinguished user invoice ID: ${id}`,
+        user.uid
+      );
     } catch (err) {
       if (!isOfflineError(err)) {
         handleFirestoreError(err, OperationType.DELETE, invoicePath);
@@ -350,7 +393,7 @@ export default function Invoices() {
 
     try {
       const element = pdfAreaRef.current;
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+      const canvas = await safeHtml2Canvas(element, { scale: 2, useCORS: true });
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210; // A4 dimensions
@@ -360,21 +403,27 @@ export default function Invoices() {
       
       const pdfBlob = pdf.output('blob');
       const fileName = `Invoice_${previewInvoice.number}.pdf`;
-      const fileId = await uploadToDrive(pdfBlob, fileName);
       
-      const user = auth.currentUser;
-      if (user && previewInvoice.id) {
+      // Save PDF locally first to ensure of physical download success
+      pdf.save(fileName);
+
+      // Attempt background Google Drive backup gracefully
+      try {
+        const fileId = await uploadToDrive(pdfBlob, fileName);
+        const user = auth.currentUser;
+        if (user && previewInvoice.id) {
           await updateDoc(doc(db, "companies", user.uid, "invoices", previewInvoice.id), {
-              driveFileId: fileId
+            driveFileId: fileId
           });
           fetchInvoicesAndCompany();
-          alert("Invoice backed up to Google Drive successfully!");
+          console.log("Invoice backed up to Google Drive successfully!");
+        }
+      } catch (driveErr: any) {
+        console.warn("Google Drive skip/backup failed:", driveErr.message);
       }
-
-      pdf.save(fileName);
     } catch (err) {
-      console.error("PDF printing/upload failed:", err);
-      alert("PDF generation or upload failed.");
+      console.error("PDF printing failed:", err);
+      alert("PDF generation failed.");
     }
   };
 

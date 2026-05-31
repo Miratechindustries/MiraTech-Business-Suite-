@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { Search, Plus, Trash2, Edit, X, User, Phone, Mail, Building, MapPin, CheckCircle2, AlertTriangle, ShieldCheck } from "lucide-react";
-import { auth } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
+import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc } from "firebase/firestore";
+import { logAction } from "../lib/audit";
 
 interface Customer {
   id: string;
@@ -32,24 +34,28 @@ export default function Customers() {
   const [totalBilling, setTotalBilling] = useState(0);
   const [status, setStatus] = useState<"Active" | "Inactive">("Active");
 
+  const [businessId, setBusinessId] = useState<string | null>(null);
+
   useEffect(() => {
-    const user = auth.currentUser;
-    const cacheKey = user ? `miratech_customers_${user.uid}` : "miratech_customers_guest";
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      setCustomers(JSON.parse(cached));
-    } else {
-      const initial: Customer[] = [
-        { id: "CST-101", name: "Sarah Jenkins", company: "Apex Systems LLC", email: "sjenkins@apexsys.com", phone: "+1 415-555-0192", address: "100 Pine St, San Francisco, CA", totalBilling: 4750.00, status: "Active" },
-        { id: "CST-102", name: "David Miller", company: "Innovate Corp", email: "david@innovate.co", phone: "+1 206-555-0891", address: "800 Fifth Ave, Seattle, WA", totalBilling: 18500.00, status: "Active" },
-        { id: "CST-103", name: "Michael Chang", company: "NextGen Software", email: "m.chang@nextgen.io", phone: "+1 650-555-0311", address: "3000 Sand Hill Rd, Menlo Park, CA", totalBilling: 350.00, status: "Active" },
-        { id: "CST-104", name: "Emily Watson", company: "Watson Holdings", email: "emily@watsonholdings.com", phone: "+1 212-555-0144", address: "420 Lexington Ave, New York, NY", totalBilling: 0.00, status: "Inactive" },
-        { id: "CST-105", name: "Robert Taylor", company: "Vanguard Tech", email: "rtaylor@vanguard.io", phone: "+1 512-555-0209", address: "401 Congress Ave, Austin, TX", totalBilling: 1250.00, status: "Active" },
-      ];
-      setCustomers(initial);
-      localStorage.setItem(cacheKey, JSON.stringify(initial));
+    async function loadBusiness() {
+        if (!auth.currentUser) return;
+        const userSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
+        setBusinessId(userSnap.data()?.businessId || null);
     }
+    loadBusiness();
   }, []);
+
+  useEffect(() => {
+    if (!businessId) return;
+    
+    async function fetchCustomers() {
+        const q = query(collection(db, "customers"), where("businessId", "==", businessId));
+        const snapshot = await getDocs(q);
+        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Customer));
+        setCustomers(data);
+    }
+    fetchCustomers();
+  }, [businessId]);
 
   const saveToLocal = (updatedList: Customer[]) => {
     setCustomers(updatedList);
@@ -69,13 +75,12 @@ export default function Customers() {
     }, ...oldLogs]));
   };
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email) return alert("Required fields: Name and Email.");
+    if (!name || !email || !businessId) return;
 
-    const newCustId = id || `CST-${String(customers.length + 101)}`;
-    const newCust: Customer = {
-      id: newCustId,
+    const newCust = {
+      businessId,
       name,
       company: company || "Individual/Direct",
       email,
@@ -85,7 +90,17 @@ export default function Customers() {
       status,
     };
 
-    saveToLocal([...customers, newCust]);
+    const docRef = await addDoc(collection(db, "customers"), newCust);
+    
+    // Log database audit trail
+    await logAction(
+      "Client Created",
+      `Created client profile '${name}' with email: ${email}`,
+      businessId,
+      Number(totalBilling)
+    );
+
+    setCustomers([...customers, { id: docRef.id, ...newCust }]);
     resetForm();
     setIsOpen(false);
   };
@@ -115,33 +130,50 @@ export default function Customers() {
     setIsOpen(true);
   };
 
-  const handleUpdate = (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name) return;
+    if (!editingCust || !businessId) return;
 
-    const updated = customers.map((it) =>
-      it.id === id
-        ? {
-            ...it,
-            name,
-            company: company || "Individual/Direct",
-            email,
-            phone,
-            address,
-            totalBilling: Number(totalBilling),
-            status,
-          }
-        : it
+    const updatedCust = {
+      ...editingCust,
+      name,
+      company: company || "Individual/Direct",
+      email,
+      phone,
+      address,
+      totalBilling: Number(totalBilling),
+      status,
+    };
+    
+    await updateDoc(doc(db, "customers", editingCust.id), updatedCust);
+    
+    // Log database audit trail
+    await logAction(
+      "Client Updated",
+      `Updated client profile '${name}' with email: ${email}`,
+      businessId,
+      Number(totalBilling)
     );
-    saveToLocal(updated);
+
+    setCustomers(customers.map((it) => it.id === editingCust.id ? updatedCust : it));
     resetForm();
     setIsOpen(false);
   };
 
-  const handleDelete = (custID: string) => {
+  const handleDelete = async (custID: string) => {
     if (confirm("Permanently archive this corporate client log?")) {
-      const updated = customers.filter((it) => it.id !== custID);
-      saveToLocal(updated);
+      await deleteDoc(doc(db, "customers", custID));
+      
+      // Log database audit trail
+      if (businessId) {
+        await logAction(
+          "Client Archived",
+          `Permanently archived client log ID: ${custID}`,
+          businessId
+        );
+      }
+
+      setCustomers(customers.filter((it) => it.id !== custID));
     }
   };
 

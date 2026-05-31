@@ -18,7 +18,7 @@ export default function MasterAdminDashboard() {
         try {
             const companiesSnapshot = await getCountFromServer(collection(db, 'companies'));
             const usersSnapshot = await getCountFromServer(collection(db, 'users'));
-            const alertsSnapshot = await getCountFromServer(collection(db, 'auditLogs'));
+            const alertsSnapshot = await getCountFromServer(collection(db, 'audit_logs'));
             
             setCounts({
                 companies: companiesSnapshot.data().count,
