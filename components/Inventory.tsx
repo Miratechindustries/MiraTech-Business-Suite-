@@ -311,7 +311,7 @@ export default function Inventory() {
         </div>
         <div className="bg-white border border-slate-200/80 p-3.5 rounded-lg shadow-3xs">
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Portfolio Net Asset</p>
-          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">${portfolioValue.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">E{portfolioValue.toLocaleString()}</h3>
           <p className="text-[8px] text-blue-500 font-medium">Evaluated at sales tier price</p>
         </div>
       </div>
@@ -409,7 +409,7 @@ export default function Inventory() {
                         );
                       })()}
                     </td>
-                    <td className="font-mono font-bold">${it.price.toFixed(2)}</td>
+                    <td className="font-mono font-bold">E{it.price.toFixed(2)}</td>
                     <td>{statusBadge}</td>
                     <td className="text-right space-x-1.5 py-1">
                       <button
@@ -513,7 +513,7 @@ export default function Inventory() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sales Unit Price ($)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sales Unit Price (E)</label>
                   <input
                     type="number"
                     step="0.01"

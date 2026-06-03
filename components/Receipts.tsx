@@ -257,7 +257,7 @@ export default function Receipts() {
                   </td>
                   <td className="py-3.5 px-4">{rec.date}</td>
                   <td className="py-3.5 px-4 text-slate-500">{rec.paymentMethod}</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-800">${rec.amount.toLocaleString()}</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-800">E{rec.amount.toLocaleString()}</td>
                   <td className="py-3.5 px-4 text-right space-x-1">
                     <button
                       onClick={() => setPreviewReceipt(rec)}
@@ -339,7 +339,7 @@ export default function Receipts() {
                 <div className="border border-slate-200 rounded-xl p-6 bg-slate-50/50 space-y-4 text-xs my-8 max-w-xl mx-auto">
                   <div className="text-center border-b border-slate-100 pb-3">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Value Cleared</span>
-                    <h2 className="text-3xl font-black text-slate-900 mt-1">${previewReceipt.amount.toLocaleString()}</h2>
+                    <h2 className="text-3xl font-black text-slate-900 mt-1">E{previewReceipt.amount.toLocaleString()}</h2>
                   </div>
 
                   <div className="grid grid-cols-2 gap-y-3 gap-x-6">

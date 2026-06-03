@@ -225,7 +225,7 @@ export default function Customers() {
         </div>
         <div className="bg-white border border-slate-200/80 p-3.5 rounded-lg shadow-3xs">
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Invoiced Receivables</p>
-          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">${totalTransactions.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">E{totalTransactions.toLocaleString()}</h3>
           <p className="text-[8px] text-blue-500 font-medium">Billed across all contract lifecycles</p>
         </div>
       </div>
@@ -294,7 +294,7 @@ export default function Customers() {
                     <td className="font-bold text-blue-900">{it.company}</td>
                     <td className="font-mono text-[11px] text-slate-600">{it.email}</td>
                     <td className="font-mono text-[11px] text-slate-500">{it.phone || "---"}</td>
-                    <td className="font-mono font-bold text-slate-800">${it.totalBilling.toLocaleString()}</td>
+                    <td className="font-mono font-bold text-slate-800">E{it.totalBilling.toLocaleString()}</td>
                     <td>
                       {isActive ? (
                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-green-50 text-green-700 border border-green-150">
@@ -426,7 +426,7 @@ export default function Customers() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Recorded Billings Total ($)</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Recorded Billings Total (E)</label>
                 <input
                   type="number"
                   placeholder="0.00"

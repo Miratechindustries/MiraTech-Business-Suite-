@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { User } from "firebase/auth";
 import { googleSignIn, logout, auth, initAuth, emailSignIn, handleFirestoreError, OperationType } from "../lib/firebase";
@@ -70,6 +70,13 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   const [passwordValue, setPasswordValue] = useState("");
   const [authError, setAuthError] = useState("");
 
+  // Inactivity auto-logout states
+  const [isWarningShown, setIsWarningShown] = useState(false);
+  const [remainingTime, setRemainingTime] = useState(60);
+
+  const lastActivityRef = useRef<number>(Date.now());
+  const isWarningShownRef = useRef<boolean>(false);
+
   const { setCurrentUser, currentUser } = useUserStore();
 
   useEffect(() => {
@@ -128,6 +135,63 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     );
     return () => unsubscribe();
   }, [setCurrentUser]);
+
+  useEffect(() => {
+    isWarningShownRef.current = isWarningShown;
+  }, [isWarningShown]);
+
+  useEffect(() => {
+    if (!user) {
+      setIsWarningShown(false);
+      return;
+    }
+
+    const getLimit = () => {
+      if (typeof window === "undefined") return 900;
+      const stored = localStorage.getItem("mira_inactivity_timeout");
+      return stored ? Number(stored) : 900; // default 15 minutes
+    };
+
+    const handleUserActivity = () => {
+      // Avoid resetting current timers if warning is currently active
+      if (!isWarningShownRef.current) {
+        lastActivityRef.current = Date.now();
+      }
+    };
+
+    const events = ["mousemove", "mousedown", "keypress", "touchmove", "scroll", "click"];
+    events.forEach((ev) => window.addEventListener(ev, handleUserActivity));
+
+    const checkInterval = setInterval(() => {
+      const limit = getLimit();
+      const elapsed = Math.floor((Date.now() - lastActivityRef.current) / 1000);
+      const warningDuration = limit <= 30 ? 10 : 60;
+      const threshold = limit - warningDuration;
+
+      if (elapsed >= limit) {
+        clearInterval(checkInterval);
+        setIsWarningShown(false);
+        handleLogout();
+      } else if (elapsed >= threshold) {
+        setIsWarningShown(true);
+        setRemainingTime(limit - elapsed);
+      } else {
+        if (isWarningShownRef.current) {
+          setIsWarningShown(false);
+        }
+      }
+    }, 1000);
+
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, handleUserActivity));
+      clearInterval(checkInterval);
+    };
+  }, [user]);
+
+  const keepSessionAlive = () => {
+    lastActivityRef.current = Date.now();
+    setIsWarningShown(false);
+  };
 
   const handleGoogleLogin = async () => {
     try {
@@ -265,13 +329,15 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     );
   }
 
-  if (currentUser?.role === 'MASTER_ADMIN' || user?.email?.toLowerCase() === 'miratechindustries@gmail.com') {
-    return <MasterAdminLayout />;
-  }
+  const isMasterAdmin = currentUser?.role === 'MASTER_ADMIN' || user?.email?.toLowerCase() === 'miratechindustries@gmail.com';
 
   console.log("DEBUG: Rendering Business Dashboard, currentUser:", currentUser);
   return (
-    <div className="flex min-h-screen bg-[#F8FAFC] text-slate-800">
+    <>
+      {isMasterAdmin ? (
+        <MasterAdminLayout />
+      ) : (
+        <div className="flex min-h-screen bg-[#F8FAFC] text-slate-800">
       {/* Sidebar Navigation */}
       <aside className="w-60 bg-white border-r border-slate-200 hidden md:flex flex-col flex-shrink-0 z-10">
         <div className="p-4 border-b border-slate-200 bg-white flex items-center justify-between max-w-full overflow-hidden">
@@ -562,12 +628,58 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
               {activeTab === "admin" && <MasterAdminDashboard />}
 
               {activeTab === "settings" && (
-                <CompanyProfile onCompanyLoaded={(data) => setCompany(data)} />
-              )}
-            </>
-          )}
-        </main>
-      </div>
-    </div>
+                 <CompanyProfile onCompanyLoaded={(data) => setCompany(data)} />
+               )}
+             </>
+           )}
+         </main>
+       </div>
+     </div>
+      )}
+
+      {/* Dynamic Security Inactivity Warning Overlay */}
+      {isWarningShown && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center space-y-4">
+            <div className="mx-auto h-12 w-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200 animate-bounce">
+              <ShieldAlert className="h-6 w-6" />
+            </div>
+            
+            <div className="space-y-2">
+              <h3 className="text-sm font-extrabold text-slate-900 tracking-tight uppercase">
+                Corporate Inactivity warning
+              </h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Your session is about to expire due to enterprise compliance standards. Inactive users are logged out of the Mira Suite automatically.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-150 py-3 px-4 rounded-xl">
+              <span className="text-[10px] text-slate-400 font-extrabold tracking-widest uppercase block mb-1">
+                Security Countdown
+              </span>
+              <span className="font-mono text-3xl font-extrabold text-indigo-700 tracking-tighter">
+                {remainingTime}s
+              </span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={keepSessionAlive}
+                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-2xs transition cursor-pointer"
+              >
+                Keep Session Active
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex-1 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-lg transition cursor-pointer"
+              >
+                Log Out Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

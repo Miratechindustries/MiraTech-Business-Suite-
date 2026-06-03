@@ -5,7 +5,7 @@ import { collection, getDocs, query, orderBy, getDoc, doc } from "firebase/fires
 import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
 import { syncToGoogleSheets, uploadToGoogleDrive, LedgerMetric } from "../lib/googleApi";
-import { BarChart3, TrendingUp, DollarSign, Wallet2, FileSpreadsheet, Download, CloudLightning, Loader2, CheckSquare, ShieldCheck, AlertCircle } from "lucide-react";
+import { BarChart3, TrendingUp, DollarSign, Wallet2, FileSpreadsheet, Download, CloudLightning, Loader2, CheckSquare, ShieldCheck, AlertCircle, ArrowDownLeft } from "lucide-react";
 import Image from "next/image";
 import jsPDF from "jspdf";
 import safeHtml2Canvas from "../lib/safeHtml2canvas";
@@ -24,6 +24,17 @@ interface Invoice {
 interface Quotation {
   total: number;
   status: "pending" | "accepted" | "declined";
+}
+
+interface Transaction {
+  id: string;
+  date: string;
+  description: string;
+  type: "Inflow" | "Outflow";
+  reference: string;
+  method: string;
+  amount: number;
+  status: "Settled" | "Pending";
 }
 
 interface CompanyDetails {
@@ -68,6 +79,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
   const [company, setCompany] = useState<CompanyDetails | null>(null);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   // Expense controller for dynamically calculating net profit margins
   const [expenses, setExpenses] = useState<number>(1500);
@@ -137,9 +149,41 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
         setInvoices(iList);
         localStorage.setItem(`miratech_offline_invoices_${businessId}`, JSON.stringify(iList));
       }
+
+      // 5. Fetch Transactions (tenant-scoped nested subcollection)
+      const tList: Transaction[] = [];
+      if (businessId) {
+        const tRef = collection(db, "companies", businessId, "transactions");
+        const tSnap = await getDocs(tRef);
+        tSnap.forEach((docSnap) => {
+          tList.push({ id: docSnap.id, ...docSnap.data() } as Transaction);
+        });
+        setTransactions(tList);
+        localStorage.setItem(`miratech_offline_transactions_${businessId}`, JSON.stringify(tList));
+      }
     } catch (err) {
       if (isOfflineError(err)) {
         console.warn("[Dashboard Offline Fallback] Loading from cache.");
+        // Try to load cached transactions
+        const rawUser = importAuth.currentUser;
+        let businessId = currentUser?.companyId || currentUser?.businessId;
+        if (!businessId && rawUser) {
+          businessId = rawUser.uid;
+        }
+        if (businessId) {
+          const cachedTxStr = localStorage.getItem(`miratech_offline_transactions_${businessId}`);
+          if (cachedTxStr) {
+            setTransactions(JSON.parse(cachedTxStr));
+          }
+          const cachedInvStr = localStorage.getItem(`miratech_offline_invoices_${businessId}`);
+          if (cachedInvStr) {
+            setInvoices(JSON.parse(cachedInvStr));
+          }
+          const cachedQuotStr = localStorage.getItem(`miratech_offline_quotations_${businessId}`);
+          if (cachedQuotStr) {
+            setQuotations(JSON.parse(cachedQuotStr));
+          }
+        }
       } else {
         console.error("Error loading dashboard data:", err);
       }
@@ -155,8 +199,22 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
   // Compute stats
   const totalQuotationsVal = quotations.reduce((acc, q) => acc + q.total, 0);
   const totalInvoicesVal = invoices.reduce((acc, i) => acc + i.total, 0);
-  const collectedRevenue = invoices.filter((i) => i.status === "paid").reduce((acc, i) => acc + i.total, 0);
-  const netProfit = Math.max(0, collectedRevenue - expenses);
+
+  // Inflows & Outflows from Transactions
+  const grossInflow = transactions.filter((t) => t.type === "Inflow" && t.status === "Settled").reduce((acc, t) => acc + t.amount, 0);
+  const outflow = transactions.filter((t) => t.type === "Outflow" && t.status === "Settled").reduce((acc, t) => acc + t.amount, 0);
+
+  // Invoice received amounts (paid invoices)
+  const invoiceReceived = invoices.filter((i) => i.status === "paid").reduce((acc, i) => acc + i.total, 0);
+
+  // Collected Revenue includes both Invoice Received amounts and Gross Inflow
+  const collectedRevenue = invoiceReceived + grossInflow;
+
+  // Total Outlay includes Corporate Operating Expenses plus Transaction Outflows
+  const totalOutflowExpenses = expenses + outflow;
+
+  // Net pay / Profit (How much we made minus expenses)
+  const netProfit = collectedRevenue - totalOutflowExpenses;
   const profitMargin = collectedRevenue > 0 ? ((netProfit / collectedRevenue) * 100).toFixed(1) : "0.0";
 
   // Past 12 Months Revenue and Invoiced Trends
@@ -259,11 +317,14 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
   const getMetricsList = (): LedgerMetric[] => {
     return [
-      { name: "Total Quotations Scope", value: `$${totalQuotationsVal.toLocaleString()}`, category: "Forecast" },
-      { name: "Total Revenue Invoiced", value: `$${totalInvoicesVal.toLocaleString()}`, category: "Invoices" },
-      { name: "Cleared Payment Revenue", value: `$${collectedRevenue.toLocaleString()}`, category: "Receipts" },
-      { name: "Operating Expenses", value: `$${expenses.toLocaleString()}`, category: "Expenses" },
-      { name: "Net Profit Earnings", value: `$${netProfit.toLocaleString()}`, category: "Profitability" },
+      { name: "Total Quotations Scope", value: `E${totalQuotationsVal.toLocaleString()}`, category: "Forecast" },
+      { name: "Total Revenue Invoiced", value: `E${totalInvoicesVal.toLocaleString()}`, category: "Invoices" },
+      { name: "Invoice Received Amounts", value: `E${invoiceReceived.toLocaleString()}`, category: "Receipts" },
+      { name: "Gross Inflow Transactions", value: `E${grossInflow.toLocaleString()}`, category: "Inflows" },
+      { name: "Outflow Transactions", value: `E${outflow.toLocaleString()}`, category: "Outflows" },
+      { name: "Operating Expenses", value: `E${expenses.toLocaleString()}`, category: "Expenses" },
+      { name: "Combined Operating Revenues", value: `E${collectedRevenue.toLocaleString()}`, category: "Receipts" },
+      { name: "Net Pay / Profit Earnings", value: `E${netProfit.toLocaleString()}`, category: "Profitability" },
       { name: "Operational Profit Margin", value: `${profitMargin}%`, category: "Profitability" },
     ];
   };
@@ -466,7 +527,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
       )}
 
       {/* Primary KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {/* Gross Billings Metric Card */}
         <motion.div
           initial={{ x: -150, opacity: 0 }}
@@ -480,7 +541,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
               <BarChart3 className="h-3.5 w-3.5" />
             </span>
           </div>
-          <h2 className="text-lg font-extrabold font-mono text-slate-800">${totalQuotationsVal.toLocaleString()}</h2>
+          <h2 className="text-lg font-extrabold font-mono text-slate-800">E{totalQuotationsVal.toLocaleString()}</h2>
           <p className="text-[9px] text-slate-400">Quotations listed scope</p>
         </motion.div>
 
@@ -494,14 +555,14 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Invoiced Receivables</span>
             <span className="p-1.5 bg-blue-50 text-blue-600 rounded-md border border-blue-100/40">
-              <DollarSign className="h-3.5 w-3.5" />
+              <FileSpreadsheet className="h-3.5 w-3.5" />
             </span>
           </div>
-          <h2 className="text-lg font-extrabold font-mono text-slate-800">${totalInvoicesVal.toLocaleString()}</h2>
+          <h2 className="text-lg font-extrabold font-mono text-slate-800">E{totalInvoicesVal.toLocaleString()}</h2>
           <p className="text-[9px] text-slate-400">Across issued invoices</p>
         </motion.div>
 
-        {/* Operating Revenue Metric Card */}
+        {/* Total Cash Inflow Metric Card */}
         <motion.div
           initial={{ y: -50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -509,16 +570,37 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition"
         >
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Operating Revenue</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Cash Inflow</span>
             <span className="p-1.5 bg-emerald-50 text-emerald-600 rounded-md border border-emerald-100/40">
               <Wallet2 className="h-3.5 w-3.5" />
             </span>
           </div>
-          <h2 className="text-lg font-extrabold font-mono text-emerald-700">${collectedRevenue.toLocaleString()}</h2>
-          <p className="text-[9px] text-emerald-500">Cash collected via invoices</p>
+          <h2 className="text-lg font-extrabold font-mono text-emerald-700">E{collectedRevenue.toLocaleString()}</h2>
+          <p className="text-[9px] text-emerald-500">
+            Invoiced (E{invoiceReceived.toLocaleString()}) + Inflows (E{grossInflow.toLocaleString()})
+          </p>
         </motion.div>
 
-        {/* Operating Profit Margin Metric Card */}
+        {/* Combined Expenses Card */}
+        <motion.div
+          initial={{ y: 50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.35 }}
+          className="bg-white border border-red-100/75 p-4 rounded-lg shadow-3xs hover:border-red-200 transition"
+        >
+          <div className="flex justify-between items-center text-slate-500 mb-1.5">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Combined Expenses</span>
+            <span className="p-1.5 bg-red-50 text-red-600 rounded-md border border-red-100/45">
+              <ArrowDownLeft className="h-3.5 w-3.5" />
+            </span>
+          </div>
+          <h2 className="text-lg font-extrabold font-mono text-red-600">E{totalOutflowExpenses.toLocaleString()}</h2>
+          <p className="text-[9px] text-red-500">
+            Fixed (E{expenses.toLocaleString()}) + Outflow (E{outflow.toLocaleString()})
+          </p>
+        </motion.div>
+
+        {/* Net Pay/Profit Margin Metric Card */}
         <motion.div
           initial={{ x: 150, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
@@ -526,13 +608,13 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition"
         >
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Operating Profit Margin</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Net Pay & Margin</span>
             <span className="p-1.5 bg-blue-50 text-blue-600 rounded-md border border-blue-100/40">
               <TrendingUp className="h-3.5 w-3.5" />
             </span>
           </div>
-          <h2 className="text-lg font-extrabold font-mono text-blue-700">{profitMargin}%</h2>
-          <p className="text-[9px] text-blue-500">Adjusted dynamically below</p>
+          <h2 className="text-lg font-extrabold font-mono text-blue-700">E{netProfit.toLocaleString()}</h2>
+          <p className="text-[9px] text-blue-500">Margin: {profitMargin}%</p>
         </motion.div>
       </div>
 
@@ -582,7 +664,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                     tickLine={false} 
                     axisLine={false} 
                     stroke="#64748B"
-                    tickFormatter={(val) => `$${val.toLocaleString()}`}
+                    tickFormatter={(val) => `E${val.toLocaleString()}`}
                     dx={-6}
                   />
                   <Tooltip 
@@ -593,7 +675,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                       border: '1px solid #E2E8F0', 
                       boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)' 
                     }} 
-                    formatter={(value: any) => [`$${Number(value).toLocaleString()}`]}
+                    formatter={(value: any) => [`E${Number(value).toLocaleString()}`]}
                   />
                   <Line 
                     type="monotone" 
@@ -699,7 +781,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                             boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)'
                           }}
                           formatter={(value: any, name: any, rawItem: any) => [
-                            `$${Number(value).toLocaleString()} (${rawItem.payload?.percent || ""})`,
+                            `E${Number(value).toLocaleString()} (${rawItem.payload?.percent || ""})`,
                             name
                           ]}
                         />
@@ -715,7 +797,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                           {item.name}
                         </span>
                         <strong className="block text-slate-850 font-mono text-[9px] truncate">
-                          ${item.value.toLocaleString()}
+                          E{item.value.toLocaleString()}
                         </strong>
                         <span className="bg-slate-50 text-slate-500 border border-slate-200/50 py-0.5 px-1 rounded block text-[8px] font-mono">
                           {item.percent}
@@ -742,7 +824,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                           tickLine={false}
                           axisLine={false}
                           stroke="#64748B"
-                          tickFormatter={(val) => `$${val.toLocaleString()}`}
+                          tickFormatter={(val) => `E${val.toLocaleString()}`}
                         />
                         <Tooltip
                           contentStyle={{
@@ -752,7 +834,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                             border: '1px solid #E2E8F0',
                             boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)'
                           }}
-                          formatter={(value: any) => [`$${Number(value).toLocaleString()}`]}
+                          formatter={(value: any) => [`E${Number(value).toLocaleString()}`]}
                         />
                         <Bar 
                           dataKey="value" 
@@ -775,7 +857,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                           {item.name}
                         </span>
                         <strong className="block text-slate-850 font-mono text-[9px] truncate">
-                          ${item.value.toLocaleString()}
+                          E{item.value.toLocaleString()}
                         </strong>
                       </div>
                     ))}
@@ -807,7 +889,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
             <div className="mt-3.5 space-y-3">
               <div>
                 <label className="block text-[10px] font-bold text-blue-950 uppercase mb-1.5">
-                  Operating Expenses ($)
+                  Operating Expenses (E)
                 </label>
                 <input
                   type="number"
@@ -821,15 +903,15 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
               <div className="p-2.5 bg-blue-50/30 border border-blue-100/60 rounded-lg space-y-1.5 text-xs">
                 <div className="flex justify-between text-[11px]">
                   <span className="text-slate-500">Gross Cleared Revenue:</span>
-                  <span className="font-bold font-mono text-slate-700">${collectedRevenue.toLocaleString()}</span>
+                  <span className="font-bold font-mono text-slate-700">E{collectedRevenue.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-[11px]">
                   <span className="text-slate-500">Operating Outlays:</span>
-                  <span className="font-bold font-mono text-red-500">-${expenses.toLocaleString()}</span>
+                  <span className="font-bold font-mono text-red-500">-E{expenses.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between border-t border-blue-100/80 pt-1.5 text-slate-800 font-bold text-[11px]">
                   <span>Net Ledger Profit:</span>
-                  <span className="font-mono text-emerald-700">${netProfit.toLocaleString()}</span>
+                  <span className="font-mono text-emerald-700">E{netProfit.toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -951,19 +1033,19 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
             <div className="border border-slate-250 p-4 rounded-xl text-center">
               <span className="text-[9px] text-slate-400 uppercase font-black block">Total Invoiced</span>
               <strong className="text-md font-bold tracking-tight text-slate-800 font-mono mt-1 block">
-                ${totalInvoicesVal.toLocaleString()}
+                E{totalInvoicesVal.toLocaleString()}
               </strong>
             </div>
             <div className="border border-slate-250 p-4 rounded-xl text-center">
-              <span className="text-[9px] text-emerald-550 uppercase font-black block">Operating Revenue</span>
+              <span className="text-[9px] text-emerald-555 uppercase font-black block">Operating Revenue</span>
               <strong className="text-md font-bold tracking-tight text-emerald-700 font-mono mt-1 block">
-                ${collectedRevenue.toLocaleString()}
+                E{collectedRevenue.toLocaleString()}
               </strong>
             </div>
             <div className="border border-slate-250 p-4 rounded-xl text-center">
-              <span className="text-[9px] text-blue-550 uppercase font-black block">Net Profit Earnings</span>
+              <span className="text-[9px] text-blue-555 uppercase font-black block">Net Profit Earnings</span>
               <strong className="text-md font-bold tracking-tight text-blue-700 font-mono mt-1 block">
-                ${netProfit.toLocaleString()}
+                E{netProfit.toLocaleString()}
               </strong>
             </div>
           </div>

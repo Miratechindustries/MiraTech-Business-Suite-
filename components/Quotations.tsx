@@ -15,6 +15,17 @@ interface Item {
   description: string;
   quantity: number;
   price: number;
+  productId?: string;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  price: number;
+  stock: number;
+  minStock: number;
 }
 
 interface Quotation {
@@ -75,6 +86,7 @@ export default function Quotations() {
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [company, setCompany] = useState<CompanyDetails | null>(null);
   const [clients, setClients] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
   // Form Fields
   const [isOpen, setIsOpen] = useState(false);
@@ -139,6 +151,22 @@ export default function Quotations() {
         if (cachedClients) setClients(JSON.parse(cachedClients));
       }
 
+      // Load products from Firestore collection 'products' filtered by businessId
+      try {
+        const qProducts = query(collection(db, "products"), where("businessId", "==", businessId));
+        const productsSnap = await getDocs(qProducts);
+        const productsList: Product[] = [];
+        productsSnap.forEach((dSnap) => {
+          productsList.push({ id: dSnap.id, ...dSnap.data() } as Product);
+        });
+        setProducts(productsList);
+        localStorage.setItem(`miratech_products_${user.uid}`, JSON.stringify(productsList));
+      } catch (prodErr) {
+        console.warn("Failed to fetch products for quotations dropdown, relying on cache.", prodErr);
+        const cachedProducts = localStorage.getItem(`miratech_products_${user.uid}`);
+        if (cachedProducts) setProducts(JSON.parse(cachedProducts));
+      }
+
     } catch (err) {
       if (isOfflineError(err)) {
         console.warn("[Quotations Offline Fallback] Loading data from local cache.");
@@ -154,6 +182,9 @@ export default function Quotations() {
         const cacheKey = user ? `miratech_customers_${user.uid}` : "miratech_customers_guest";
         const cachedClients = localStorage.getItem(cacheKey);
         if (cachedClients) setClients(JSON.parse(cachedClients));
+
+        const cachedProducts = localStorage.getItem(`miratech_products_${user.uid}`);
+        if (cachedProducts) setProducts(JSON.parse(cachedProducts));
       } else {
         handleFirestoreError(err, OperationType.GET, quotsPath);
       }
@@ -198,6 +229,21 @@ export default function Quotations() {
     setItems(next);
   };
 
+  const handleProductSelectForItem = (index: number, productIdStr: string) => {
+    const next = [...items];
+    if (!productIdStr) {
+      next[index].productId = undefined;
+    } else {
+      const selectedProd = products.find((p) => p.id === productIdStr);
+      if (selectedProd) {
+        next[index].productId = selectedProd.id;
+        next[index].description = selectedProd.name;
+        next[index].price = selectedProd.price;
+      }
+    }
+    setItems(next);
+  };
+
   const calculateTotal = () => {
     return items.reduce((acc, current) => acc + current.quantity * current.price, 0);
   };
@@ -234,7 +280,7 @@ export default function Quotations() {
         // Log database audit trail
         await logAction(
           "Quotation Drafted",
-          `Drafted quotation #${payload.number} for client '${payload.clientName}'. Total value: $${payload.total}`,
+          `Drafted quotation #${payload.number} for client '${payload.clientName}'. Total value: E${payload.total}`,
           user.uid,
           payload.total
         );
@@ -270,10 +316,37 @@ export default function Quotations() {
     const user = auth.currentUser;
     if (!user) return;
 
+    const targetQuot = quotations.find((element) => element.id === id);
     const quotPath = `companies/${user.uid}/quotations/${id}`;
     let isOffline = false;
+
     try {
       await updateDoc(doc(db, "companies", user.uid, "quotations", id), { status: nextStatus });
+
+      if (targetQuot && targetQuot.status !== "accepted" && nextStatus === "accepted") {
+        for (const item of targetQuot.items) {
+          if (item.productId) {
+            try {
+              const productRef = doc(db, "products", item.productId);
+              const pSnap = await getDoc(productRef);
+              if (pSnap.exists()) {
+                const pData = pSnap.data();
+                const currentStock = Number(pData.stock) || 0;
+                const newStock = Math.max(0, currentStock - item.quantity);
+                await updateDoc(productRef, { stock: newStock });
+
+                await logAction(
+                  "Product Stock Decremented",
+                  `Decremented stock of '${pData.name}' by ${item.quantity} due to approval of Quote #${targetQuot.number}. New stock level: ${newStock}`,
+                  user.uid
+                );
+              }
+            } catch (pErr) {
+              console.error("Failed to decrement product stock during quotation approval", pErr);
+            }
+          }
+        }
+      }
     } catch (err) {
       if (!isOfflineError(err)) {
         handleFirestoreError(err, OperationType.UPDATE, quotPath);
@@ -281,6 +354,27 @@ export default function Quotations() {
       }
       isOffline = true;
       console.warn("[Quotations Offline State Update] Modifying quotation state locally.");
+    }
+
+    if (targetQuot && targetQuot.status !== "accepted" && nextStatus === "accepted") {
+      const cachedProductsKey = `miratech_products_${user.uid}`;
+      const cachedProducts = localStorage.getItem(cachedProductsKey);
+      if (cachedProducts) {
+        try {
+          const productsList: Product[] = JSON.parse(cachedProducts);
+          const updatedProducts = productsList.map((p) => {
+            const item = targetQuot.items.find((it) => it.productId === p.id);
+            if (item) {
+              return { ...p, stock: Math.max(0, (Number(p.stock) || 0) - item.quantity) };
+            }
+            return p;
+          });
+          localStorage.setItem(cachedProductsKey, JSON.stringify(updatedProducts));
+          setProducts(updatedProducts);
+        } catch (cacheErr) {
+          console.error("Failed to update cache stock offline", cacheErr);
+        }
+      }
     }
 
     // Reflect update in local cache of quotations
@@ -341,7 +435,7 @@ export default function Quotations() {
       // 3. Log audit trail entry
       await logAction(
         "Invoice Created from Quotation",
-        `Converted Quotation #${q.number} to Corporate Invoice #${generatedInvNumber} for '${q.clientName}'. Amount: $${q.total}`,
+        `Converted Quotation #${q.number} to Corporate Invoice #${generatedInvNumber} for '${q.clientName}'. Amount: E${q.total}`,
         user.uid,
         q.total
       );
@@ -532,7 +626,7 @@ export default function Quotations() {
                     <div className="text-[10px] text-slate-400">{q.clientEmail}</div>
                   </td>
                   <td className="py-3.5 px-4">{q.validUntil}</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-800">${q.total.toLocaleString()}</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-800">E{q.total.toLocaleString()}</td>
                   <td className="py-3.5 px-4">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${
@@ -727,58 +821,105 @@ export default function Quotations() {
                   </button>
                 </div>
 
-                {items.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                    <div className="col-span-6">
-                      <input
-                        type="text"
-                        required
-                        placeholder="Description of deliverables..."
-                        value={item.description}
-                        onChange={(e) => handleItemChange(idx, "description", e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-slate-50/20 focus:outline-hidden focus:border-slate-400"
-                      />
+                {items.map((item, idx) => {
+                  const matchedProd = products.find(p => p.id === item.productId);
+                  return (
+                    <div key={idx} className="p-3 border border-slate-100 rounded-lg bg-slate-50/50 space-y-2.5">
+                      <div className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-12 sm:col-span-7">
+                          <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">
+                            Pick Product from Inventory (Optional)
+                          </label>
+                          <select
+                            value={item.productId || ""}
+                            onChange={(e) => handleProductSelectForItem(idx, e.target.value)}
+                            className="w-full px-2 py-1 border border-slate-200 rounded-md text-[11px] bg-white focus:outline-hidden focus:border-blue-400"
+                          >
+                            <option value="">-- Custom Description / Write Free Text --</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} (E{p.price.toLocaleString()} | Stock: {p.stock})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {matchedProd && (
+                          <div className="col-span-12 sm:col-span-5 text-right pr-1">
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              matchedProd.stock <= 0 
+                                ? "bg-red-50 text-red-600" 
+                                : matchedProd.stock <= matchedProd.minStock 
+                                  ? "bg-amber-50 text-amber-700" 
+                                  : "bg-emerald-50 text-emerald-700"
+                            }`}>
+                              Stock Availability: {matchedProd.stock} units
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-6">
+                          <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">
+                            Line Item Description
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Description of deliverables..."
+                            value={item.description}
+                            onChange={(e) => handleItemChange(idx, "description", e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-hidden focus:border-blue-400"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 text-center">
+                            Qty
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            min="1"
+                            placeholder="Qty"
+                            value={item.quantity}
+                            onChange={(e) => handleItemChange(idx, "quantity", e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-center focus:outline-hidden focus:border-blue-400"
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 text-right">
+                            Price (E)
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            min="0"
+                            step="0.01"
+                            placeholder="Price"
+                            value={item.price}
+                            onChange={(e) => handleItemChange(idx, "price", e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-right focus:outline-hidden focus:border-blue-400"
+                          />
+                        </div>
+                        <div className="col-span-1 text-center pt-3">
+                          <button
+                            type="button"
+                            disabled={items.length === 1}
+                            onClick={() => handleRemoveItem(idx)}
+                            className="text-red-500 hover:text-red-700 disabled:opacity-30 cursor-pointer inline-block"
+                          >
+                            <Trash className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="col-span-2">
-                      <input
-                        type="number"
-                        required
-                        min="1"
-                        placeholder="Qty"
-                        value={item.quantity}
-                        onChange={(e) => handleItemChange(idx, "quantity", e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-slate-50/20 focus:outline-hidden focus:border-slate-400"
-                      />
-                    </div>
-                    <div className="col-span-3">
-                      <input
-                        type="number"
-                        required
-                        min="0"
-                        step="0.01"
-                        placeholder="Price"
-                        value={item.price}
-                        onChange={(e) => handleItemChange(idx, "price", e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-slate-50/20 focus:outline-hidden focus:border-slate-400"
-                      />
-                    </div>
-                    <div className="col-span-1 text-center">
-                      <button
-                        type="button"
-                        disabled={items.length === 1}
-                        onClick={() => handleRemoveItem(idx)}
-                        className="text-red-500 hover:text-red-700 disabled:opacity-30 cursor-pointer inline-block"
-                      >
-                        <Trash className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
                 <span className="text-xs text-slate-400 font-mono">Calculated value total</span>
-                <span className="text-md font-bold text-slate-800">${calculateTotal().toLocaleString()}</span>
+                <span className="text-md font-bold text-slate-800">E{calculateTotal().toLocaleString()}</span>
               </div>
 
               <div className="flex gap-2 justify-end pt-3">
@@ -905,10 +1046,10 @@ export default function Quotations() {
                         <td className="py-3 px-3 border border-slate-200 font-medium">{it.description}</td>
                         <td className="py-3 px-3 border border-slate-200 text-center font-mono">{it.quantity}</td>
                         <td className="py-3 px-3 border border-slate-200 text-right font-mono">
-                          ${it.price.toLocaleString()}
+                          E{it.price.toLocaleString()}
                         </td>
                         <td className="py-3 px-3 border border-slate-200 text-right font-bold text-slate-900 font-mono">
-                          ${(it.quantity * it.price).toLocaleString()}
+                          E{(it.quantity * it.price).toLocaleString()}
                         </td>
                       </tr>
                     ))}
@@ -926,11 +1067,11 @@ export default function Quotations() {
                   <div className="text-right w-64 space-y-1.5">
                     <div className="flex justify-between text-slate-600">
                       <span>Subtotal:</span>
-                      <span className="font-mono">${previewQuotation.total.toLocaleString()}</span>
+                      <span className="font-mono">E{previewQuotation.total.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between border-t-2 border-slate-900 pt-1.5 font-bold text-slate-900 text-sm">
                       <span>Total Value:</span>
-                      <span className="font-bold font-mono">${previewQuotation.total.toLocaleString()}</span>
+                      <span className="font-bold font-mono">E{previewQuotation.total.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>

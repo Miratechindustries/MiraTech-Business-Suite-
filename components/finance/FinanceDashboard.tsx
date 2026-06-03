@@ -11,11 +11,11 @@ export default function FinanceDashboard() {
         {/* KPI Cards */}
         <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
             <h3 className="text-sm font-medium text-slate-500">Total Revenue</h3>
-            <p className="text-2xl font-bold text-green-600">$0.00</p>
+            <p className="text-2xl font-bold text-green-600">E0.00</p>
         </div>
         <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
             <h3 className="text-sm font-medium text-slate-500">Total Expenses</h3>
-            <p className="text-2xl font-bold text-red-600">$0.00</p>
+            <p className="text-2xl font-bold text-red-600">E0.00</p>
         </div>
         {/* ... more cards */}
       </div>

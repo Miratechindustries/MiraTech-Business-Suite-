@@ -26,6 +26,7 @@ export default function Transactions() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [businessId, setBusinessId] = useState<string | null>(null);
+  const [errorSignal, setErrorSignal] = useState<string | null>(null);
 
   // Form Fields
   const [id, setId] = useState("");
@@ -41,12 +42,30 @@ export default function Transactions() {
     async function loadBusiness() {
       const user = auth.currentUser;
       if (!user) return;
-      const cached = currentUser?.companyId || currentUser?.businessId;
-      if (cached) {
-        setBusinessId(cached);
-      } else {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        setBusinessId(userDoc.data()?.businessId || userDoc.data()?.companyId || user.uid);
+      try {
+        const cached = currentUser?.companyId || currentUser?.businessId;
+        if (cached) {
+          setBusinessId(cached);
+        } else {
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          setBusinessId(userDoc.data()?.businessId || userDoc.data()?.companyId || user.uid);
+        }
+      } catch (err) {
+        console.error("Failed to load business configuration for transactions active scope.", err);
+        const fallbackId = user.uid;
+        setBusinessId(fallbackId);
+        
+        // Log to compliance audit logs
+        try {
+          await logAction(
+            "System Identity Load Error",
+            `Failed to load business profile for user ${user.uid}. Reason: ${err instanceof Error ? err.message : String(err)}`,
+            fallbackId
+          );
+        } catch (auditErr) {
+          console.error("Critical failure writing identity error log.", auditErr);
+        }
+        setErrorSignal("Failed to authorize corporate business context. Defaulted to fallback user identity space.");
       }
     }
     loadBusiness();
@@ -55,6 +74,7 @@ export default function Transactions() {
   const loadTransactions = async () => {
     if (!businessId) return;
     setLoading(true);
+    setErrorSignal(null);
     const colRef = collection(db, "companies", businessId, "transactions");
     try {
       const snapshot = await getDocs(colRef);
@@ -71,7 +91,11 @@ export default function Transactions() {
         ];
         
         for (const tx of initial) {
-          await setDoc(doc(db, "companies", businessId, "transactions", tx.id), tx);
+          try {
+            await setDoc(doc(db, "companies", businessId, "transactions", tx.id), tx);
+          } catch (seedErr) {
+            console.error(`Failed to seed transaction ${tx.id}`, seedErr);
+          }
         }
         data = initial;
       }
@@ -82,9 +106,33 @@ export default function Transactions() {
       if (isOfflineError(err)) {
         console.warn("[Transactions Workspace Cache Mode] Error loading, loading from local cache fallback.");
         const cached = localStorage.getItem(`miratech_transactions_${businessId}`);
-        if (cached) setTxns(JSON.parse(cached));
+        if (cached) {
+          try {
+            setTxns(JSON.parse(cached));
+          } catch {}
+        }
       } else {
-        handleFirestoreError(err, OperationType.LIST, `companies/${businessId}/transactions`);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        setErrorSignal(`Audit system failed to fetch transaction logs: ${errMsg}. Relational incident was dispatched to compatibility registry.`);
+        
+        // Log to compliance audit logs
+        try {
+          await logAction(
+            "Transaction Query Failure",
+            `System failed to query transactions ledger. Reason: ${errMsg}`,
+            businessId
+          );
+        } catch (auditErr) {
+          console.error("Critical failure writing load transactions error to audit logs.", auditErr);
+        }
+
+        // Fallback to cache
+        const cached = localStorage.getItem(`miratech_transactions_${businessId}`);
+        if (cached) {
+          try {
+            setTxns(JSON.parse(cached));
+          } catch {}
+        }
       }
     } finally {
       setLoading(false);
@@ -121,7 +169,7 @@ export default function Transactions() {
       // 2. Audit Trail logging
       await logAction(
         "Ledger Transaction Logged",
-        `Created transaction ${newTxKey} of type ${type} with value $${amount}. Ref: ${reference || "N/A"}.`,
+        `Created transaction ${newTxKey} of type ${type} with value E${amount}. Ref: ${reference || "N/A"}.`,
         businessId,
         amount
       );
@@ -130,7 +178,19 @@ export default function Transactions() {
       setIsOpen(false);
       await loadTransactions();
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, `companies/${businessId}/transactions/${newTxKey}`);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setErrorSignal(`Transaction authentication denied: ${errMsg}. Incident recorded on server.`);
+      
+      // Post details in audit log!
+      try {
+        await logAction(
+          "Transaction Entry Denied",
+          `Authentication failed or database rejected payment ledger line ${newTxKey} (Amnt: E${amount}, Type: ${type}, Ref: ${reference || "N/A"}). Result: ${errMsg}`,
+          businessId
+        );
+      } catch (auditErr) {
+        console.error("Failed to write payment creation failure to audit ledger.", auditErr);
+      }
     }
   };
 
@@ -160,7 +220,18 @@ export default function Transactions() {
 
         await loadTransactions();
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `companies/${businessId}/transactions/${txid}`);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        setErrorSignal(`Deletion access authorization denied: ${errMsg}. Operations logged.`);
+        
+        try {
+          await logAction(
+            "Transaction Deletion Refused",
+            `Secure deletion of invoice/payment row '${txid}' was refused. Reason: ${errMsg}`,
+            businessId
+          );
+        } catch (auditErr) {
+          console.error("Failed to write payment extinction decline to audit log.", auditErr);
+        }
       }
     }
   };
@@ -195,6 +266,20 @@ export default function Transactions() {
 
   return (
     <div className="space-y-4">
+      {/* Dynamic Error Warning Alerts */}
+      {errorSignal && (
+        <div className="p-3 border border-red-200 bg-red-50/70 rounded-lg flex items-start gap-2.5 text-xs text-red-800 font-medium animate-fade-in shadow-2xs">
+          <AlertCircle className="h-4 w-4 text-red-650 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <span className="font-extrabold block text-red-900 uppercase tracking-widest text-[9px] mb-0.5">Secure Transaction Engine Warning</span>
+            {errorSignal}
+          </div>
+          <button onClick={() => setErrorSignal(null)} className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer transition">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Upper Status Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
@@ -224,17 +309,17 @@ export default function Transactions() {
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white border border-slate-200/80 p-3.5 rounded-lg shadow-3xs">
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Gross Inflow Cleared</p>
-          <h3 className="text-base font-extrabold text-green-700 mt-1 font-mono">${grossInflow.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold text-green-700 mt-1 font-mono">E{grossInflow.toLocaleString()}</h3>
           <p className="text-[8px] text-green-500 font-semibold font-mono">Real-time revenue settlement</p>
         </div>
         <div className="bg-white border border-slate-200/80 p-3.5 rounded-lg shadow-3xs">
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Gross Outflow / Expenses</p>
-          <h3 className="text-base font-extrabold text-red-600 mt-1 font-mono">-${grossOutflow.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold text-red-600 mt-1 font-mono">-E{grossOutflow.toLocaleString()}</h3>
           <p className="text-[8px] text-red-500 font-semibold font-mono">Operational outlays settled</p>
         </div>
         <div className="bg-white border border-slate-200/80 p-3.5 rounded-lg shadow-3xs">
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Net Position Capital</p>
-          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">${netCash.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">E{netCash.toLocaleString()}</h3>
           <p className="text-[8px] text-blue-550 font-semibold font-mono">Consolidated liquid balance</p>
         </div>
       </div>
@@ -327,7 +412,7 @@ export default function Transactions() {
                       )}
                     </td>
                     <td className={`font-mono font-extrabold text-right ${isIn ? "text-green-700" : "text-red-600"}`}>
-                      {isIn ? "+" : "-"}${t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {isIn ? "+" : "-"}E{t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="text-right py-1">
                       <button
@@ -407,7 +492,7 @@ export default function Transactions() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount ($)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount (E)</label>
                   <input
                     type="number"
                     step="0.01"

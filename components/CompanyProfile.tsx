@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, updateDoc, collection, addDoc } from "firebase/firestore";
 import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
-import { Building, Mail, Phone, MapPin, Image as ImageIcon, Loader2, CheckCircle } from "lucide-react";
+import { Building, Mail, Phone, MapPin, Image as ImageIcon, Loader2, CheckCircle, ShieldAlert } from "lucide-react";
 import Image from "next/image";
 
 interface CompanyData {
@@ -57,6 +57,14 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
   const [favicon, setFavicon] = useState("");
   const [primaryColor, setPrimaryColor] = useState("#0F172A");
   const [secondaryColor, setSecondaryColor] = useState("#3B82F6");
+  const [inactivityTimeout, setInactivityTimeout] = useState(900); // 15 mins default
+
+  useEffect(() => {
+    const cachedTimeout = localStorage.getItem("mira_inactivity_timeout");
+    if (cachedTimeout) {
+      setInactivityTimeout(Number(cachedTimeout));
+    }
+  }, []);
 
   useEffect(() => {
     async function fetchCompany() {
@@ -431,6 +439,37 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
               <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Secondary Color</label>
                   <input type="color" value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} className="w-full h-10 border border-slate-200 rounded-lg" />
+              </div>
+          </div>
+
+          <div className="p-4 border border-indigo-100 rounded-xl bg-slate-50/70 space-y-3.5 mt-3">
+              <div className="flex items-center gap-2 text-indigo-900 font-extrabold text-xs uppercase tracking-widest">
+                  <ShieldAlert className="h-4 w-4 text-indigo-600" />
+                  Enterprise Inactivity Controls
+              </div>
+              <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1.5 leading-relaxed">
+                      Session Inactivity Auto-Logout Timeout
+                  </label>
+                  <select
+                      value={inactivityTimeout}
+                      onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setInactivityTimeout(val);
+                          localStorage.setItem("mira_inactivity_timeout", String(val));
+                      }}
+                      className="w-full px-3 py-2 border border-slate-250 rounded-lg text-xs bg-white focus:outline-hidden focus:border-slate-500 shadow-3xs"
+                  >
+                      <option value="30">30 Seconds (Fast Simulation / Testing)</option>
+                      <option value="120">2 Minutes</option>
+                      <option value="300">5 Minutes</option>
+                      <option value="900">15 Minutes (Recommended Default)</option>
+                      <option value="1800">30 Minutes</option>
+                      <option value="3600">1 Hour</option>
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed font-semibold">
+                      Sets the maximum idle duration before a warnings window alerts the user, followed by dynamic auto-logout. Meets SOC2 enterprise compliance specs.
+                  </p>
               </div>
           </div>
         </div>

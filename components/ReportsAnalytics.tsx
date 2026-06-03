@@ -183,7 +183,7 @@ export default function ReportsAnalytics() {
               <BarChart3 className="h-3 w-3" />
             </span>
           </div>
-          <h3 className="text-base font-extrabold font-mono text-slate-800 mt-1">${totalBillings.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold font-mono text-slate-800 mt-1">E{totalBillings.toLocaleString()}</h3>
           <div className="flex items-center gap-1 text-[8px] text-green-600 mt-0.5 font-bold">
             <ArrowUpRight className="h-2.5 w-2.5" /> <span>+24.5% vs previous fiscal term</span>
           </div>
@@ -196,7 +196,7 @@ export default function ReportsAnalytics() {
               <DollarSign className="h-3 w-3" />
             </span>
           </div>
-          <h3 className="text-base font-extrabold font-mono text-green-700 mt-1">${totalInvoices.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold font-mono text-green-700 mt-1">E{totalInvoices.toLocaleString()}</h3>
           <div className="flex items-center gap-1 text-[8px] text-green-600 mt-0.5 font-bold">
             <ArrowUpRight className="h-2.5 w-2.5" /> <span>+18.9% collection rate</span>
           </div>
@@ -237,7 +237,7 @@ export default function ReportsAnalytics() {
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="month" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value / 1000}k`} />
+                <YAxis fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `E${value / 1000}k`} />
                 <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{fontSize: '10px'}} />
                 <Bar dataKey="revenue" fill="#10B981" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -258,19 +258,19 @@ export default function ReportsAnalytics() {
             <div className="space-y-2.5 text-xs font-medium">
               <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-500">Gross Contract value:</span>
-                <span className="font-mono text-slate-700 font-bold">${totalBillings.toLocaleString()}</span>
+                <span className="font-mono text-slate-700 font-bold">E{totalBillings.toLocaleString()}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-500">Billed Assets:</span>
-                <span className="font-mono text-slate-700 font-bold">${totalInvoices.toLocaleString()}</span>
+                <span className="font-mono text-slate-700 font-bold">E{totalInvoices.toLocaleString()}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-500">Cash Flow Outlays (Est.):</span>
-                <span className="font-mono text-red-500 font-bold">-${totalExpenses.toLocaleString()}</span>
+                <span className="font-mono text-red-500 font-bold">-E{totalExpenses.toLocaleString()}</span>
               </div>
               <div className="flex justify-between pt-1 font-bold text-slate-900">
                 <span>Active Operating Profit:</span>
-                <span className="font-mono text-emerald-700">${totalProfit.toLocaleString()}</span>
+                <span className="font-mono text-emerald-700">E{totalProfit.toLocaleString()}</span>
               </div>
             </div>
           </div>
@@ -302,11 +302,11 @@ export default function ReportsAnalytics() {
                 return (
                   <tr key={idx} className="hover:bg-slate-50/40">
                     <td className="font-bold text-slate-800">{r.quarter}</td>
-                    <td className="font-mono text-slate-500">${r.billings.toLocaleString()}</td>
-                    <td className="font-mono text-slate-700 font-bold">${r.invoices.toLocaleString()}</td>
-                    <td className="font-mono text-red-500">-${r.expenses.toLocaleString()}</td>
+                    <td className="font-mono text-slate-500">E{r.billings.toLocaleString()}</td>
+                    <td className="font-mono text-slate-700 font-bold">E{r.invoices.toLocaleString()}</td>
+                    <td className="font-mono text-red-500">-E{r.expenses.toLocaleString()}</td>
                     <td className="font-mono text-indigo-700 font-bold">{margin.toFixed(1)}%</td>
-                    <td className="font-mono text-right font-extrabold text-green-700">${(r.invoices - r.expenses).toLocaleString()}</td>
+                    <td className="font-mono text-right font-extrabold text-green-700">E{(r.invoices - r.expenses).toLocaleString()}</td>
                   </tr>
                 );
               })}

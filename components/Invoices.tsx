@@ -237,7 +237,7 @@ export default function Invoices() {
         // Log database audit trail
         await logAction(
           "Invoice Created",
-          `Billed invoice #${payload.number} to client '${payload.clientName}'. Total amount: $${payload.total}`,
+          `Billed invoice #${payload.number} to client '${payload.clientName}'. Total amount: E${payload.total}`,
           user.uid,
           payload.total
         );
@@ -540,7 +540,7 @@ export default function Invoices() {
                     <div className="text-[10px] text-slate-400">{inv.clientEmail}</div>
                   </td>
                   <td className="py-3.5 px-4">{inv.dueDate}</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-800">${inv.total.toLocaleString()}</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-800">E{inv.total.toLocaleString()}</td>
                   <td className="py-3.5 px-4">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${
@@ -763,7 +763,7 @@ export default function Invoices() {
 
               <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
                 <span className="text-xs text-slate-400 font-mono">Calculated value total</span>
-                <span className="text-md font-bold text-slate-800">${calculateTotal().toLocaleString()}</span>
+                <span className="text-md font-bold text-slate-800">E{calculateTotal().toLocaleString()}</span>
               </div>
 
               <div className="flex gap-2 justify-end pt-3">
@@ -822,7 +822,7 @@ export default function Invoices() {
 
             <div className="flex justify-between items-center text-xs border-y border-slate-100 py-2.5">
               <span className="text-slate-500">Amount Paid:</span>
-              <span className="font-bold text-slate-800">${payingInvoice.total.toLocaleString()}</span>
+              <span className="font-bold text-slate-800">E{payingInvoice.total.toLocaleString()}</span>
             </div>
 
             <div className="flex gap-2">
@@ -869,12 +869,7 @@ export default function Invoices() {
             <div className="p-6 bg-slate-100 overflow-x-auto max-h-[70vh]">
               <div
                 ref={pdfAreaRef}
-                style={{ 
-                    width: "210mm", 
-                    minHeight: "297mm",
-                    backgroundColor: "#ffffff",
-                    color: "#1f2937"
-                }}
+                style={{ width: "210mm", minHeight: "297mm" }}
                 className="mx-auto bg-white p-[20mm] border border-slate-200 shadow-sm relative text-slate-800 font-sans"
               >
                 {/* Letterhead Header */}
@@ -949,10 +944,10 @@ export default function Invoices() {
                         <td className="py-3 px-3 border border-slate-200 font-medium">{it.description}</td>
                         <td className="py-3 px-3 border border-slate-200 text-center font-mono">{it.quantity}</td>
                         <td className="py-3 px-3 border border-slate-200 text-right font-mono">
-                          ${it.price.toLocaleString()}
+                          E{it.price.toLocaleString()}
                         </td>
                         <td className="py-3 px-3 border border-slate-200 text-right font-bold text-slate-900 font-mono">
-                          ${(it.quantity * it.price).toLocaleString()}
+                          E{(it.quantity * it.price).toLocaleString()}
                         </td>
                       </tr>
                     ))}
@@ -970,11 +965,11 @@ export default function Invoices() {
                   <div className="text-right w-64 space-y-1.5">
                     <div className="flex justify-between text-slate-600">
                       <span>Subtotal:</span>
-                      <span className="font-mono">${previewInvoice.total.toLocaleString()}</span>
+                      <span className="font-mono">E{previewInvoice.total.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between border-t-2 border-slate-900 pt-1.5 font-bold text-slate-900 text-sm">
                       <span>Total Invoice Amount:</span>
-                      <span className="font-bold font-mono">${previewInvoice.total.toLocaleString()}</span>
+                      <span className="font-bold font-mono">E{previewInvoice.total.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
