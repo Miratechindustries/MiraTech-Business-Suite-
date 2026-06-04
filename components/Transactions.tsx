@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Search, Plus, Trash2, Edit, X, ArrowUpRight, ArrowDownLeft, FileSpreadsheet, Download, Calendar, Settings, DollarSign, Wallet2, CheckCircle, AlertCircle } from "lucide-react";
 import { auth, db, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
 import { collection, doc, addDoc, getDocs, deleteDoc, getDoc, query, setDoc } from "firebase/firestore";
-import { useUserStore } from "../lib/store";
+import { useUserStore, useToastStore } from "../lib/store";
 import { logAction } from "../lib/audit";
 
 interface Transaction {
@@ -20,6 +20,7 @@ interface Transaction {
 
 export default function Transactions() {
   const { currentUser } = useUserStore();
+  const addToast = useToastStore((state) => state.addToast);
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
@@ -177,7 +178,9 @@ export default function Transactions() {
       resetForm();
       setIsOpen(false);
       await loadTransactions();
+      addToast(`Transaction ${newTxKey} saved successfully`, "success");
     } catch (err) {
+      addToast(`System Warning / Error: Entry denied. ${err instanceof Error ? err.message : String(err)}`, "error");
       const errMsg = err instanceof Error ? err.message : String(err);
       setErrorSignal(`Transaction authentication denied: ${errMsg}. Incident recorded on server.`);
       
@@ -219,7 +222,9 @@ export default function Transactions() {
         );
 
         await loadTransactions();
+        addToast(`Transaction record ${txid} deleted successfully`, "warning");
       } catch (err) {
+        addToast(`System Warning / Error: Deletion refused. ${err instanceof Error ? err.message : String(err)}`, "error");
         const errMsg = err instanceof Error ? err.message : String(err);
         setErrorSignal(`Deletion access authorization denied: ${errMsg}. Operations logged.`);
         
@@ -248,6 +253,7 @@ export default function Transactions() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    addToast("Export Complete: Ledger Transactions CSV downloaded", "success");
   };
 
   const filteredTxns = txns.filter((t) => {

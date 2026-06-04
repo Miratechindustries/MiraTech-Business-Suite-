@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { collection, doc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc } from "firebase/firestore";
 import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
-import { useUserStore } from "../lib/store";
+import { useUserStore, useToastStore } from "../lib/store";
 import { logAction } from "../lib/audit";
 import { uploadToDrive } from "../lib/drive";
 import { FileCheck, Search, Trash, Download, Loader2, Eye, X } from "lucide-react";
@@ -34,6 +34,7 @@ interface CompanyDetails {
 
 export default function Receipts() {
   const { currentUser } = useUserStore();
+  const addToast = useToastStore((state) => state.addToast);
 
   // Local auth shadowing to redirect all queries to the correct shared company workspace
   const auth = {
@@ -145,6 +146,7 @@ export default function Receipts() {
       }
     }
 
+    addToast("Receipt deleted successfully closeout", "warning");
     if (!isOffline) {
       fetchReceiptsAndCompany();
     }
@@ -168,6 +170,7 @@ export default function Receipts() {
       
       // Save PDF locally first to ensure of physical download success
       pdf.save(fileName);
+      addToast(`Export Complete: Saved PDF ${fileName}`, "success");
 
       // Attempt background Google Drive backup gracefully
       try {
@@ -178,14 +181,14 @@ export default function Receipts() {
             driveFileId: fileId
           });
           fetchReceiptsAndCompany();
-          console.log("Receipt backed up to Google Drive successfully!");
+          addToast("Receipt backed up to Google Drive successfully!", "info");
         }
       } catch (driveErr: any) {
         console.warn("Google Drive skip/backup failed:", driveErr.message);
       }
     } catch (err) {
       console.error("PDF printing failed:", err);
-      alert("PDF generation failed.");
+      addToast(`System Error: PDF generation failed. Reason: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
   };
 

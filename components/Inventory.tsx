@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Search, Plus, Filter, AlertTriangle, ArrowUpDown, ChevronDown, Trash2, Edit, Save, X, Layers, Box, Zap, Settings, Network, Server, Cable, CheckCircle2 } from "lucide-react";
 import { auth, db } from "../lib/firebase";
+import { useToastStore } from "../lib/store";
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc } from "firebase/firestore";
 import { logAction } from "../lib/audit";
 
@@ -57,6 +58,7 @@ const suggestSku = (itemName: string): string => {
 };
 
 export default function Inventory() {
+  const addToast = useToastStore((state) => state.addToast);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [categoryConfigs, setCategoryConfigs] = useState<CategoryConfig[]>(DEFAULT_CATEGORIES);
   const [search, setSearch] = useState("");
@@ -177,6 +179,7 @@ export default function Inventory() {
     );
 
     setItems([...items, { id: docRef.id, ...newItem }]);
+    addToast(`Product '${name}' saved successfully`, "success");
     resetForm();
     setIsOpen(false);
   };
@@ -237,6 +240,7 @@ export default function Inventory() {
     );
 
     setItems(items.map((it) => it.id === editingItem.id ? updatedItem : it));
+    addToast(`Product '${name}' updated successfully`, "success");
     resetForm();
     setIsOpen(false);
   };
@@ -255,6 +259,7 @@ export default function Inventory() {
       }
 
       setItems(items.filter((it) => it.id !== itemId));
+      addToast("Product deleted successfully", "warning");
     }
   };
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc, where } from "firebase/firestore";
 import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
-import { useUserStore } from "../lib/store";
+import { useUserStore, useToastStore } from "../lib/store";
 import { logAction } from "../lib/audit";
 import { uploadToDrive } from "../lib/drive";
 import { FileText, Plus, Search, Trash, Edit, Download, Loader2, Eye, X, Check, CheckCircle2 } from "lucide-react";
@@ -64,6 +64,7 @@ interface Customer {
 
 export default function Quotations() {
   const { currentUser } = useUserStore();
+  const addToast = useToastStore((state) => state.addToast);
 
   // Local auth shadowing to redirect all queries to the correct shared company workspace
   const auth = {
@@ -99,6 +100,56 @@ export default function Quotations() {
   const [items, setItems] = useState<Item[]>([{ description: "", quantity: 1, price: 0 }]);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const generateNextQuotationNumber = () => {
+    let nextNum = "QT-1001";
+    if (quotations && quotations.length > 0) {
+      let maxNum = 0;
+      let prefix = "QT-";
+      let padLength = 0;
+      
+      for (const q of quotations) {
+        const numStr = q.number;
+        if (!numStr) continue;
+        const match = numStr.match(/\d+/);
+        if (match) {
+          const val = parseInt(match[0], 10);
+          if (val > maxNum) {
+            maxNum = val;
+            const idx = numStr.indexOf(match[0]);
+            prefix = numStr.substring(0, idx);
+            if (match[0].startsWith("0") && match[0].length > 1) {
+              padLength = match[0].length;
+            } else {
+              padLength = 0;
+            }
+          }
+        }
+      }
+      if (maxNum > 0) {
+        const incremented = maxNum + 1;
+        const numPart = padLength > 0 ? String(incremented).padStart(padLength, "0") : String(incremented);
+        nextNum = `${prefix}${numPart}`;
+      }
+    }
+    return nextNum;
+  };
+
+  const handleOpenCreateQuotation = () => {
+    const nextNum = generateNextQuotationNumber();
+    setNumber(nextNum);
+    
+    // Set default dates
+    const today = new Date().toISOString().split("T")[0];
+    setDate(today);
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 30);
+    setValidUntil(nextWeek.toISOString().split("T")[0]);
+    
+    setIsOpen(true);
+  };
 
   // Preview & Export Modal
   const [previewQuotation, setPreviewQuotation] = useState<Quotation | null>(null);
@@ -304,8 +355,10 @@ export default function Quotations() {
       setDate("");
       setValidUntil("");
       setItems([{ description: "", quantity: 1, price: 0 }]);
+      addToast(`Quotation #${payload.number} Saved successfully`, "success");
       fetchQuotationsAndCompany();
     } catch (err) {
+      addToast(`System Error: Failed to draft quotation #${payload.number}. Reason: ${err instanceof Error ? err.message : String(err)}`, "error");
       handleFirestoreError(err, OperationType.CREATE, quotsPath);
     } finally {
       setSubmitting(false);
@@ -388,6 +441,7 @@ export default function Quotations() {
       }
     }
 
+    addToast(`Quotation status updated to ${nextStatus}`, "success");
     if (!isOffline) {
       fetchQuotationsAndCompany();
     }
@@ -403,7 +457,25 @@ export default function Quotations() {
     setConvertingId(q.id || null);
     const businessId = currentUser.companyId || currentUser.businessId || user.uid;
     const prefixRemoved = q.number.replace(/^(QT|QUOT|Q|qt|quot|q)-/i, "");
-    const generatedInvNumber = `INV-${prefixRemoved}`;
+    let generatedInvNumber = `INV-${prefixRemoved}`;
+
+    // Read cached invoices to avoid duplicate numbers!
+    try {
+      const cachedInvsStr = localStorage.getItem(`miratech_offline_invoices_${businessId}`);
+      if (cachedInvsStr) {
+        const cachedInvsList = JSON.parse(cachedInvsStr);
+        const existingNumbers = new Set(cachedInvsList.map((inv: any) => String(inv.number).toUpperCase()));
+        let attemptNum = generatedInvNumber;
+        let suffix = 1;
+        while (existingNumbers.has(attemptNum.toUpperCase())) {
+          attemptNum = `${generatedInvNumber}-${suffix}`;
+          suffix++;
+        }
+        generatedInvNumber = attemptNum;
+      }
+    } catch (e) {
+      console.warn("Could not check duplicate invoices cache:", e);
+    }
 
     const invoicePayload: any = {
       ownerId: user.uid,
@@ -445,11 +517,11 @@ export default function Quotations() {
         invoiceReference: generatedInvNumber
       });
       
-      alert(`Quotation successfully converted to Invoice #${generatedInvNumber}! You can view and download it under the Invoices tab.`);
+      addToast(`Quotation converted to Invoice #${generatedInvNumber} successfully!`, "success");
       fetchQuotationsAndCompany();
     } catch (err) {
       console.error("Failed to convert quotation to invoice:", err);
-      alert("Failed to convert quotation to invoice.");
+      addToast(`System Error: Failed to convert quotation. Reason: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
       setConvertingId(null);
     }
@@ -490,6 +562,7 @@ export default function Quotations() {
       }
     }
 
+    addToast("Quotation deleted successfully", "warning");
     if (!isOffline) {
       fetchQuotationsAndCompany();
     }
@@ -513,6 +586,7 @@ export default function Quotations() {
       
       // Save PDF locally first to ensure of physical download success
       pdf.save(fileName);
+      addToast(`Export Complete: Saved PDF ${fileName}`, "success");
 
       // Attempt background Google Drive backup gracefully
       try {
@@ -523,14 +597,14 @@ export default function Quotations() {
             driveFileId: fileId
           });
           fetchQuotationsAndCompany();
-          console.log("Quotation backed up to Google Drive successfully!");
+          addToast("Quotation backed up to Google Drive successfully!", "info");
         }
       } catch (driveErr: any) {
         console.warn("Google Drive skip/backup failed:", driveErr.message);
       }
     } catch (err) {
       console.error("PDF printing failed:", err);
-      alert("PDF generation failed.");
+      addToast(`System Error: PDF generation failed. Reason: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
   };
 
@@ -539,7 +613,15 @@ export default function Quotations() {
       q.clientName.toLowerCase().includes(search.toLowerCase()) ||
       q.number.toLowerCase().includes(search.toLowerCase());
     const matchesFilter = filter === "all" ? true : q.status === filter;
-    return matchesSearch && matchesFilter;
+    
+    let matchesDate = true;
+    if (startDate) {
+      matchesDate = matchesDate && q.date >= startDate;
+    }
+    if (endDate) {
+      matchesDate = matchesDate && q.date <= endDate;
+    }
+    return matchesSearch && matchesFilter && matchesDate;
   });
 
   return (
@@ -547,7 +629,7 @@ export default function Quotations() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h1 className="text-lg font-extrabold tracking-tight text-slate-900">Quotations Manager</h1>
-          <p className="text-[11px] text-slate-500">Draft, view, and print corporate price quotes.</p>
+          <p className="text-[11px] text-slate-505">Draft, view, and print corporate price quotes.</p>
         </div>
         {!company ? (
           <div className="text-[11px] bg-amber-50 text-amber-700 p-2 py-1.5 rounded-md border border-amber-100/50 max-w-sm">
@@ -555,7 +637,7 @@ export default function Quotations() {
           </div>
         ) : (
           <button
-            onClick={() => setIsOpen(true)}
+            onClick={handleOpenCreateQuotation}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold cursor-pointer shadow-3xs transition"
           >
             <Plus className="h-3.5 w-3.5" /> Create Quotation
@@ -591,6 +673,34 @@ export default function Quotations() {
               {tab}
             </button>
           ))}
+        </div>
+        <div className="flex items-center gap-1.5 w-full md:w-auto self-start md:self-auto bg-slate-50/50 p-1 px-2 border border-slate-200 rounded-md">
+          <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider whitespace-nowrap">From:</span>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="px-1.5 py-0.5 border border-slate-200 rounded-md text-[10px] bg-white focus:outline-hidden font-medium"
+          />
+          <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider whitespace-nowrap">To:</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="px-1.5 py-0.5 border border-slate-200 rounded-md text-[10px] bg-white focus:outline-hidden font-medium"
+          />
+          {(startDate || endDate) && (
+            <button
+              type="button"
+              onClick={() => {
+                setStartDate("");
+                setEndDate("");
+              }}
+              className="text-[10px] font-extrabold text-blue-600 hover:text-blue-800 uppercase ml-1 cursor-pointer transition"
+            >
+              Clear
+            </button>
+          )}
         </div>
       </div>
 

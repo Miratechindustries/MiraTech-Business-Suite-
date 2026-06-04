@@ -38,6 +38,7 @@ import Quotations from "./Quotations";
 import Invoices from "./Invoices";
 import Receipts from "./Receipts";
 import CompanyProfile from "./CompanyProfile";
+import ToastContainer from "./ToastContainer";
 import Inventory from "./Inventory";
 import Customers from "./Customers";
 import Transactions from "./Transactions";
@@ -680,6 +681,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
           </div>
         </div>
       )}
+      <ToastContainer />
     </>
   );
 }
