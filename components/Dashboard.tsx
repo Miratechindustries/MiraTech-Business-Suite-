@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { collection, getDocs, query, orderBy, getDoc, doc } from "firebase/firestore";
 import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
 import { syncToGoogleSheets, uploadToGoogleDrive, LedgerMetric } from "../lib/googleApi";
-import { BarChart3, TrendingUp, DollarSign, Wallet2, FileSpreadsheet, Download, CloudLightning, Loader2, CheckSquare, ShieldCheck, AlertCircle, ArrowDownLeft } from "lucide-react";
+import { BarChart3, TrendingUp, DollarSign, Wallet2, FileSpreadsheet, Download, CloudLightning, Loader2, CheckSquare, ShieldCheck, AlertCircle, ArrowDownLeft, AlertTriangle } from "lucide-react";
 import Image from "next/image";
 import jsPDF from "jspdf";
 import safeHtml2Canvas from "../lib/safeHtml2canvas";
@@ -19,6 +19,7 @@ interface Invoice {
   status: "unpaid" | "paid" | "overdue";
   date?: string;
   number?: string;
+  items?: { description: string; quantity: number; price: number }[];
 }
 
 interface Quotation {
@@ -88,7 +89,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
   const pdfDashboardRef = useRef<HTMLDivElement>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const user = auth.currentUser;
     if (!user) return;
 
@@ -190,11 +191,11 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser, auth.currentUser]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   // Compute stats
   const totalQuotationsVal = quotations.reduce((acc, q) => acc + q.total, 0);
@@ -226,32 +227,103 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
       baseDate = new Date(2026, 4, 31); // 4 = May
     }
     
+    // Illustrative fallback if empty
+    const isEmpty = invoices.length === 0;
+    const demoData = [
+      { revenue: 15000, invoiced: 22000, unpaidCount: 4 },
+      { revenue: 18000, invoiced: 25000, unpaidCount: 5 },
+      { revenue: 12000, invoiced: 18000, unpaidCount: 3 },
+      { revenue: 22000, invoiced: 29000, unpaidCount: 6 },
+      { revenue: 25000, invoiced: 34000, unpaidCount: 7 },
+      { revenue: 21000, invoiced: 27000, unpaidCount: 4 },
+      { revenue: 28000, invoiced: 38000, unpaidCount: 8 },
+      { revenue: 31000, invoiced: 41000, unpaidCount: 5 },
+      { revenue: 26000, invoiced: 33500, unpaidCount: 9 },
+      { revenue: 34000, invoiced: 45000, unpaidCount: 6 },
+      { revenue: 39000, invoiced: 48000, unpaidCount: 4 },
+      { revenue: 41000, invoiced: 52000, unpaidCount: 3 },
+    ];
+
     for (let i = 11; i >= 0; i--) {
       const d = new Date(baseDate.getFullYear(), baseDate.getMonth() - i, 1);
       const year = d.getFullYear();
       const monthSelect = String(d.getMonth() + 1).padStart(2, '0');
       const label = d.toLocaleString('default', { month: 'short' });
+      const demoVal = demoData[11 - i];
       months.push({
         key: `${year}-${monthSelect}`,
         month: `${label} '${String(year).slice(-2)}`,
-        revenue: 0,
-        invoiced: 0,
+        revenue: isEmpty ? demoVal.revenue : 0,
+        invoiced: isEmpty ? demoVal.invoiced : 0,
+        unpaidCount: isEmpty ? demoVal.unpaidCount : 0,
       });
     }
 
-    invoices.forEach((inv) => {
-      const invMonth = (inv.date || "").substring(0, 7); // "YYYY-MM"
-      const match = months.find((m) => m.key === invMonth);
-      if (match) {
-        if (inv.status === "paid") {
-          match.revenue += Number(inv.total || 0);
+    if (!isEmpty) {
+      invoices.forEach((inv) => {
+        const invMonth = (inv.date || "").substring(0, 7); // "YYYY-MM"
+        const match = months.find((m) => m.key === invMonth);
+        if (match) {
+          if (inv.status === "paid") {
+            match.revenue += Number(inv.total || 0);
+          } else if (inv.status === "unpaid" || inv.status === "overdue") {
+            match.unpaidCount += 1;
+          }
+          match.invoiced += Number(inv.total || 0);
         }
-        match.invoiced += Number(inv.total || 0);
-      }
-    });
+      });
+    }
 
     return months;
   })();
+
+  // Computed values for top-selling inventory items
+  const topSellingItems = (() => {
+    const counts: { [key: string]: { name: string; quantity: number; revenue: number } } = {};
+    const hasItems = invoices.some(inv => inv.items && Array.isArray(inv.items) && inv.items.length > 0);
+
+    if (hasItems) {
+      invoices.forEach((inv) => {
+        if (inv.items && Array.isArray(inv.items)) {
+          inv.items.forEach((item) => {
+            const name = item.description || "Unknown Item";
+            if (!counts[name]) {
+              counts[name] = { name, quantity: 0, revenue: 0 };
+            }
+            counts[name].quantity += Number(item.quantity || 0);
+            counts[name].revenue += Number(item.quantity || 0) * Number(item.price || 0);
+          });
+        }
+      });
+      return Object.values(counts)
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5);
+    } else {
+      // Demo fallback items
+      return [
+        { name: "Mira Shield Pro V1", quantity: 185, revenue: 92500 },
+        { name: "SaaS Enterprise Sync License", quantity: 142, revenue: 71000 },
+        { name: "Miratech Security Router", quantity: 98, revenue: 49000 },
+        { name: "Fiber Patch Cord Multi-mode", quantity: 85, revenue: 4250 },
+        { name: "Ethernet Switch 24-Port", quantity: 64, revenue: 19200 },
+      ];
+    }
+  })();
+
+  // Stats on unpaid invoices
+  const unpaidInvoices = invoices.filter(i => i.status === "unpaid" || i.status === "overdue");
+  const unpaidInvoicesCount = unpaidInvoices.length;
+  const unpaidInvoicesAmount = unpaidInvoices.reduce((acc, i) => acc + (i.total || 0), 0);
+  
+  const overdueInvoices = invoices.filter(i => i.status === "overdue");
+  const overdueCount = overdueInvoices.length;
+  const overdueAmount = overdueInvoices.reduce((acc, i) => acc + (i.total || 0), 0);
+
+  // If empty, supply mock aging values
+  const displayUnpaidCount = invoices.length === 0 ? 12 : unpaidInvoicesCount;
+  const displayUnpaidAmount = invoices.length === 0 ? 25600 : unpaidInvoicesAmount;
+  const displayOverdueCount = invoices.length === 0 ? 5 : overdueCount;
+  const displayOverdueAmount = invoices.length === 0 ? 9600 : overdueAmount;
 
   // Computed values for collections pie chart
   const isCollectionsEmpty = invoices.length === 0 || invoices.reduce((acc, i) => acc + (i.total || 0), 0) === 0;
@@ -634,9 +706,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                   <TrendingUp className="h-4 w-4" style={{ color: company?.primaryColor || '#3B82F6' }} />
                   Monthly Performance Trend
                 </h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">Cleared cash collections vs. total invoiced targets over the past 12 months.</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Cleared cash collections, invoiced targets, and unpaid invoice counts over the past 12 months.</p>
               </div>
-              <div className="flex items-center gap-4 text-[10px] font-bold">
+              <div className="flex flex-wrap items-center gap-4 text-[10px] font-bold pb-2 sm:pb-0">
                 <span className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: company?.primaryColor || '#3b82f6' }}></span> 
                   Cleared Cash
@@ -644,6 +716,10 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                 <span className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: company?.secondaryColor || '#10b981' }}></span> 
                   Invoiced Receivables
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-rose-500 font-mono"></span> 
+                  Unpaid Invoice Count
                 </span>
               </div>
             </div>
@@ -660,12 +736,24 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                     dy={6}
                   />
                   <YAxis 
+                    yAxisId="left"
+                    orientation="left"
                     fontSize={10} 
                     tickLine={false} 
                     axisLine={false} 
                     stroke="#64748B"
                     tickFormatter={(val) => `E${val.toLocaleString()}`}
                     dx={-6}
+                  />
+                  <YAxis 
+                    yAxisId="right"
+                    orientation="right"
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    stroke="#F43F5E"
+                    tickFormatter={(val) => `${val}`}
+                    dx={6}
                   />
                   <Tooltip 
                     contentStyle={{ 
@@ -675,9 +763,15 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                       border: '1px solid #E2E8F0', 
                       boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)' 
                     }} 
-                    formatter={(value: any) => [`E${Number(value).toLocaleString()}`]}
+                    formatter={(value: any, name: any) => {
+                      if (name === "Unpaid Invoices Count") {
+                        return [`${value} invoices`, name];
+                      }
+                      return [`E${Number(value).toLocaleString()}`, name];
+                    }}
                   />
                   <Line 
+                    yAxisId="left"
                     type="monotone" 
                     dataKey="revenue" 
                     name="Cleared Cash Revenue"
@@ -687,6 +781,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                     dot={{ r: 3, strokeWidth: 1.5 }}
                   />
                   <Line 
+                    yAxisId="left"
                     type="monotone" 
                     dataKey="invoiced" 
                     name="Invoiced Receivables"
@@ -694,6 +789,16 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                     strokeWidth={1.5}
                     strokeDasharray="4 4"
                     dot={{ r: 2 }}
+                  />
+                  <Line 
+                    yAxisId="right"
+                    type="monotone" 
+                    dataKey="unpaidCount" 
+                    name="Unpaid Invoices Count"
+                    stroke="#F43F5E" 
+                    strokeWidth={2}
+                    activeDot={{ r: 5 }} 
+                    dot={{ r: 3, stroke: "#F43F5E", fill: "#FFF" }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -864,6 +969,168 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Enterprise Fiscal Monitoring & Inventory Insights */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 animate-tw-animate-css">
+        {/* Top-Selling Inventory Items */}
+        <motion.div
+          initial={{ y: 50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.6, ease: "easeOut", delay: 0.65 }}
+          className="bg-white border border-blue-100/70 p-5 rounded-lg shadow-3xs hover:border-blue-200 transition lg:col-span-7 flex flex-col justify-between"
+          id="dashboard-top-selling-inventory-card"
+        >
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <div>
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5" style={{ color: company?.primaryColor || '#1E293B' }}>
+                  <TrendingUp className="h-4 w-4" style={{ color: company?.primaryColor || '#3B82F6' }} />
+                  Top-Selling Inventory & Service Items
+                </h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Strategic volume and revenue rankings across all client accounts.
+                </p>
+              </div>
+              {invoices.length === 0 && (
+                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded text-[9px] font-bold uppercase tracking-wider animate-pulse">
+                  Illustrative Demo
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mt-2">
+              <div className="h-44 md:col-span-7">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={topSellingItems}
+                    layout="vertical"
+                    margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                    <XAxis type="number" fontSize={9} stroke="#64748B" axisLine={false} tickLine={false} />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      fontSize={9}
+                      stroke="#64748B"
+                      axisLine={false}
+                      tickLine={false}
+                      width={90}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        fontSize: "11px",
+                        borderRadius: "8px",
+                        backgroundColor: "#FFFFFF",
+                        border: "1px solid #E2E8F0",
+                        boxShadow: "0 1px 3px 0 rgba(0,0,0,0.1)",
+                      }}
+                      formatter={(value: any, name: any) => {
+                        if (name === "Quantity Sold") return [`${value} units`, "Units Sold"];
+                        if (name === "Generated Revenue") return [`E${Number(value).toLocaleString()}`, "Revenue"];
+                        return [value, name];
+                      }}
+                    />
+                    <Bar 
+                      dataKey="quantity" 
+                      name="Quantity Sold" 
+                      fill={company?.primaryColor || "#3b82f6"} 
+                      radius={[0, 4, 4, 0]} 
+                      barSize={12} 
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="md:col-span-5 flex flex-col justify-center">
+                <div className="overflow-x-auto border border-slate-100 rounded-md">
+                  <table className="w-full text-left text-[10px] text-slate-600">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[8px] tracking-wider border-b border-slate-100">
+                        <th className="py-1 px-2">Item Name</th>
+                        <th className="py-1 px-2 text-center">Qty</th>
+                        <th className="py-1 px-2 text-right border-l border-slate-100">Revenue</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {topSellingItems.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-1.5 px-2 text-slate-800 font-semibold truncate max-w-[90px]" title={item.name}>
+                            {item.name}
+                          </td>
+                          <td className="py-1.5 px-2 text-center font-mono text-slate-600 font-bold">
+                            {item.quantity}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono font-bold text-slate-900 border-l border-slate-100 font-mono">
+                            E{item.revenue.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Unpaid Invoices Fiscal Risk & Volume */}
+        <motion.div
+          initial={{ y: 50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.6, ease: "easeOut", delay: 0.7 }}
+          className="bg-white border border-blue-100/70 p-5 rounded-lg shadow-3xs hover:border-blue-200 transition lg:col-span-5 flex flex-col justify-between"
+          id="dashboard-unpaid-invoices-risk-card"
+        >
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <div>
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5" style={{ color: company?.primaryColor || '#1E293B' }}>
+                  <AlertCircle className="h-4 w-4" style={{ color: '#F43F5E' }} />
+                  Outstanding Cash-Flow Monitor
+                </h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Real-time visual tracker of outstanding financial receivables.
+                </p>
+              </div>
+              {invoices.length === 0 && (
+                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded text-[9px] font-bold uppercase tracking-wider animate-pulse">
+                  Illustrative Demo
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <div className="bg-rose-50/50 p-3 rounded-lg border border-rose-100 text-center flex flex-col justify-between">
+                <div>
+                  <span className="text-[8px] font-bold text-rose-500 uppercase tracking-widest block">Unpaid Invoice Balance</span>
+                  <h4 className="text-lg font-extrabold font-mono text-rose-700 mt-1">E{displayUnpaidAmount.toLocaleString()}</h4>
+                </div>
+                <div className="mt-2 text-[9px] text-rose-600 bg-rose-50 border border-rose-200/50 py-0.5 px-1 rounded inline-block font-mono">
+                  {displayUnpaidCount} invoices outstanding
+                </div>
+              </div>
+
+              <div className="bg-amber-50/40 p-3 rounded-lg border border-amber-100 text-center flex flex-col justify-between">
+                <div>
+                  <span className="text-[8px] font-bold text-amber-500 uppercase tracking-widest block">Critically Overdue Balance</span>
+                  <h4 className="text-lg font-extrabold font-mono text-amber-700 mt-1">E{displayOverdueAmount.toLocaleString()}</h4>
+                </div>
+                <div className="mt-2 text-[9px] text-amber-600 bg-amber-50 border border-amber-200/50 py-0.5 px-1 rounded inline-block font-mono font-mono">
+                  {displayOverdueCount} critically overdue
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 p-2.5 bg-slate-50/70 border border-slate-100 rounded-lg flex items-center gap-2.5 text-[10px] text-slate-600">
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0 animate-pulse"></span>
+              <p className="leading-relaxed">
+                Fiscal forecast is adjusted for <strong className="text-slate-900 font-mono">E{displayUnpaidAmount.toLocaleString()}</strong> in liquid receivables requiring prompt active follow-ups.
+              </p>
             </div>
           </div>
         </motion.div>

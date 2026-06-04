@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { Search, Plus, Trash2, Edit, X, User, Phone, Mail, Building, MapPin, CheckCircle2, AlertTriangle, ShieldCheck } from "lucide-react";
-import { auth, db } from "../lib/firebase";
+import { auth, db, handleFirestoreError, OperationType } from "../lib/firebase";
+import { useUserStore } from "../lib/store";
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc } from "firebase/firestore";
 import { logAction } from "../lib/audit";
 
@@ -18,6 +19,7 @@ interface Customer {
 }
 
 export default function Customers() {
+  const { currentUser } = useUserStore();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -39,11 +41,25 @@ export default function Customers() {
   useEffect(() => {
     async function loadBusiness() {
         if (!auth.currentUser) return;
-        const userSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
-        setBusinessId(userSnap.data()?.businessId || null);
+        const cached = currentUser?.companyId || currentUser?.businessId;
+        if (cached) {
+          setBusinessId(cached);
+        } else {
+          try {
+            const userSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
+            if (userSnap.exists()) {
+              setBusinessId(userSnap.data()?.businessId || userSnap.data()?.companyId || auth.currentUser.uid);
+            } else {
+              setBusinessId(auth.currentUser.uid);
+            }
+          } catch (e) {
+            handleFirestoreError(e, OperationType.GET, `users/${auth.currentUser.uid}`);
+            setBusinessId(auth.currentUser.uid);
+          }
+        }
     }
     loadBusiness();
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     if (!businessId) return;

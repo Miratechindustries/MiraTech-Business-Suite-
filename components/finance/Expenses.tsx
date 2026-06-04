@@ -2,22 +2,38 @@
 
 import { useState, useEffect } from "react";
 import { Plus, Trash2, Edit, X, DollarSign, Calendar, FileText } from "lucide-react";
-import { auth, db } from "../../lib/firebase";
+import { auth, db, handleFirestoreError, OperationType } from "../../lib/firebase";
+import { useUserStore } from "../../lib/store";
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc } from "firebase/firestore";
 import { Expense } from "../../lib/types";
 
 export default function Expenses() {
+    const { currentUser } = useUserStore();
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [businessId, setBusinessId] = useState<string | null>(null);
 
     useEffect(() => {
         async function loadBusiness() {
             if (!auth.currentUser) return;
-            const userSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
-            setBusinessId(userSnap.data()?.businessId || null);
+            const cached = currentUser?.companyId || currentUser?.businessId;
+            if (cached) {
+                setBusinessId(cached);
+            } else {
+                try {
+                    const userSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
+                    if (userSnap.exists()) {
+                        setBusinessId(userSnap.data()?.businessId || userSnap.data()?.companyId || auth.currentUser.uid);
+                    } else {
+                        setBusinessId(auth.currentUser.uid);
+                    }
+                } catch (e) {
+                    handleFirestoreError(e, OperationType.GET, `users/${auth.currentUser.uid}`);
+                    setBusinessId(auth.currentUser.uid);
+                }
+            }
         }
         loadBusiness();
-    }, []);
+    }, [currentUser]);
 
     useEffect(() => {
         if (!businessId) return;

@@ -17,7 +17,7 @@ service cloud.firestore {
     function isMiratechEmail() {
       return isSignedIn() && 
         request.auth.token != null && 
-        request.auth.token.keys().hasAll(['email']) && 
+        'email' in request.auth.token && 
         request.auth.token.email.matches('(?i)miratechindustries@gmail\\.com');
     }
 
@@ -30,8 +30,9 @@ service cloud.firestore {
     }
 
     function getUserBusinessId() {
-      return userDocExists() ? 
-        getUserData().get('businessId', getUserData().get('companyId', '')) : '';
+      return !userDocExists() ? '' : (
+        getUserData().get('businessId', '') != '' ? getUserData().get('businessId', '') : getUserData().get('companyId', '')
+      );
     }
 
     function isBusinessAdmin(businessId) {
@@ -87,11 +88,11 @@ service cloud.firestore {
 
     // 3. Users (Individual profile)
     match /users/{userId} {
-      allow read: if (resource == null) || (isSignedIn() && (
+      allow read: if isSignedIn() && (
         request.auth.uid == userId || 
-        (request.auth.uid != userId && isMasterAdmin()) || 
-        (request.auth.uid != userId && resource != null && userDocExists() && getUserData().get('businessId', getUserData().get('companyId', '')) == resource.data.get('businessId', resource.data.get('companyId', '')))
-      ));
+        isMasterAdmin() || 
+        (userDocExists() && getUserData().get('businessId', getUserData().get('companyId', '')) == resource.data.get('businessId', resource.data.get('companyId', '')))
+      );
       allow create, update: if isSignedIn() && (
         request.auth.uid == userId || 
         isMasterAdmin()
@@ -100,7 +101,7 @@ service cloud.firestore {
     }
 
     // 4. Multi-tenant flat collections (Expenses, Customers, Products, Audit Logs, etc.)
-    match /products/{docId} {
+    match /{collectionName}/{docId} {
       allow read: if isSignedIn() && (
         isMasterAdmin() ||
         (resource == null) ||
@@ -126,96 +127,6 @@ service cloud.firestore {
         resource.data.get('companyId', '') == getUserBusinessId() ||
         resource.data.get('businessId', '') == request.auth.uid ||
         resource.data.get('companyId', '') == request.auth.uid ||
-        resource.data.get('ownerId', '') == request.auth.uid
-      );
-    }
-
-    match /customers/{docId} {
-      allow read: if isSignedIn() && (
-        isMasterAdmin() ||
-        (resource == null) ||
-        resource.data.get('businessId', '') == getUserBusinessId() ||
-        resource.data.get('companyId', '') == getUserBusinessId() ||
-        resource.data.get('businessId', '') == request.auth.uid ||
-        resource.data.get('companyId', '') == request.auth.uid ||
-        resource.data.get('ownerId', '') == request.auth.uid
-      );
-      
-      allow create: if isSignedIn() && (
-        isMasterAdmin() ||
-        request.resource.data.get('businessId', '') == getUserBusinessId() ||
-        request.resource.data.get('companyId', '') == getUserBusinessId() ||
-        request.resource.data.get('businessId', '') == request.auth.uid ||
-        request.resource.data.get('companyId', '') == request.auth.uid ||
-        request.resource.data.get('ownerId', '') == request.auth.uid
-      );
-      
-      allow update, delete: if isSignedIn() && (
-        isMasterAdmin() ||
-        resource.data.get('businessId', '') == getUserBusinessId() ||
-        resource.data.get('companyId', '') == getUserBusinessId() ||
-        resource.data.get('businessId', '') == request.auth.uid ||
-        resource.data.get('companyId', '') == request.auth.uid ||
-        resource.data.get('ownerId', '') == request.auth.uid
-      );
-    }
-
-    match /audit_logs/{docId} {
-      allow read: if isSignedIn() && (
-        isMasterAdmin() ||
-        (resource == null) ||
-        resource.data.get('businessId', '') == getUserBusinessId() ||
-        resource.data.get('companyId', '') == getUserBusinessId() ||
-        resource.data.get('businessId', '') == request.auth.uid ||
-        resource.data.get('companyId', '') == request.auth.uid ||
-        resource.data.get('ownerId', '') == request.auth.uid
-      );
-      
-      allow create: if isSignedIn() && (
-        isMasterAdmin() ||
-        request.resource.data.get('businessId', '') == getUserBusinessId() ||
-        request.resource.data.get('companyId', '') == getUserBusinessId() ||
-        request.resource.data.get('businessId', '') == request.auth.uid ||
-        request.resource.data.get('companyId', '') == request.auth.uid ||
-        request.resource.data.get('ownerId', '') == request.auth.uid
-      );
-      
-      allow update, delete: if isSignedIn() && (
-        isMasterAdmin() ||
-        resource.data.get('businessId', '') == getUserBusinessId() ||
-        resource.data.get('companyId', '') == getUserBusinessId() ||
-        resource.data.get('businessId', '') == request.auth.uid ||
-        resource.data.get('companyId', '') == request.auth.uid ||
-        resource.data.get('ownerId', '') == request.auth.uid
-      );
-    }
-
-    match /expenses/{docId} {
-      allow read: if isSignedIn() && (
-        isMasterAdmin() ||
-        (resource == null) ||
-        resource.data.get('businessId', '') == getUserBusinessId() ||
-        resource.data.get('companyId', '') == getUserBusinessId() ||
-        resource.data.get('businessId', '') == request.auth.uid ||
-        resource.data.get('companyId', '') == request.auth.uid ||
-        resource.data.get('ownerId', '') == request.auth.uid
-      );
-      
-      allow create: if isSignedIn() && (
-        isMasterAdmin() ||
-        request.resource.data.get('businessId', '') == getUserBusinessId() ||
-        request.resource.data.get('companyId', '') == getUserBusinessId() ||
-        request.resource.data.get('businessId', '') == request.auth.uid ||
-        request.resource.data.get('companyId', '') == request.auth.uid ||
-        request.resource.data.get('ownerId', '') == request.auth.uid
-      );
-      
-      allow update, delete: if isSignedIn() && (
-        isMasterAdmin() ||
-        resource.data.get('businessId', '') == getUserBusinessId() ||
-        resource.data.get('companyId', '') == getUserBusinessId() ||
-        resource.data.get('businessId', '') == request.auth.uid ||
-        request.resource.data.get('companyId', '') == request.auth.uid ||
         resource.data.get('ownerId', '') == request.auth.uid
       );
     }

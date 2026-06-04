@@ -17,6 +17,7 @@ import {
   Landmark, 
   BarChart3, 
   ShieldAlert, 
+  ShieldCheck, 
   Settings, 
   Search, 
   Bell, 
@@ -34,6 +35,7 @@ import {
 
 // Subcomponents
 import Dashboard from "./Dashboard";
+import AuditCenter from "./finance/AuditCenter";
 import Quotations from "./Quotations";
 import Invoices from "./Invoices";
 import Receipts from "./Receipts";
@@ -89,6 +91,10 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
         setGoogleToken(token || cachedToken);
         if (currentUser) {
           try {
+            if (!auth.currentUser) {
+              console.log("DEBUG: Firebase Auth is not fully initialized yet. Waiting for auth state to settle.");
+              return;
+            }
             const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
             let userData: any = userDoc.exists()
               ? userDoc.data()
@@ -362,6 +368,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             { id: "receipts", label: "Receipts", icon: CheckSquare },
             { id: "transactions", label: "Transactions", icon: Landmark },
             { id: "reports", label: "Reports & Analytics", icon: BarChart3 },
+            { id: "audit_center", label: "Audit Center", icon: ShieldCheck },
             { id: "audit", label: "Audit Logs", icon: ShieldAlert },
             ...(currentUser?.role === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
             { id: "settings", label: "Settings", icon: Settings },
@@ -521,6 +528,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                   { id: "receipts", label: "Receipts", icon: CheckSquare },
                   { id: "transactions", label: "Transactions", icon: Landmark },
                   { id: "reports", label: "Reports & Analytics", icon: BarChart3 },
+                  { id: "audit_center", label: "Audit Center", icon: ShieldCheck },
                   { id: "audit", label: "Audit Logs", icon: ShieldAlert },
                   ...(currentUser?.role === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
                   { id: "settings", label: "Settings", icon: Settings },
@@ -624,6 +632,8 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
               {activeTab === "transactions" && <Transactions />}
 
               {activeTab === "reports" && <ReportsAnalytics />}
+
+              {activeTab === "audit_center" && <AuditCenter />}
 
               {activeTab === "audit" && <AuditLogs />}
               {activeTab === "admin" && <MasterAdminDashboard />}
