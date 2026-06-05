@@ -58,23 +58,23 @@ export const TRANSACTION_MAPPINGS: Record<string, TxMapping> = {
   "Customer Subscriptions": {
     debitAccount: "Assets: Cash",
     debitType: "Assets",
-    creditAccount: "Revenue: Subscription Revenue",
+    creditAccount: "Revenue: Client Sales Revenue",
     creditType: "Revenue"
   },
   "Subscription Renewals": {
     debitAccount: "Assets: Cash",
     debitType: "Assets",
-    creditAccount: "Revenue: Subscription Revenue",
+    creditAccount: "Revenue: Client Sales Revenue",
     creditType: "Revenue"
   },
   "One-Time Payments": {
     debitAccount: "Assets: Cash",
     debitType: "Assets",
-    creditAccount: "Revenue: One-Time Revenue",
+    creditAccount: "Revenue: Product & Service Revenue",
     creditType: "Revenue"
   },
   "Loan Disbursements": {
-    debitAccount: "Assets: Loans Receivable",
+    debitAccount: "Assets: Trade Receivables",
     debitType: "Assets",
     creditAccount: "Assets: Cash",
     creditType: "Assets"
@@ -82,53 +82,53 @@ export const TRANSACTION_MAPPINGS: Record<string, TxMapping> = {
   "Loan Repayments": {
     debitAccount: "Assets: Cash",
     debitType: "Assets",
-    creditAccount: "Assets: Loans Receivable",
+    creditAccount: "Assets: Trade Receivables",
     creditType: "Assets"
   },
   "Savings Contributions": {
     debitAccount: "Assets: Cash",
     debitType: "Assets",
-    creditAccount: "Liabilities: Savings Deposits",
+    creditAccount: "Liabilities: Client Deposits Liability",
     creditType: "Liabilities"
   },
   "Withdrawals": {
-    debitAccount: "Liabilities: Savings Deposits",
+    debitAccount: "Liabilities: Client Deposits Liability",
     debitType: "Liabilities",
     creditAccount: "Assets: Cash",
     creditType: "Assets"
   },
   "Interest Earned (Savings)": {
-    debitAccount: "Expenses: Interest Expense",
+    debitAccount: "Expenses: Operating Interest Costs",
     debitType: "Expenses",
-    creditAccount: "Liabilities: Savings Deposits",
+    creditAccount: "Liabilities: Client Deposits Liability",
     creditType: "Liabilities"
   },
   "Interest Earned (Loans)": {
     debitAccount: "Assets: Cash",
     debitType: "Assets",
-    creditAccount: "Revenue: Interest Income",
+    creditAccount: "Revenue: Operating Interest Income",
     creditType: "Revenue"
   },
   "Penalties and Fees": {
     debitAccount: "Assets: Cash",
     debitType: "Assets",
-    creditAccount: "Revenue: Fee & Penalty Income",
+    creditAccount: "Revenue: Fee & Penalty Revenue",
     creditType: "Revenue"
   },
   "Refunds": {
-    debitAccount: "Expenses: Refund Expense",
+    debitAccount: "Expenses: Product Refunds Outlay",
     debitType: "Expenses",
     creditAccount: "Assets: Cash",
     creditType: "Assets"
   },
   "Discounts": {
-    debitAccount: "Expenses: Discount Expense",
+    debitAccount: "Expenses: Sales Discounts & Incentives",
     debitType: "Expenses",
     creditAccount: "Assets: Cash",
     creditType: "Assets"
   },
   "Commission Payments": {
-    debitAccount: "Expenses: Commission Expense",
+    debitAccount: "Expenses: Sales Commissions Paid",
     debitType: "Expenses",
     creditAccount: "Assets: Cash",
     creditType: "Assets"
@@ -148,7 +148,7 @@ export const TRANSACTION_MAPPINGS: Record<string, TxMapping> = {
   "System-Generated Transactions": {
     debitAccount: "Assets: Cash",
     debitType: "Assets",
-    creditAccount: "Revenue: Service Fee Income",
+    creditAccount: "Revenue: System Operating Income",
     creditType: "Revenue"
   }
 };

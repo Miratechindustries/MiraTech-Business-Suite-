@@ -30,7 +30,9 @@ import {
   Printer,
   ChevronRight,
   Send,
-  Lock
+  Lock,
+  Edit3,
+  Save
 } from "lucide-react";
 import { auth, db } from "../../lib/firebase";
 import { collection, query, getDocs, doc, getDoc, addDoc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -113,8 +115,43 @@ export default function AuditCenter() {
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
-  // Selected statement for preview: 'Balance Sheet' | 'Income Statement' | 'Trial Balance' | 'Cash Flow' | 'P&L' | 'AR' | 'AP'
-  const [selectedSheet, setSelectedSheet] = useState<"Balance Sheet" | "Income Statement" | "Trial Balance" | "Cash Flow" | "P&L" | "AR" | "AP">("Balance Sheet");
+  // Selected statement for preview: 'Balance Sheet' | 'Income Statement' | 'Trial Balance' | 'Cash Flow' | 'P&L' | 'AR' | 'AP' | 'Balance Brought Forward (b/f) Doc'
+  const [selectedSheet, setSelectedSheet] = useState<"Balance Sheet" | "Income Statement" | "Trial Balance" | "Cash Flow" | "P&L" | "AR" | "AP" | "Balance Brought Forward (b/f) Doc">("Balance Sheet");
+
+  const [companyInfo, setCompanyInfo] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    logo?: string;
+  } | null>(null);
+
+  const [balanceForward, setBalanceForward] = useState<{
+    id: string;
+    date: string;
+    cashBf: number;
+    receivablesBf: number;
+    payablesBf: number;
+    equityBf: number;
+    notes?: string;
+  }>({
+    id: "opening_bf",
+    date: "2026-01-01",
+    cashBf: 10000,
+    receivablesBf: 2500,
+    payablesBf: 1550,
+    equityBf: 10950,
+    notes: "Consolidated opening balance brought forward (b/f) from prior fiscal cycles"
+  });
+
+  const [showBfEdit, setShowBfEdit] = useState(false);
+  const [bfForm, setBfForm] = useState({
+    cashBf: 10000,
+    receivablesBf: 2500,
+    payablesBf: 1550,
+    equityBf: 10950,
+    notes: "Opening balance brought forward (b/f) from prior fiscal cycles"
+  });
 
   const isMasterAdmin = 
     currentUser?.role === "MASTER_ADMIN" || 
@@ -322,10 +359,90 @@ export default function AuditCenter() {
 
       setLedger(ledgerData);
       setJournals(journalData);
+
+      const activeCorpId = (isSuperAdminView && selectedTenantId !== "all") ? selectedTenantId : businessId;
+      if (activeCorpId) {
+        try {
+          const compRef = doc(db, "companies", activeCorpId);
+          const compSnap = await getDoc(compRef);
+          if (compSnap.exists()) {
+            setCompanyInfo(compSnap.data() as any);
+          } else {
+            setCompanyInfo(null);
+          }
+
+          const bfRef = doc(db, "companies", activeCorpId, "balance_forwards", "opening_bf");
+          const bfSnap = await getDoc(bfRef);
+          if (bfSnap.exists()) {
+            const bfData = bfSnap.data() as any;
+            setBalanceForward(bfData);
+            setBfForm({
+              cashBf: bfData.cashBf || 0,
+              receivablesBf: bfData.receivablesBf || 0,
+              payablesBf: bfData.payablesBf || 0,
+              equityBf: bfData.equityBf || 0,
+              notes: bfData.notes || ""
+            });
+          } else {
+            const targetName = tenants.find(t => t.id === activeCorpId)?.name || "Active Tenant Company";
+            const initialBf = {
+              id: "opening_bf",
+              date: "2026-01-01",
+              cashBf: 12000,
+              receivablesBf: 3000,
+              payablesBf: 1500,
+              equityBf: 13500,
+              notes: `Opening Balance Brought Forward (b/f) sheet prepared for ${targetName}`
+            };
+            setBalanceForward(initialBf);
+            setBfForm({
+              cashBf: initialBf.cashBf,
+              receivablesBf: initialBf.receivablesBf,
+              payablesBf: initialBf.payablesBf,
+              equityBf: initialBf.equityBf,
+              notes: initialBf.notes
+            });
+          }
+        } catch (e) {
+          console.error("Error loading supplementary tenant info", e);
+        }
+      } else {
+        setCompanyInfo(null);
+      }
     } catch (err: any) {
       addToast(`Error fetching books matching this tenant scope: ${err?.message}`, "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveBalanceForward = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const activeCorpId = (isSuperAdminView && selectedTenantId !== "all") ? selectedTenantId : businessId;
+    if (!activeCorpId) {
+      addToast("Active business scope is required to save balance brought forward.", "error");
+      return;
+    }
+    try {
+      const payload = {
+        id: "opening_bf",
+        date: "2026-01-01",
+        cashBf: Number(bfForm.cashBf),
+        receivablesBf: Number(bfForm.receivablesBf),
+        payablesBf: Number(bfForm.payablesBf),
+        equityBf: Number(bfForm.equityBf),
+        notes: bfForm.notes,
+        updatedAt: serverTimestamp(),
+        updatedBy: auth.currentUser?.email || "auditor"
+      };
+
+      await setDoc(doc(db, "companies", activeCorpId, "balance_forwards", "opening_bf"), payload);
+      setBalanceForward(payload);
+      addToast("Opening Balance Brought Forward (b/f) document saved successfully!", "success");
+      setShowBfEdit(false);
+      fetchAccountingLogs();
+    } catch (e: any) {
+      addToast(`Failed saving b/f document: ${e.message}`, "error");
     }
   };
 
@@ -486,9 +603,29 @@ export default function AuditCenter() {
     };
   };
 
-  // Helper to aggregate balances by Category types or specific accounts
+  // Helper to aggregate balances by Category types or specific accounts, taking balance forward into account
   const getAccountsBalance = (accName: string, side: "debit" | "credit" | "net"): number => {
     let sum = 0;
+    
+    // Incorporate opening Balance Forward (b/f) for calculations
+    if (side === "net" && balanceForward) {
+      if (accName === "Assets: Cash") {
+        sum += balanceForward.cashBf;
+      } else if (accName === "Assets: Trade Receivables") {
+        sum += balanceForward.receivablesBf;
+      } else if (accName === "Liabilities: Client Deposits Liability") {
+        sum += balanceForward.payablesBf;
+      } else if (accName === "Equity: Retained Earnings") {
+        sum += balanceForward.equityBf;
+      }
+    } else if (side === "debit" && balanceForward) {
+      if (accName === "Assets: Cash") sum += balanceForward.cashBf;
+      if (accName === "Assets: Trade Receivables") sum += balanceForward.receivablesBf;
+    } else if (side === "credit" && balanceForward) {
+      if (accName === "Liabilities: Client Deposits Liability") sum += balanceForward.payablesBf;
+      if (accName === "Equity: Retained Earnings") sum += balanceForward.equityBf;
+    }
+
     ledger.forEach(l => {
       if (l.account === accName) {
         if (side === "debit") sum += l.debit;
@@ -505,6 +642,18 @@ export default function AuditCenter() {
   // Get total balances grouped by ledger account types (Asset, Liability, Equity, Revenue, Expense)
   const getAccountTypeBalance = (type: "Assets" | "Liabilities" | "Equity" | "Revenue" | "Expenses"): number => {
     let sum = 0;
+    
+    // Incorporate opening Balance Forward (b/f) into aggregated type groups
+    if (balanceForward) {
+      if (type === "Assets") {
+        sum += (balanceForward.cashBf + balanceForward.receivablesBf);
+      } else if (type === "Liabilities") {
+        sum += balanceForward.payablesBf;
+      } else if (type === "Equity") {
+        sum += balanceForward.equityBf;
+      }
+    }
+
     ledger.forEach(l => {
       if (l.accountType === type) {
         const mult = (type === "Assets" || type === "Expenses") ? 1 : -1;
@@ -517,10 +666,10 @@ export default function AuditCenter() {
   // Render Balance Sheet metrics dynamically
   const generateBalanceSheet = () => {
     const cash = getAccountsBalance("Assets: Cash", "net");
-    const loansRec = getAccountsBalance("Assets: Loans Receivable", "net");
+    const loansRec = getAccountsBalance("Assets: Trade Receivables", "net");
     const assets = cash + loansRec;
 
-    const savings = getAccountsBalance("Liabilities: Savings Deposits", "net");
+    const savings = getAccountsBalance("Liabilities: Client Deposits Liability", "net");
     const retainedEarnings = getAccountsBalance("Equity: Retained Earnings", "net");
     const equityLiabilities = savings + retainedEarnings;
 
@@ -532,6 +681,65 @@ export default function AuditCenter() {
       retainedEarnings,
       totalEquityLiabilities: equityLiabilities,
       balanced: Math.abs(assets - equityLiabilities) < 0.01 // absolute double-entry balance verification
+    };
+  };
+
+  // Helper to compute cash flows according to GAAP direct-method categories based on business accounts
+  const computeCashFlowStatement = () => {
+    // 1. Operating Cash Inflows
+    const salesInflow = getAccountsBalance("Revenue: Client Sales Revenue", "credit");
+    const serviceInflow = getAccountsBalance("Revenue: Product & Service Revenue", "credit");
+    const systemInflow = getAccountsBalance("Revenue: System Operating Income", "credit");
+    const totalOperatingInflow = salesInflow + serviceInflow + systemInflow;
+
+    // 2. Operating Cash Outflows
+    const refundOutflow = getAccountsBalance("Expenses: Product Refunds Outlay", "debit");
+    const discountOutflow = getAccountsBalance("Expenses: Sales Discounts & Incentives", "debit");
+    const commissionOutflow = getAccountsBalance("Expenses: Sales Commissions Paid", "debit");
+    const interestOutflow = getAccountsBalance("Expenses: Operating Interest Costs", "debit");
+    const totalOperatingOutflow = refundOutflow + discountOutflow + commissionOutflow + interestOutflow;
+
+    const netOperatingCash = totalOperatingInflow - totalOperatingOutflow;
+
+    // 3. Investing Activities (Outstanding receivables trade flow)
+    const activeLoansDisbursed = getAccountsBalance("Assets: Trade Receivables", "debit");
+    const activeLoansCollected = getAccountsBalance("Assets: Trade Receivables", "credit");
+    const netInvestingCash = activeLoansCollected - activeLoansDisbursed;
+
+    // 4. Financing Activities (Client deposits escrow movements and retained equity adjustments)
+    const depositsReceived = getAccountsBalance("Liabilities: Client Deposits Liability", "credit");
+    const depositsWithdrawn = getAccountsBalance("Liabilities: Client Deposits Liability", "debit");
+    const equityInflows = getAccountsBalance("Equity: Retained Earnings", "credit");
+    const equityOutflows = getAccountsBalance("Equity: Retained Earnings", "debit");
+    const netFinancingCash = (depositsReceived - depositsWithdrawn) + (equityInflows - equityOutflows);
+
+    // Opening and closing flow reconciliation
+    const beginningCash = balanceForward ? balanceForward.cashBf : 10000;
+    const netCashChange = netOperatingCash + netInvestingCash + netFinancingCash;
+    const endingCash = beginningCash + netCashChange;
+
+    return {
+      salesInflow,
+      serviceInflow,
+      systemInflow,
+      totalOperatingInflow,
+      refundOutflow,
+      discountOutflow,
+      commissionOutflow,
+      interestOutflow,
+      totalOperatingOutflow,
+      netOperatingCash,
+      activeLoansDisbursed,
+      activeLoansCollected,
+      netInvestingCash,
+      depositsReceived,
+      depositsWithdrawn,
+      equityInflows,
+      equityOutflows,
+      netFinancingCash,
+      beginningCash,
+      netCashChange,
+      endingCash
     };
   };
 
@@ -588,11 +796,11 @@ export default function AuditCenter() {
 
     const items = [
       { acc: "Assets: Cash Balances", group: "Assets", val: getAccountsBalance("Assets: Cash", "net") },
-      { acc: "Assets: Active Loans Portfolio", group: "Assets", val: getAccountsBalance("Assets: Loans Receivable", "net") },
-      { acc: "Liabilities: Customer Savings Deposits", group: "Liabilities", val: getAccountsBalance("Liabilities: Savings Deposits", "net") },
-      { acc: "Revenue: Corporate Subscriptions", group: "Revenue", val: getAccountsBalance("Revenue: Subscription Revenue", "net") },
-      { acc: "Revenue: Other Auxiliary Revenues", group: "Revenue", val: getAccountsBalance("Revenue: One-Time Revenue", "net") },
-      { acc: "Expenses: Sales Commissions & Fees", group: "Expenses", val: getAccountsBalance("Expenses: Commission Expense", "net") }
+      { acc: "Assets: Outstanding Trade Receivables", group: "Assets", val: getAccountsBalance("Assets: Trade Receivables", "net") },
+      { acc: "Liabilities: Client Deposits Liability", group: "Liabilities", val: getAccountsBalance("Liabilities: Client Deposits Liability", "net") },
+      { acc: "Revenue: Client Sales Revenue", group: "Revenue", val: getAccountsBalance("Revenue: Client Sales Revenue", "net") },
+      { acc: "Revenue: Product & Service Revenue", group: "Revenue", val: getAccountsBalance("Revenue: Product & Service Revenue", "net") },
+      { acc: "Expenses: Sales Commissions Paid", group: "Expenses", val: getAccountsBalance("Expenses: Sales Commissions Paid", "net") }
     ];
 
     items.forEach(it => {
@@ -758,15 +966,18 @@ export default function AuditCenter() {
                   value={entryModule}
                   onChange={(e) => {
                     setEntryModule(e.target.value);
-                    if (e.target.value === "Customer Subscriptions") setEntryDescription("Enterprise premium yearly seat subscription");
-                    else if (e.target.value === "Loan Disbursements") setEntryDescription("Disbursement of venture business loan payload #4");
-                    else if (e.target.value === "Savings Contributions") setEntryDescription("Contingency savings capital vault injection");
-                    else if (e.target.value === "Withdrawals") setEntryDescription("Customer personal savings withdrawal");
-                    else if (e.target.value === "One-Time Payments") setEntryDescription("Auxiliary product configuration invoice payout");
-                    else if (e.target.value === "Penalties and Fees") setEntryDescription("Late filing compliance fee penalty");
-                    else if (e.target.value === "Refunds") setEntryDescription("SaaS software performance core tier refund");
-                    else if (e.target.value === "Discounts") setEntryDescription("Corporate discount incentive bundle reduction");
-                    else if (e.target.value === "Commission Payments") setEntryDescription("Partner channel sales affiliate commission");
+                    if (e.target.value === "Customer Subscriptions" || e.target.value === "Subscription Renewals") setEntryDescription("Customer corporate product sales transaction entry");
+                    else if (e.target.value === "Loan Disbursements") setEntryDescription("Outstanding trade credit extension to retail distributor");
+                    else if (e.target.value === "Loan Repayments") setEntryDescription("Principal collection on outstanding customer receivables");
+                    else if (e.target.value === "Savings Contributions") setEntryDescription("Deferred client security deposit payment in escrow");
+                    else if (e.target.value === "Withdrawals") setEntryDescription("Return of customer escrow deposit balance");
+                    else if (e.target.value === "One-Time Payments") setEntryDescription("Standard product sales / auxiliary services rendered payout");
+                    else if (e.target.value === "Penalties and Fees") setEntryDescription("Late filing administration fine penalty");
+                    else if (e.target.value === "Refunds") setEntryDescription("Returned merchandise performance refund");
+                    else if (e.target.value === "Discounts") setEntryDescription("Corporate discount promo incentive reduction");
+                    else if (e.target.value === "Commission Payments") setEntryDescription("Sales representative partner affiliate commission payment");
+                    else if (e.target.value === "Administrative Adjustments (Inflow)") setEntryDescription("Capital injection or prior period correction inflow");
+                    else if (e.target.value === "Administrative Adjustments (Outflow)") setEntryDescription("Prior period adjustment or corporate capital reduction");
                   }}
                   className="w-full bg-white border border-indigo-200 text-indigo-950 rounded-lg px-2.5 py-1.5 font-bold outline-hidden"
                 >
@@ -892,29 +1103,29 @@ export default function AuditCenter() {
                   </div>
                 </div>
 
-                {/* Loans Receivable */}
+                {/* Trade Receivables */}
                 <div className="bg-white border border-slate-205/85 p-4 rounded-xl shadow-3xs flex flex-col justify-between">
                   <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Active Loans Portfolio (Asset Ref: 104)</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Trade Receivables (Asset Ref: 104)</span>
                     <h3 className="text-2xl font-extrabold text-indigo-700 mt-1 font-mono">
-                      E{getAccountsBalance("Assets: Loans Receivable", "net").toLocaleString()}
+                      E{getAccountsBalance("Assets: Trade Receivables", "net").toLocaleString()}
                     </h3>
                   </div>
                   <div className="text-[9px] text-slate-500 mt-1 pt-1 border-t border-slate-50 font-bold">
-                    Real active company loans asset position.
+                    Outstanding trade invoice receivables asset position.
                   </div>
                 </div>
 
-                {/* Savings Account liability balance */}
+                {/* Client Deposits Escrow liability balance */}
                 <div className="bg-white border border-slate-205/85 p-4 rounded-xl shadow-3xs flex flex-col justify-between">
                   <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Savings Vault Liability (Ref: 201)</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Client Deposits Escrow (Ref: 201)</span>
                     <h3 className="text-2xl font-extrabold text-red-600 mt-1 font-mono">
-                      E{getAccountsBalance("Liabilities: Savings Deposits", "net").toLocaleString()}
+                      E{getAccountsBalance("Liabilities: Client Deposits Liability", "net").toLocaleString()}
                     </h3>
                   </div>
                   <div className="text-[9px] text-slate-500 mt-1 pt-1 border-t border-slate-50 font-bold">
-                    Total active customer deposits liabilities.
+                    Total active client deposits liabilities held in escrow.
                   </div>
                 </div>
 
@@ -962,22 +1173,22 @@ export default function AuditCenter() {
                     <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">Liquidity Account Portfolios</h4>
                     <p className="text-[10px] text-slate-400">Proportional aggregate double-entry balances</p>
                     
-                    <div className="space-y-2.5 pt-2 text-xs font-bold text-slate-600">
+                    <div className="space-y-2.5 pt-2 text-xs font-bold text-slate-600 font-sans">
                       <div className="flex justify-between items-center py-1 border-b border-slate-50">
-                        <span className="text-slate-500">Assets Portfolio (Cash & Loans):</span>
-                        <span className="font-mono text-slate-900">E{((getAccountsBalance("Assets: Cash", "net") || 14850) + (getAccountsBalance("Assets: Loans Receivable", "net") || 25000)).toLocaleString()}</span>
+                        <span className="text-slate-500">Assets Portfolio (Cash & Trade Receivables):</span>
+                        <span className="font-mono text-slate-900 font-bold">E{((getAccountsBalance("Assets: Cash", "net") || 14850) + (getAccountsBalance("Assets: Trade Receivables", "net") || 5000)).toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between items-center py-1 border-b border-slate-50">
-                        <span className="text-slate-500">Liabilities (Savings & Deposits):</span>
-                        <span className="font-mono text-red-600">E{(getAccountsBalance("Liabilities: Savings Deposits", "net") || 12000).toLocaleString()}</span>
+                        <span className="text-slate-500">Liabilities (Client Deposits held):</span>
+                        <span className="font-mono text-red-600 font-bold">E{(getAccountsBalance("Liabilities: Client Deposits Liability", "net") || 2000).toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between items-center py-1 border-b border-slate-50">
                         <span className="text-slate-500">Retained Equity Reserves:</span>
-                        <span className="font-mono text-indigo-700">E{(getAccountsBalance("Equity: Retained Earnings", "net") || 15000).toLocaleString()}</span>
+                        <span className="font-mono text-indigo-750 font-bold">E{(getAccountsBalance("Equity: Retained Earnings", "net") || 13000).toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between items-center py-1 border-b border-slate-50">
-                        <span className="text-slate-500">Active Operational Revenue:</span>
-                        <span className="font-mono text-emerald-700">E{((getAccountsBalance("Revenue: Subscription Revenue", "net") || 8500) + (getAccountsBalance("Revenue: One-Time Revenue", "net") || 1850)).toLocaleString()}</span>
+                        <span className="text-slate-500">Active Operating Revenue Inflow:</span>
+                        <span className="font-mono text-emerald-700 font-bold">E{((getAccountsBalance("Revenue: Client Sales Revenue", "net") || 0) + (getAccountsBalance("Revenue: Product & Service Revenue", "net") || 0) + (getAccountsBalance("Revenue: System Operating Income", "net") || 0)).toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -1126,8 +1337,8 @@ export default function AuditCenter() {
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                 
                 {/* Switcher */}
-                <div className="md:col-span-3 space-y-1 bg-white p-3 rounded-xl border border-slate-200 shadow-3xs h-fit">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Available Reports Sheets</span>
+                <div className="md:col-span-3 space-y-1 bg-white p-3 rounded-xl border border-slate-200 shadow-3xs h-fit font-sans">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Available Reports Sheets</span>
                   {[
                     "Balance Sheet",
                     "Income Statement",
@@ -1135,7 +1346,8 @@ export default function AuditCenter() {
                     "Cash Flow",
                     "P&L",
                     "AR",
-                    "AP"
+                    "AP",
+                    "Balance Brought Forward (b/f) Doc"
                   ].map((sh) => (
                     <button
                       key={sh}
@@ -1171,25 +1383,25 @@ export default function AuditCenter() {
                   </div>
 
                   {/* Worksheet body */}
-                  <div className="space-y-4">
+                  <div className="space-y-4 font-sans">
                     {selectedSheet === "Balance Sheet" && (
                       <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {/* Assets */}
                           <div className="space-y-2">
                             <h4 className="border-b-2 border-slate-900 pb-1 text-xs font-extrabold text-slate-900 uppercase">Assets (Debits balance)</h4>
-                            <div className="space-y-2 text-xs font-bold">
-                              <div className="flex justify-between py-1 border-b border-slate-50">
+                            <div className="space-y-2 text-xs font-bold font-sans">
+                              <div className="flex justify-between py-1 border-b border-slate-100">
                                 <span>Cash / Vault Reserving (Ref 101)</span>
-                                <span className="font-mono">E{getAccountsBalance("Assets: Cash", "net").toLocaleString()}</span>
+                                <span className="font-mono text-slate-900">E{getAccountsBalance("Assets: Cash", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                               </div>
-                              <div className="flex justify-between py-1 border-b border-slate-50">
-                                <span>Loans Portfolio Outstanding (Ref 104)</span>
-                                <span className="font-mono">E{getAccountsBalance("Assets: Loans Receivable", "net").toLocaleString()}</span>
+                              <div className="flex justify-between py-1 border-b border-slate-100">
+                                <span>Outstanding Trade Receivables (Ref 104)</span>
+                                <span className="font-mono text-slate-900">E{getAccountsBalance("Assets: Trade Receivables", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                               </div>
-                              <div className="flex justify-between pt-2 border-t border-slate-200 text-indigo-820 text-xs">
+                              <div className="flex justify-between pt-2.5 border-t border-slate-200 text-indigo-800 text-xs font-black">
                                 <span>TOTAL CORPORATE ASSETS</span>
-                                <span className="font-mono">E{(getAccountsBalance("Assets: Cash", "net") + getAccountsBalance("Assets: Loans Receivable", "net")).toLocaleString()}</span>
+                                <span className="font-mono">E{(getAccountsBalance("Assets: Cash", "net") + getAccountsBalance("Assets: Trade Receivables", "net")).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                               </div>
                             </div>
                           </div>
@@ -1198,17 +1410,17 @@ export default function AuditCenter() {
                           <div className="space-y-2">
                             <h4 className="border-b-2 border-slate-900 pb-1 text-xs font-extrabold text-slate-900 uppercase">Liabilities & Equity</h4>
                             <div className="space-y-2 text-xs font-bold font-sans">
-                              <div className="flex justify-between py-1 border-b border-slate-50">
-                                <span>Savings Vault Escrows (Liability Ref 201)</span>
-                                <span className="font-mono">E{getAccountsBalance("Liabilities: Savings Deposits", "net").toLocaleString()}</span>
+                              <div className="flex justify-between py-1 border-b border-slate-100">
+                                <span>Client Deposits Liability (Ref 201)</span>
+                                <span className="font-mono text-slate-900">E{getAccountsBalance("Liabilities: Client Deposits Liability", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                               </div>
-                              <div className="flex justify-between py-1 border-b border-slate-50">
+                              <div className="flex justify-between py-1 border-b border-slate-100">
                                 <span>Retained Earnings Reserves (Equity Ref 301)</span>
-                                <span className="font-mono">E{getAccountsBalance("Equity: Retained Earnings", "net").toLocaleString()}</span>
+                                <span className="font-mono text-slate-900">E{getAccountsBalance("Equity: Retained Earnings", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                               </div>
-                              <div className="flex justify-between pt-2 border-t border-slate-200 text-red-750 text-xs">
+                              <div className="flex justify-between pt-2.5 border-t border-slate-200 text-red-750 text-xs font-black">
                                 <span>TOTAL LIABILITIES & EQUITY</span>
-                                <span className="font-mono">E{(getAccountsBalance("Liabilities: Savings Deposits", "net") + getAccountsBalance("Equity: Retained Earnings", "net")).toLocaleString()}</span>
+                                <span className="font-mono">E{(getAccountsBalance("Liabilities: Client Deposits Liability", "net") + getAccountsBalance("Equity: Retained Earnings", "net")).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                               </div>
                             </div>
                           </div>
@@ -1222,74 +1434,611 @@ export default function AuditCenter() {
                     )}
 
                     {selectedSheet === "Income Statement" && (
-                      <div className="space-y-3">
-                        <h4 className="border-b-2 border-slate-900 pb-1 text-xs font-extrabold text-slate-900 uppercase">Revenue & Expense Position Summary</h4>
-                        <div className="space-y-2 text-xs font-bold">
-                          <div className="flex justify-between py-1.5 border-b border-slate-50">
-                            <span>SaaS Platform Yearly Subscriptions</span>
-                            <span className="font-mono text-green-700">E{getAccountsBalance("Revenue: Subscription Revenue", "net").toLocaleString()}</span>
+                      <div className="space-y-4 font-sans">
+                        <div className="border border-slate-200 rounded-xl overflow-hidden">
+                          <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex justify-between items-center">
+                            <h4 className="text-[10px] font-extrabold text-slate-900 uppercase tracking-wider">Revenue Streams (Inflows)</h4>
+                            <span className="text-[9px] font-mono text-slate-500">Accumulative</span>
                           </div>
-                          <div className="flex justify-between py-1.5 border-b border-slate-50">
-                            <span>One-Time Aux Consultation Revenues</span>
-                            <span className="font-mono text-green-700">E{getAccountsBalance("Revenue: One-Time Revenue", "net").toLocaleString()}</span>
+                          <div className="p-4 space-y-2 text-xs font-bold leading-normal text-slate-700">
+                            <div className="flex justify-between py-1 border-b border-slate-100">
+                              <span className="text-slate-600">Client Sales Revenue</span>
+                              <span className="font-mono text-slate-900">E{getAccountsBalance("Revenue: Client Sales Revenue", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-slate-100">
+                              <span className="text-slate-600">Product & Service Revenue</span>
+                              <span className="font-mono text-slate-900">E{getAccountsBalance("Revenue: Product & Service Revenue", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-slate-100">
+                              <span className="text-slate-600">Operating Interest Income</span>
+                              <span className="font-mono text-slate-900">E{getAccountsBalance("Revenue: Operating Interest Income", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-slate-100">
+                              <span className="text-slate-600">Fee & Penalty Revenue</span>
+                              <span className="font-mono text-slate-900">E{getAccountsBalance("Revenue: Fee & Penalty Revenue", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-slate-100">
+                              <span className="text-slate-600">System Operating Income</span>
+                              <span className="font-mono text-slate-900">E{getAccountsBalance("Revenue: System Operating Income", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between pt-2.5 border-t border-slate-200 text-emerald-700 font-extrabold">
+                              <span>TOTAL OPERATING REVENUES</span>
+                              <span className="font-mono">E{(
+                                getAccountsBalance("Revenue: Client Sales Revenue", "net") +
+                                getAccountsBalance("Revenue: Product & Service Revenue", "net") +
+                                getAccountsBalance("Revenue: Operating Interest Income", "net") +
+                                getAccountsBalance("Revenue: Fee & Penalty Revenue", "net") +
+                                getAccountsBalance("Revenue: System Operating Income", "net")
+                              ).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
                           </div>
-                          <div className="flex justify-between py-1.5 border-b border-slate-50">
-                            <span>Outflow Expenses (Discounts, Affiliate Commissions, Audits)</span>
-                            <span className="font-mono text-red-500">-E{getAccountsBalance("Expenses: Commission Expense", "net").toLocaleString()}</span>
+                        </div>
+
+                        <div className="border border-slate-200 rounded-xl overflow-hidden">
+                          <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex justify-between items-center">
+                            <h4 className="text-[10px] font-extrabold text-slate-900 uppercase tracking-wider">Costs and Operating Expenses</h4>
+                            <span className="text-[9px] font-mono text-slate-500">Incurred</span>
                           </div>
-                          <div className="flex justify-between pt-3 text-slate-900 font-black text-xs">
-                            <span>NET EARNED INCOME POSITION (P&L)</span>
-                            <span className="font-mono text-indigo-700">E{(getAccountsBalance("Revenue: Subscription Revenue", "net") + getAccountsBalance("Revenue: One-Time Revenue", "net") - getAccountsBalance("Expenses: Commission Expense", "net")).toLocaleString()}</span>
+                          <div className="p-4 space-y-2 text-xs font-bold leading-normal text-slate-700">
+                            <div className="flex justify-between py-1 border-b border-slate-100">
+                              <span className="text-slate-600">Product Refunds Outlay</span>
+                              <span className="font-mono text-red-650">-E{getAccountsBalance("Expenses: Product Refunds Outlay", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-slate-100">
+                              <span className="text-slate-600">Sales Opportunities Discounts & Incentives</span>
+                              <span className="font-mono text-red-650">-E{getAccountsBalance("Expenses: Sales Discounts & Incentives", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-slate-100">
+                              <span className="text-slate-600">Sales Commissions Paid</span>
+                              <span className="font-mono text-red-650">-E{getAccountsBalance("Expenses: Sales Commissions Paid", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between py-1 border-b border-slate-100">
+                              <span className="text-slate-600">Operating Interest Funding Costs</span>
+                              <span className="font-mono text-red-650">-E{getAccountsBalance("Expenses: Operating Interest Costs", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between pt-2.5 border-t border-slate-200 text-red-700 font-extrabold">
+                              <span>TOTAL OPERATING OUTLAYS</span>
+                              <span className="font-mono">E{(
+                                getAccountsBalance("Expenses: Product Refunds Outlay", "net") +
+                                getAccountsBalance("Expenses: Sales Discounts & Incentives", "net") +
+                                getAccountsBalance("Expenses: Sales Commissions Paid", "net") +
+                                getAccountsBalance("Expenses: Operating Interest Costs", "net")
+                              ).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
                           </div>
+                        </div>
+
+                        <div className="p-3.5 bg-indigo-50 border border-indigo-150 rounded-xl flex items-center justify-between text-xs font-black text-indigo-950">
+                          <span>NET PERIOD INCOME POSITION (PROFIT / LOSS)</span>
+                          <span className="font-mono text-indigo-700 text-sm">
+                            E{(
+                              (getAccountsBalance("Revenue: Client Sales Revenue", "net") +
+                              getAccountsBalance("Revenue: Product & Service Revenue", "net") +
+                              getAccountsBalance("Revenue: Operating Interest Income", "net") +
+                              getAccountsBalance("Revenue: Fee & Penalty Revenue", "net") +
+                              getAccountsBalance("Revenue: System Operating Income", "net")) -
+                              (getAccountsBalance("Expenses: Product Refunds Outlay", "net") +
+                              getAccountsBalance("Expenses: Sales Discounts & Incentives", "net") +
+                              getAccountsBalance("Expenses: Sales Commissions Paid", "net") +
+                              getAccountsBalance("Expenses: Operating Interest Costs", "net"))
+                            ).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </span>
                         </div>
                       </div>
                     )}
 
-                    {selectedSheet !== "Balance Sheet" && selectedSheet !== "Income Statement" && (
-                      <div className="space-y-4">
-                        <div className="border border-slate-150 rounded-lg overflow-hidden">
+                    {selectedSheet === "Trial Balance" && (
+                      <div className="space-y-4 font-sans text-xs">
+                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-3xs">
                           <table className="w-full text-left text-xs text-slate-650">
-                            <thead className="bg-slate-50 font-bold">
+                            <thead className="bg-slate-50 font-bold border-b border-slate-200">
                               <tr>
-                                <th className="p-2.5">Position Target Code</th>
-                                <th className="p-2.5">Subledger Segment</th>
-                                <th className="p-2.5 text-right">Debit Bal</th>
-                                <th className="p-2.5 text-right">Credit Bal</th>
+                                <th className="p-2.5">Account Code</th>
+                                <th className="p-2.5">Subledger Segment Account</th>
+                                <th className="p-2.5">Account Class</th>
+                                <th className="p-2.5 text-right">Debit Balance (E)</th>
+                                <th className="p-2.5 text-right">Credit Balance (E)</th>
                                 <th className="p-2.5 text-right">Net Value</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 font-bold text-slate-800">
-                               <tr>
-                                <td className="p-2.5 font-mono text-slate-500">ACC-101</td>
-                                <td className="p-2.5">Assets: Cash Reserves</td>
-                                <td className="p-2.5 text-right font-mono">E{getAccountsBalance("Assets: Cash", "debit").toLocaleString()}</td>
-                                <td className="p-2.5 text-right font-mono">E{getAccountsBalance("Assets: Cash", "credit").toLocaleString()}</td>
-                                <td className="p-2.5 text-right font-mono text-emerald-700">E{getAccountsBalance("Assets: Cash", "net").toLocaleString()}</td>
-                              </tr>
-                              <tr>
-                                <td className="p-2.5 font-mono text-slate-500">ACC-104</td>
-                                <td className="p-2.5">Assets: Active Capital Loans</td>
-                                <td className="p-2.5 text-right font-mono">E{getAccountsBalance("Assets: Loans Receivable", "debit").toLocaleString()}</td>
-                                <td className="p-2.5 text-right font-mono">0.00</td>
-                                <td className="p-2.5 text-right font-mono text-emerald-700">E{getAccountsBalance("Assets: Loans Receivable", "net").toLocaleString()}</td>
-                              </tr>
-                              <tr>
-                                <td className="p-2.5 font-mono text-slate-500">ACC-201</td>
-                                <td className="p-2.5">Liabilities: Member Savings Ledger</td>
-                                <td className="p-2.5 text-right font-mono">0.00</td>
-                                <td className="p-2.5 text-right font-mono">E{getAccountsBalance("Liabilities: Savings Deposits", "credit").toLocaleString()}</td>
-                                <td className="p-2.5 text-right font-mono text-red-600">E{getAccountsBalance("Liabilities: Savings Deposits", "net").toLocaleString()}</td>
-                              </tr>
-                              <tr>
-                                <td className="p-2.5 font-mono text-slate-500">ACC-301</td>
-                                <td className="p-2.5">Equity: Retained Corporate Reserves</td>
-                                <td className="p-2.5 text-right font-mono">0.00</td>
-                                <td className="p-2.5 text-right font-mono">E{getAccountsBalance("Equity: Retained Earnings", "credit").toLocaleString()}</td>
-                                <td className="p-2.5 text-right font-mono text-slate-700">E{getAccountsBalance("Equity: Retained Earnings", "net").toLocaleString()}</td>
+                            <tbody className="divide-y divide-slate-100 font-bold text-slate-850">
+                              {[
+                                { code: "ACC-101", desc: "Assets: Cash", type: "Assets" },
+                                { code: "ACC-104", desc: "Assets: Trade Receivables", type: "Assets" },
+                                { code: "ACC-201", desc: "Liabilities: Client Deposits Liability", type: "Liabilities" },
+                                { code: "ACC-301", desc: "Equity: Retained Earnings", type: "Equity" },
+                                { code: "ACC-401", desc: "Revenue: Client Sales Revenue", type: "Revenue" },
+                                { code: "ACC-402", desc: "Revenue: Product & Service Revenue", type: "Revenue" },
+                                { code: "ACC-403", desc: "Revenue: Operating Interest Income", type: "Revenue" },
+                                { code: "ACC-404", desc: "Revenue: Fee & Penalty Revenue", type: "Revenue" },
+                                { code: "ACC-405", desc: "Revenue: System Operating Income", type: "Revenue" },
+                                { code: "ACC-501", desc: "Expenses: Product Refunds Outlay", type: "Expenses" },
+                                { code: "ACC-502", desc: "Expenses: Sales Discounts & Incentives", type: "Expenses" },
+                                { code: "ACC-503", desc: "Expenses: Sales Commissions Paid", type: "Expenses" },
+                                { code: "ACC-504", desc: "Expenses: Operating Interest Costs", type: "Expenses" }
+                              ].map((it) => {
+                                const deb = getAccountsBalance(it.desc, "debit");
+                                const cred = getAccountsBalance(it.desc, "credit");
+                                const netVal = getAccountsBalance(it.desc, "net");
+                                if (deb === 0 && cred === 0 && netVal === 0) return null;
+                                return (
+                                  <tr key={it.code} className="hover:bg-slate-50/50">
+                                    <td className="p-3 font-mono text-slate-400 text-[10px]">{it.code}</td>
+                                    <td className="p-3 text-slate-905">{it.desc}</td>
+                                    <td className="p-3 text-slate-450 text-[10px]">{it.type}</td>
+                                    <td className="p-3 text-right font-mono text-slate-705">{deb > 0 ? deb.toLocaleString(undefined, { minimumFractionDigits: 2 }) : "0.00"}</td>
+                                    <td className="p-3 text-right font-mono text-slate-705">{cred > 0 ? cred.toLocaleString(undefined, { minimumFractionDigits: 2 }) : "0.00"}</td>
+                                    <td className={`p-3 text-right font-mono ${
+                                      it.type === "Assets" || it.type === "Expenses" 
+                                        ? "text-emerald-700" 
+                                        : "text-red-650"
+                                    }`}>E{netVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                  </tr>
+                                );
+                              })}
+                              {/* Consolidated footer */}
+                              <tr className="bg-slate-900 border-t-2 border-slate-950 text-white font-extrabold text-[11px]">
+                                <td colSpan={3} className="p-3.5 uppercase tracking-wide">Consolidated Verification Sum</td>
+                                <td className="p-3.5 text-right font-mono text-sky-305">
+                                  {(() => {
+                                    let sumDeb = 0;
+                                    [
+                                      "Assets: Cash", "Assets: Trade Receivables", "Liabilities: Client Deposits Liability", "Equity: Retained Earnings",
+                                      "Revenue: Client Sales Revenue", "Revenue: Product & Service Revenue", "Revenue: Operating Interest Income",
+                                      "Revenue: Fee & Penalty Revenue", "Revenue: System Operating Income", "Expenses: Product Refunds Outlay",
+                                      "Expenses: Sales Discounts & Incentives", "Expenses: Sales Commissions Paid", "Expenses: Operating Interest Costs"
+                                    ].forEach(a => { sumDeb += getAccountsBalance(a, "debit"); });
+                                    return `E${sumDeb.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                                  })()}
+                                </td>
+                                <td className="p-3.5 text-right font-mono text-sky-305">
+                                  {(() => {
+                                    let sumCred = 0;
+                                    [
+                                      "Assets: Cash", "Assets: Trade Receivables", "Liabilities: Client Deposits Liability", "Equity: Retained Earnings",
+                                      "Revenue: Client Sales Revenue", "Revenue: Product & Service Revenue", "Revenue: Operating Interest Income",
+                                      "Revenue: Fee & Penalty Revenue", "Revenue: System Operating Income", "Expenses: Product Refunds Outlay",
+                                      "Expenses: Sales Discounts & Incentives", "Expenses: Sales Commissions Paid", "Expenses: Operating Interest Costs"
+                                    ].forEach(a => { sumCred += getAccountsBalance(a, "credit"); });
+                                    return `E${sumCred.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                                  })()}
+                                </td>
+                                <td className="p-3.5 text-right font-mono text-emerald-400">
+                                  Balanced
+                                </td>
                               </tr>
                             </tbody>
                           </table>
                         </div>
+                      </div>
+                    )}
+
+                    {selectedSheet === "Cash Flow" && (
+                      <div className="space-y-4 font-sans text-xs">
+                        {(() => {
+                          const cf = computeCashFlowStatement();
+                          return (
+                            <div className="space-y-4">
+                              {/* Operating */}
+                              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-3xs">
+                                <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 font-extrabold uppercase text-slate-900">
+                                  1. Cash Flows from Operating Activities (Direct Method)
+                                </div>
+                                <div className="p-4 space-y-2 font-bold text-slate-700">
+                                  <div className="flex justify-between py-1 border-b border-slate-100">
+                                    <span>Client Sales Revenue Received</span>
+                                    <span className="font-mono text-emerald-700">+E{cf.salesInflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between py-1 border-b border-slate-100">
+                                    <span>Product & Custom Service Inflow</span>
+                                    <span className="font-mono text-emerald-700">+E{cf.serviceInflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between py-1 border-b border-slate-100">
+                                    <span>Product Refunds Outflows</span>
+                                    <span className="font-mono text-red-650">-E{cf.refundOutflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between py-1 border-b border-slate-100">
+                                    <span>Sales Discounts & Promo Outlays</span>
+                                    <span className="font-mono text-red-650">-E{cf.discountOutflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between py-1 border-b border-slate-100">
+                                    <span>Affiliate Commissions Paid</span>
+                                    <span className="font-mono text-red-650">-E{cf.commissionOutflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between pt-2.5 text-indigo-800 font-extrabold border-t border-slate-150">
+                                    <span>Net Cash from Operating Activities</span>
+                                    <span className="font-mono">E{cf.netOperatingCash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Investing */}
+                              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-3xs">
+                                <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 font-extrabold uppercase text-slate-900">
+                                  2. Cash Flows from Investing Activities (Outstanding receivables)
+                                </div>
+                                <div className="p-4 space-y-2 font-bold text-slate-700">
+                                  <div className="flex justify-between py-1 border-b border-slate-100">
+                                    <span>Trade Credit Extension Capital Outlay</span>
+                                    <span className="font-mono text-red-650">-E{cf.activeLoansDisbursed.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between py-1 border-b border-slate-100">
+                                    <span>Trade Receivables Principal Collected</span>
+                                    <span className="font-mono text-emerald-700">+E{cf.activeLoansCollected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between pt-2.5 text-indigo-800 font-extrabold border-t border-slate-150">
+                                    <span>Net Cash from Investing Activities</span>
+                                    <span className="font-mono">E{cf.netInvestingCash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Financing */}
+                              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-3xs">
+                                <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 font-extrabold uppercase text-slate-900">
+                                  3. Cash Flows from Financing Activities
+                                </div>
+                                <div className="p-4 space-y-2 font-bold text-slate-700">
+                                  <div className="flex justify-between py-1 border-b border-slate-100">
+                                    <span>Client Escrow Deposits Received</span>
+                                    <span className="font-mono text-emerald-700">+E{cf.depositsReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between py-1 border-b border-slate-100">
+                                    <span>Client Security Escrow Withdrawals Paid</span>
+                                    <span className="font-mono text-red-650">-E{cf.depositsWithdrawn.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between pt-2.5 text-indigo-800 font-extrabold border-t border-slate-150">
+                                    <span>Net Cash from Financing Activities</span>
+                                    <span className="font-mono">E{cf.netFinancingCash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Net reconciliation */}
+                              <div className="p-4 bg-slate-950 text-slate-100 rounded-xl space-y-2 shadow-md leading-relaxed font-sans font-bold">
+                                <div className="flex justify-between text-slate-400 border-b border-slate-900 pb-1 text-[10px]">
+                                  <span>STATEMENT FLOW RECONCILIATION</span>
+                                  <span>GAAP Direct Standard</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-400 block">Net Period Cash Liquidity Change</span>
+                                  <span className="font-mono">E{cf.netCashChange.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                                <div className="flex justify-between text-blue-400">
+                                  <span>(+) Cash balance brought forward (b/f)</span>
+                                  <span className="font-mono">E{cf.beginningCash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                                <div className="flex justify-between border-t border-slate-800 pt-2 text-emerald-400 text-sm font-black">
+                                  <span>Ending Liquid Cash Vaults Balance</span>
+                                  <span className="font-mono">E{cf.endingCash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {selectedSheet === "P&L" && (
+                      <div className="space-y-4 font-sans text-xs">
+                        {(() => {
+                          const sales = getAccountsBalance("Revenue: Client Sales Revenue", "net");
+                          const services = getAccountsBalance("Revenue: Product & Service Revenue", "net");
+                          const interestInc = getAccountsBalance("Revenue: Operating Interest Income", "net");
+                          const fees = getAccountsBalance("Revenue: Fee & Penalty Revenue", "net");
+                          const sysInflow = getAccountsBalance("Revenue: System Operating Income", "net");
+                          const totalRevenue = sales + services + interestInc + fees + sysInflow;
+
+                          const refunds = getAccountsBalance("Expenses: Product Refunds Outlay", "net");
+                          const discounts = getAccountsBalance("Expenses: Sales Discounts & Incentives", "net");
+                          const commissions = getAccountsBalance("Expenses: Sales Commissions Paid", "net");
+                          const interestCost = getAccountsBalance("Expenses: Operating Interest Costs", "net");
+                          const totalExpenses = refunds + discounts + commissions + interestCost;
+
+                          const grossRevenue = sales + services;
+                          const grossProfit = grossRevenue - refunds - discounts;
+                          const ebitda = totalRevenue - totalExpenses;
+                          const profitMargin = totalRevenue > 0 ? (ebitda / totalRevenue) * 100 : 0;
+
+                          return (
+                            <div className="space-y-4 font-bold text-slate-700">
+                              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-3xs">
+                                <div className="bg-slate-50 p-3 flex justify-between uppercase font-extrabold text-slate-900 border-b border-slate-200">
+                                  <span>Gross Trading Position</span>
+                                  <span>Ratio of Gross Revenue</span>
+                                </div>
+                                <div className="p-4 space-y-2">
+                                  <div className="flex justify-between border-b border-slate-100 py-1">
+                                    <span className="text-slate-600">Gross Sales & Services Revenue</span>
+                                    <span className="font-mono">E{grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-100 py-1">
+                                    <span className="text-slate-600">Less: Refunds Outlay</span>
+                                    <span className="font-mono text-red-650">-E{refunds.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-100 py-1">
+                                    <span className="text-slate-600">Less: Sales Discounts & Incentives Offered</span>
+                                    <span className="font-mono text-red-650">-E{discounts.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between border-t border-slate-250 pt-2 text-slate-950 font-black">
+                                    <span>Gross Trading Profit Margin</span>
+                                    <span className="font-mono text-indigo-700">E{grossProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })} ({grossRevenue > 0 ? ((grossProfit / grossRevenue) * 100).toFixed(1) : "0"}%)</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-3xs">
+                                <div className="bg-slate-50 p-3 flex justify-between uppercase font-extrabold text-slate-900 border-b border-slate-200">
+                                  <span>Auxiliary Operating Results & EBITDA analysis</span>
+                                  <span>Ratio of Profit Margin</span>
+                                </div>
+                                <div className="p-4 space-y-2 font-sans font-bold">
+                                  <div className="flex justify-between border-b border-slate-100 py-1">
+                                    <span className="text-slate-600">Auxiliary Interest & Penalties Inflows</span>
+                                    <span className="font-mono">E{(interestInc + fees + sysInflow).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-100 py-1">
+                                    <span className="text-slate-600">Less: Agent Commissions Payments</span>
+                                    <span className="font-mono text-red-650">-E{commissions.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-100 py-1">
+                                    <span className="text-slate-600">Less: Operating Interest Financing Costs</span>
+                                    <span className="font-mono text-red-650">-E{interestCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between pt-3 font-black text-indigo-900 border-t border-slate-250 text-sm">
+                                    <span>NET EARNINGS FOR PERIOD (EBITDA)</span>
+                                    <span className="font-mono">E{ebitda.toLocaleString(undefined, { minimumFractionDigits: 2 })} ({profitMargin.toFixed(1)}%)</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {selectedSheet === "AR" && (
+                      <div className="space-y-4 font-sans text-xs">
+                        <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl flex justify-between items-center shadow-3xs">
+                          <div>
+                            <h4 className="font-extrabold text-slate-900 uppercase">Outstanding Trade Receivables Book Ledger</h4>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Subledger of all invoice lines, bills of exchange and short-term capital extension assets.</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block uppercase font-bold">Total Receivables Asset</span>
+                            <span className="font-mono font-black text-indigo-700 text-sm">E{getAccountsBalance("Assets: Trade Receivables", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+
+                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-3xs">
+                          <table className="w-full text-left text-xs text-slate-650">
+                            <thead className="bg-slate-50 font-bold border-b border-slate-200">
+                              <tr>
+                                <th className="p-2.5">Audit Ref</th>
+                                <th className="p-2.5">Date</th>
+                                <th className="p-2.5">Account Details description</th>
+                                <th className="p-2.5 text-right">Debit (Invoiced)</th>
+                                <th className="p-2.5 text-right">Credit (Collected)</th>
+                                <th className="p-2.5 text-right">Outstanding position</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-bold text-slate-800">
+                              {balanceForward && balanceForward.receivablesBf > 0 && (
+                                <tr className="bg-slate-50/20 font-sans">
+                                  <td className="p-2.5 font-mono text-[10px] text-blue-800">OPENING-BF</td>
+                                  <td className="p-2.5 font-mono text-slate-400 text-[10px]">{balanceForward.date}</td>
+                                  <td className="p-2.5 font-extrabold text-slate-900">Balance brought forward (receivables b/f)</td>
+                                  <td className="p-2.5 text-right font-mono">E{balanceForward.receivablesBf.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                  <td className="p-2.5 text-right font-mono text-slate-305">0.00</td>
+                                  <td className="p-2.5 text-right font-mono text-indigo-755">E{balanceForward.receivablesBf.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                              )}
+                              
+                              {ledger
+                                .filter(l => l.account === "Assets: Trade Receivables")
+                                .map((l, idx) => (
+                                  <tr key={idx} className="hover:bg-slate-50/40">
+                                    <td className="p-2.5 font-mono text-[10px] text-blue-800">{l.referenceNumber}</td>
+                                    <td className="p-2.5 font-mono text-slate-400 text-[10px]">{l.date}</td>
+                                    <td className="p-2.5">{l.description}</td>
+                                    <td className={`p-2.5 text-right font-mono ${l.debit > 0 ? "text-slate-900" : "text-slate-300"}`}>
+                                      {l.debit > 0 ? `E${l.debit.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "0.00"}
+                                    </td>
+                                    <td className={`p-2.5 text-right font-mono ${l.credit > 0 ? "text-slate-900" : "text-slate-300"}`}>
+                                      {l.credit > 0 ? `E${l.credit.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "0.00"}
+                                    </td>
+                                    <td className="p-2.5 text-right font-mono text-indigo-750">
+                                      E{l.runningBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                ))}
+
+                              {ledger.filter(l => l.account === "Assets: Trade Receivables").length === 0 && (
+                                <tr>
+                                  <td colSpan={6} className="p-4 text-center text-slate-400 font-bold">No outstanding trade receivables found.</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedSheet === "AP" && (
+                      <div className="space-y-4 font-sans text-xs">
+                        <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl flex justify-between items-center shadow-3xs">
+                          <div>
+                            <h4 className="font-extrabold text-slate-900 uppercase">Client Security Escrows & Deposits list</h4>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Secured client-side cash balances held in escrow custody.</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block uppercase font-bold">Total Client Escrows</span>
+                            <span className="font-mono font-black text-red-650 text-sm">E{getAccountsBalance("Liabilities: Client Deposits Liability", "net").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+
+                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-3xs">
+                          <table className="w-full text-left text-xs text-slate-650">
+                            <thead className="bg-slate-50 font-bold border-b border-slate-200">
+                              <tr>
+                                <th className="p-2.5">Audit Ref</th>
+                                <th className="p-2.5">Date</th>
+                                <th className="p-2.5">Account Details description</th>
+                                <th className="p-2.5 text-right">Debit (Withdrawn)</th>
+                                <th className="p-2.5 text-right">Credit (Deposited)</th>
+                                <th className="p-2.5 text-right">Outstanding liability</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-bold text-slate-800">
+                              {balanceForward && balanceForward.payablesBf > 0 && (
+                                <tr className="bg-slate-50/20">
+                                  <td className="p-2.5 font-mono text-[10px] text-blue-800">OPENING-BF</td>
+                                  <td className="p-2.5 font-mono text-slate-400 text-[10px]">{balanceForward.date}</td>
+                                  <td className="p-2.5 font-extrabold text-slate-100">Balance brought forward (escrows b/f)</td>
+                                  <td className="p-2.5 text-right font-mono text-slate-305">0.00</td>
+                                  <td className="p-2.5 text-right font-mono">E{balanceForward.payablesBf.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                  <td className="p-2.5 text-right font-mono text-indigo-755">E{balanceForward.payablesBf.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                              )}
+
+                              {ledger
+                                .filter(l => l.account === "Liabilities: Client Deposits Liability")
+                                .map((l, idx) => (
+                                  <tr key={idx} className="hover:bg-slate-50/40">
+                                    <td className="p-2.5 font-mono text-[10px] text-blue-850">{l.referenceNumber}</td>
+                                    <td className="p-2.5 font-mono text-slate-400 text-[10px]">{l.date}</td>
+                                    <td className="p-2.5">{l.description}</td>
+                                    <td className={`p-2.5 text-right font-mono ${l.debit > 0 ? "text-slate-900" : "text-slate-300"}`}>
+                                      {l.debit > 0 ? `E${l.debit.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "0.00"}
+                                    </td>
+                                    <td className={`p-2.5 text-right font-mono ${l.credit > 0 ? "text-slate-900" : "text-slate-300"}`}>
+                                      {l.credit > 0 ? `E${l.credit.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "0.00"}
+                                    </td>
+                                    <td className="p-2.5 text-right font-mono text-indigo-750">
+                                      E{l.runningBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                ))}
+
+                              {ledger.filter(l => l.account === "Liabilities: Client Deposits Liability").length === 0 && (
+                                <tr>
+                                  <td colSpan={6} className="p-4 text-center text-slate-400 font-bold">No Client escrows transactions logged.</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedSheet === "Balance Brought Forward (b/f) Doc" && (
+                      <div className="space-y-4 font-sans text-xs">
+                        <div className="p-4 bg-indigo-50 border border-indigo-150 rounded-xl flex justify-between items-center shadow-3xs">
+                          <div>
+                            <h4 className="font-extrabold text-indigo-950 uppercase">Opening Balance Brought Forward (b/f) Ledger Doc</h4>
+                            <p className="text-[10px] text-indigo-600 mt-0.5">Authorized audit document defining initial financial positions prior to fiscal cycle entries.</p>
+                          </div>
+                          
+                          <button
+                            onClick={() => setShowBfEdit(!showBfEdit)}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-black tracking-tight cursor-pointer transition flex items-center gap-1.5"
+                          >
+                            <Edit3 className="h-3 w-3" /> {showBfEdit ? "Discard Editor" : "Edit b/f Positions"}
+                          </button>
+                        </div>
+
+                        {showBfEdit ? (
+                          <form onSubmit={handleSaveBalanceForward} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3.5 dynamic-form">
+                            <h5 className="font-black text-xs text-slate-800 uppercase tracking-wider pb-1.5 border-b border-slate-200">Adjust Starting Positions</h5>
+                            <div className="grid grid-cols-2 gap-3.5 font-bold text-slate-700">
+                              <div className="space-y-1">
+                                <label className="text-[10px] text-slate-500 uppercase block">Pre-existing Cash Balance (E)</label>
+                                <input
+                                  type="number"
+                                  value={bfForm.cashBf}
+                                  onChange={(e) => setBfForm({ ...bfForm, cashBf: Number(e.target.value) })}
+                                  className="w-full bg-white border border-slate-200 rounded-lg p-2 font-mono text-xs focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] text-slate-500 uppercase block">Pre-existing Receivables (AR) (E)</label>
+                                <input
+                                  type="number"
+                                  value={bfForm.receivablesBf}
+                                  onChange={(e) => setBfForm({ ...bfForm, receivablesBf: Number(e.target.value) })}
+                                  className="w-full bg-white border border-slate-200 rounded-lg p-2 font-mono text-xs focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] text-slate-500 uppercase block">Pre-existing Client Escrows (E)</label>
+                                <input
+                                  type="number"
+                                  value={bfForm.payablesBf}
+                                  onChange={(e) => setBfForm({ ...bfForm, payablesBf: Number(e.target.value) })}
+                                  className="w-full bg-white border border-slate-200 rounded-lg p-2 font-mono text-xs focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] text-slate-500 uppercase block">Pre-existing Retained Equity (E)</label>
+                                <input
+                                  type="number"
+                                  value={bfForm.equityBf}
+                                  onChange={(e) => setBfForm({ ...bfForm, equityBf: Number(e.target.value) })}
+                                  className="w-full bg-white border border-slate-200 rounded-lg p-2 font-mono text-xs focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div className="col-span-2 space-y-1">
+                                <label className="text-[10px] text-slate-500 uppercase block">Audit justification remarks</label>
+                                <textarea
+                                  value={bfForm.notes}
+                                  onChange={(e) => setBfForm({ ...bfForm, notes: e.target.value })}
+                                  rows={2}
+                                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setShowBfEdit(false)}
+                                className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 font-bold hover:bg-slate-100 rounded-lg cursor-pointer"
+                              >
+                                Discard
+                              </button>
+                              <button
+                                type="submit"
+                                className="px-4 py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg font-black tracking-tight flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Save className="h-3.5 w-3.5" /> Save b/f adjustments
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <div className="border border-slate-200 rounded-xl p-4 space-y-3 font-bold text-slate-700 leading-normal">
+                            <h5 className="font-black text-xs text-slate-800 uppercase tracking-widest border-b border-slate-100 pb-1.5">Current Balance Sheet Carried Forward</h5>
+                            <div className="space-y-2 text-xs">
+                              <div className="flex justify-between border-b border-slate-100 py-1">
+                                <span className="text-slate-500">Starting Liquid Cash (ACC-101 b/f):</span>
+                                <span className="font-mono text-slate-900">E{balanceForward?.cashBf?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-slate-100 py-1">
+                                <span className="text-slate-500">Outstanding Invoices (ACC-104 b/f):</span>
+                                <span className="font-mono text-slate-900">E{balanceForward?.receivablesBf?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-slate-100 py-1">
+                                <span className="text-slate-500">Client Escrows / Liability (ACC-201 b/f):</span>
+                                <span className="font-mono text-slate-900">E{balanceForward?.payablesBf?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-slate-100 py-1">
+                                <span className="text-slate-500">Retained Earnings (ACC-301 b/f):</span>
+                                <span className="font-mono text-slate-900">E{balanceForward?.equityBf?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              <div className="pt-2 text-slate-450 border-t border-slate-100 text-[10px] leading-relaxed">
+                                <strong>Justification logs:</strong> {balanceForward?.notes || "No supplementary remarks submitted."}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
