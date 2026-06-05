@@ -10,7 +10,12 @@
         "email": { "type": "string", "description": "Company email address." },
         "phone": { "type": "string", "description": "Company contact number." },
         "address": { "type": "string", "description": "Physical company address." },
-        "letterheadLogo": { "type": "string", "description": "Base64 or URL data of the company logo." }
+        "letterheadLogo": { "type": "string", "description": "Base64 or URL data of the company logo." },
+        "logo": { "type": "string", "description": "Base64 or URL data of the company logo." },
+        "favicon": { "type": "string", "description": "Base64 or URL data of the favicon / icon." },
+        "primaryColor": { "type": "string", "description": "Primary color code (HEX)." },
+        "secondaryColor": { "type": "string", "description": "Secondary color code (HEX)." },
+        "useCompanyLetterhead": { "type": "boolean", "description": "Whether to use company letterhead spanning the full top of invoice or quotation." }
       },
       "required": ["ownerId", "name"]
     },

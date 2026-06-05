@@ -49,6 +49,7 @@ interface CompanyDetails {
   phone: string;
   address: string;
   letterheadLogo: string;
+  useCompanyLetterhead?: boolean;
 }
 
 interface Customer {
@@ -1089,29 +1090,49 @@ export default function Quotations() {
                 className="mx-auto bg-white p-[20mm] border border-slate-200 shadow-sm relative text-slate-800 font-sans"
               >
                 {/* Letterhead Logo & Company Header */}
-                <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-6">
-                  <div>
-                    {company?.letterheadLogo ? (
-                      <img
-                        src={company.letterheadLogo}
-                        alt="Corporate Symbol"
-                        className="max-h-20 object-contain mb-2"
-                      />
-                    ) : (
-                      <span className="text-lg font-extrabold text-slate-900 tracking-tight uppercase">
-                        {company?.name || "Corporate Ledger"}
-                      </span>
-                    )}
-                    <h1 className="text-2xl font-black text-slate-900 tracking-wider">OFFICIAL QUOTATION</h1>
+                {company?.useCompanyLetterhead && company?.letterheadLogo ? (
+                  <div className="-mx-[20mm] -mt-[20mm] mb-6 relative">
+                    <img
+                      src={company.letterheadLogo}
+                      alt="Corporate Banner Letterhead"
+                      className="w-full h-auto max-h-[48mm] object-contain block border-b border-slate-200"
+                    />
+                    <div className="px-[20mm] pt-4 flex justify-between items-end border-b-2 border-slate-900 pb-4">
+                      <div>
+                        <h1 className="text-2xl font-black text-slate-900 tracking-wider">OFFICIAL QUOTATION</h1>
+                      </div>
+                      <div className="text-right text-[10px] text-slate-500 space-y-0.5 leading-normal">
+                        <p className="font-bold text-slate-800">{company?.name}</p>
+                        <p>{company?.email} | {company?.phone}</p>
+                        <p className="max-w-[400px] truncate">{company?.address}</p>
+                      </div>
+                    </div>
                   </div>
+                ) : (
+                  <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-6">
+                    <div>
+                      {company?.letterheadLogo ? (
+                        <img
+                          src={company.letterheadLogo}
+                          alt="Corporate Symbol"
+                          className="max-h-20 object-contain mb-2"
+                        />
+                      ) : (
+                        <span className="text-lg font-extrabold text-slate-900 tracking-tight uppercase">
+                          {company?.name || "Corporate Ledger"}
+                        </span>
+                      )}
+                      <h1 className="text-2xl font-black text-slate-900 tracking-wider">OFFICIAL QUOTATION</h1>
+                    </div>
 
-                  <div className="text-right text-[11px] text-slate-500 space-y-0.5">
-                    <p className="font-bold text-slate-800">{company?.name}</p>
-                    <p>{company?.email}</p>
-                    <p>{company?.phone}</p>
-                    <p className="whitespace-pre-line max-w-[200px]">{company?.address}</p>
+                    <div className="text-right text-[11px] text-slate-500 space-y-0.5">
+                      <p className="font-bold text-slate-800">{company?.name}</p>
+                      <p>{company?.email}</p>
+                      <p>{company?.phone}</p>
+                      <p className="whitespace-pre-line max-w-[200px]">{company?.address}</p>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Metadata details */}
                 <div className="grid grid-cols-2 gap-4 mb-6 text-xs">

@@ -18,6 +18,7 @@ interface CompanyData {
   favicon: string;
   primaryColor: string;
   secondaryColor: string;
+  useCompanyLetterhead?: boolean;
 }
 
 interface CompanyProfileProps {
@@ -57,6 +58,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
   const [favicon, setFavicon] = useState("");
   const [primaryColor, setPrimaryColor] = useState("#0F172A");
   const [secondaryColor, setSecondaryColor] = useState("#3B82F6");
+  const [useCompanyLetterhead, setUseCompanyLetterhead] = useState(false);
   const [inactivityTimeout, setInactivityTimeout] = useState(900); // 15 mins default
 
   useEffect(() => {
@@ -92,6 +94,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
           setFavicon(data.favicon || "");
           setPrimaryColor(data.primaryColor || "#0F172A");
           setSecondaryColor(data.secondaryColor || "#3B82F6");
+          setUseCompanyLetterhead(data.useCompanyLetterhead || false);
           localStorage.setItem(`miratech_offline_company_${user.uid}`, JSON.stringify(data));
           if (onCompanyLoaded) onCompanyLoaded(data);
         } else {
@@ -107,6 +110,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             setFavicon(data.favicon || "");
             setPrimaryColor(data.primaryColor || "#0F172A");
             setSecondaryColor(data.secondaryColor || "#3B82F6");
+            setUseCompanyLetterhead(data.useCompanyLetterhead || false);
             if (onCompanyLoaded) onCompanyLoaded(data);
           } else {
             if (onCompanyLoaded) onCompanyLoaded(null);
@@ -127,6 +131,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             setFavicon(data.favicon || "");
             setPrimaryColor(data.primaryColor || "#0F172A");
             setSecondaryColor(data.secondaryColor || "#3B82F6");
+            setUseCompanyLetterhead(data.useCompanyLetterhead || false);
             if (onCompanyLoaded) onCompanyLoaded(data);
           } else {
             if (onCompanyLoaded) onCompanyLoaded(null);
@@ -210,6 +215,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
       favicon,
       primaryColor,
       secondaryColor,
+      useCompanyLetterhead,
     };
 
     const companyDocPath = `companies/${user.uid}`;
@@ -260,6 +266,11 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     }
   };
 
+  const isAdminUser = 
+    currentUser?.role === 'BUSINESS_ADMIN' || 
+    currentUser?.role === 'MASTER_ADMIN' ||
+    currentUser?.email?.toLowerCase() === 'miratechindustries@gmail.com';
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -278,6 +289,18 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
       </div>
 
       <form onSubmit={handleSave} className="p-6 space-y-5">
+        {!isAdminUser && (
+          <div className="p-3.5 text-xs bg-amber-50 text-amber-700 border border-amber-250 rounded-xl flex items-start gap-2.5 shadow-3xs">
+            <ShieldAlert className="h-4.5 w-4.5 shrink-0 text-amber-600 mt-0.5" />
+            <div>
+              <span className="font-bold block uppercase tracking-wider text-[10px]">View-Only Mode</span>
+              <p className="mt-0.5 leading-relaxed">
+                You are currently logged in with staffing credentials. Only Company Administrators can modify corporation details, colors, and branding assets.
+              </p>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="p-3 text-xs bg-red-50 text-red-600 border border-red-100 rounded-lg">
             {error}
@@ -303,9 +326,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
               <input
                 type="text"
                 required
+                disabled={!isAdminUser}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400"
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400 disabled:opacity-60"
                 placeholder="e.g. MiraTech Industries LLC"
               />
             </div>
@@ -323,9 +347,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                 <input
                   type="email"
                   required
+                  disabled={!isAdminUser}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400 disabled:opacity-60"
                   placeholder="contact@company.com"
                 />
               </div>
@@ -340,11 +365,12 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                   <Phone className="h-4 w-4" />
                 </span>
                 <input
-                  type="tel"
+                  type="text"
                   required
+                  disabled={!isAdminUser}
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400 disabled:opacity-60"
                   placeholder="+1 (555) 0199"
                 />
               </div>
@@ -362,9 +388,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
               <textarea
                 required
                 rows={2}
+                disabled={!isAdminUser}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400"
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400 disabled:opacity-60"
                 placeholder="120 Corporate Way, Suite 10, Metro City, CA 90001"
               />
             </div>
@@ -385,17 +412,19 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                     className="max-h-24 mx-auto rounded-md object-contain border border-slate-100 bg-white p-2"
                     referrerPolicy="no-referrer"
                   />
-                  <div className="flex gap-2 justify-center">
-                    <label className="cursor-pointer text-xs font-medium text-slate-600 hover:text-slate-800 underline">
-                      Change Letterhead Logo
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleLetterheadLogoUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
+                  {isAdminUser && (
+                    <div className="flex gap-2 justify-center">
+                      <label className="cursor-pointer text-xs font-medium text-slate-600 hover:text-slate-800 underline">
+                        Change Letterhead Logo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLetterheadLogoUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -406,77 +435,180 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                     Upload corporate symbol / visual logo
                   </p>
                   <p className="text-[10px] text-slate-400">Supports PNG, JPG (Max 800KB)</p>
-                  <label className="cursor-pointer inline-block mt-2 px-3 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold rounded-lg shadow-2xs">
-                    Choose Image File
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleLetterheadLogoUpload}
-                      className="hidden"
-                    />
-                  </label>
+                  {isAdminUser && (
+                    <label className="cursor-pointer inline-block mt-2 px-3 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold rounded-lg shadow-2xs">
+                      Choose Image File
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLetterheadLogoUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
                 </div>
               )}
             </div>
           </div>
 
+          {/* Company Logo and Favicon Uploader & Preview Block */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Company Logo</label>
-                  <input type="file" accept="image/*" onChange={handleLogoUpload} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100" />
+            <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/20 space-y-2">
+              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Company Logo
+              </label>
+              <div className="flex items-center gap-3">
+                <div className="h-14 w-14 shrink-0 bg-white border border-slate-100 rounded-lg flex items-center justify-center p-1 overflow-hidden relative shadow-2xs">
+                  {logo ? (
+                    <img
+                      src={logo}
+                      alt="Logo Preview"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    <ImageIcon className="h-5 w-5 text-slate-400" />
+                  )}
+                </div>
+                <div className="flex-1 space-y-1">
+                  <span className="text-[10px] text-slate-400 block">PNG, JPG (Max 800KB)</span>
+                  {isAdminUser ? (
+                    <label className="cursor-pointer inline-block px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold rounded-md shadow-3xs">
+                      Change Logo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 italic">Upload Disabled</span>
+                  )}
+                </div>
               </div>
-              <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Favicon</label>
-                  <input type="file" accept="image/*" onChange={handleFaviconUpload} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100" />
+            </div>
+
+            <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/20 space-y-2">
+              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Favicon (Icon)
+              </label>
+              <div className="flex items-center gap-3">
+                <div className="h-14 w-14 shrink-0 bg-white border border-slate-100 rounded-lg flex items-center justify-center p-2 overflow-hidden relative shadow-2xs">
+                  {favicon ? (
+                    <img
+                      src={favicon}
+                      alt="Icon Preview"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-[10px] text-slate-400 font-mono font-bold uppercase">ICON</span>
+                  )}
+                </div>
+                <div className="flex-1 space-y-1">
+                  <span className="text-[10px] text-slate-400 block">Square Image (Max 200KB)</span>
+                  {isAdminUser ? (
+                    <label className="cursor-pointer inline-block px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold rounded-md shadow-3xs">
+                      Change Icon
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFaviconUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 italic">Upload Disabled</span>
+                  )}
+                </div>
               </div>
+            </div>
+          </div>
+
+          {/* Letterhead stretching Option Selection Checkbox Card */}
+          <div className="p-4 border border-blue-100 rounded-xl bg-blue-50/30 space-y-2 mt-2">
+            <div className="flex items-start gap-3">
+              <input
+                id="useCompanyLetterhead"
+                type="checkbox"
+                disabled={!isAdminUser}
+                checked={useCompanyLetterhead}
+                onChange={(e) => setUseCompanyLetterhead(e.target.checked)}
+                className="mt-0.5 h-4 w-4 text-blue-600 border-slate-300 rounded-sm focus:ring-blue-500 cursor-pointer disabled:opacity-50"
+              />
+              <div className="space-y-1">
+                <label htmlFor="useCompanyLetterhead" className="block text-xs font-bold text-slate-800 uppercase tracking-wider cursor-pointer select-none">
+                  Extend Letterhead as Full-Width Top Banner
+                </label>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  When enabled, the letterhead logo will span the entire top width of your quotes and invoices, serving as a clean corporate header banner.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Primary Color</label>
-                  <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="w-full h-10 border border-slate-200 rounded-lg" />
-              </div>
-              <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Secondary Color</label>
-                  <input type="color" value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} className="w-full h-10 border border-slate-200 rounded-lg" />
-              </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                Primary Color
+              </label>
+              <input
+                type="color"
+                disabled={!isAdminUser}
+                value={primaryColor}
+                onChange={(e) => setPrimaryColor(e.target.value)}
+                className="w-full h-10 border border-slate-200 rounded-lg cursor-pointer disabled:opacity-50"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                Secondary Color
+              </label>
+              <input
+                type="color"
+                disabled={!isAdminUser}
+                value={secondaryColor}
+                onChange={(e) => setSecondaryColor(e.target.value)}
+                className="w-full h-10 border border-slate-200 rounded-lg cursor-pointer disabled:opacity-50"
+              />
+            </div>
           </div>
 
           <div className="p-4 border border-indigo-100 rounded-xl bg-slate-50/70 space-y-3.5 mt-3">
-              <div className="flex items-center gap-2 text-indigo-900 font-extrabold text-xs uppercase tracking-widest">
-                  <ShieldAlert className="h-4 w-4 text-indigo-600" />
-                  Enterprise Inactivity Controls
-              </div>
-              <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1.5 leading-relaxed">
-                      Session Inactivity Auto-Logout Timeout
-                  </label>
-                  <select
-                      value={inactivityTimeout}
-                      onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setInactivityTimeout(val);
-                          localStorage.setItem("mira_inactivity_timeout", String(val));
-                      }}
-                      className="w-full px-3 py-2 border border-slate-250 rounded-lg text-xs bg-white focus:outline-hidden focus:border-slate-500 shadow-3xs"
-                  >
-                      <option value="30">30 Seconds (Fast Simulation / Testing)</option>
-                      <option value="120">2 Minutes</option>
-                      <option value="300">5 Minutes</option>
-                      <option value="900">15 Minutes (Recommended Default)</option>
-                      <option value="1800">30 Minutes</option>
-                      <option value="3600">1 Hour</option>
-                  </select>
-                  <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed font-semibold">
-                      Sets the maximum idle duration before a warnings window alerts the user, followed by dynamic auto-logout. Meets SOC2 enterprise compliance specs.
-                  </p>
-              </div>
+            <div className="flex items-center gap-2 text-indigo-900 font-extrabold text-xs uppercase tracking-widest">
+              <ShieldAlert className="h-4 w-4 text-indigo-600" />
+              Enterprise Inactivity Controls
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1.5 leading-relaxed">
+                Session Inactivity Auto-Logout Timeout
+              </label>
+              <select
+                disabled={!isAdminUser}
+                value={inactivityTimeout}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setInactivityTimeout(val);
+                  localStorage.setItem("mira_inactivity_timeout", String(val));
+                }}
+                className="w-full px-3 py-2 border border-slate-250 rounded-lg text-xs bg-white focus:outline-hidden focus:border-slate-500 shadow-3xs disabled:opacity-60"
+              >
+                <option value="30">30 Seconds (Fast Simulation / Testing)</option>
+                <option value="120">2 Minutes</option>
+                <option value="300">5 Minutes</option>
+                <option value="900">15 Minutes (Recommended Default)</option>
+                <option value="1800">30 Minutes</option>
+                <option value="3600">1 Hour</option>
+              </select>
+              <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed font-semibold">
+                Sets the maximum idle duration before a warnings window alerts the user, followed by dynamic auto-logout. Meets SOC2 compliance specs.
+              </p>
+            </div>
           </div>
         </div>
 
         <button
           type="submit"
-          disabled={saving || !name}
+          disabled={saving || !name || !isAdminUser}
           className="w-full mt-4 flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-slate-800 text-white font-medium hover:bg-slate-900 disabled:opacity-50 text-sm cursor-pointer shadow-xs transition"
         >
           {saving ? (
