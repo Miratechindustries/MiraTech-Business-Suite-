@@ -191,7 +191,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
     } finally {
       setLoading(false);
     }
-  }, [currentUser, auth.currentUser]);
+  }, [currentUser?.companyId, currentUser?.businessId, importAuth.currentUser?.uid]);
 
   useEffect(() => {
     loadData();
@@ -518,9 +518,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
     <div className="space-y-4">
       {/* Upper Status Bar */}
       <motion.div
-        initial={{ y: -50, opacity: 0 }}
+        initial={{ y: -12, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.6, ease: "easeOut", delay: 0.0 }}
+        transition={{ duration: 0.5, ease: "easeOut", delay: 0 }}
         className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
       >
         <div>
@@ -602,9 +602,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {/* Gross Billings Metric Card */}
         <motion.div
-          initial={{ x: -150, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
+          initial={{ y: 15, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.05 }}
           className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition"
         >
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
@@ -619,9 +619,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
         {/* Invoiced Receivables Metric Card */}
         <motion.div
-          initial={{ scale: 0.4, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", damping: 12, stiffness: 100, delay: 0.2 }}
+          initial={{ y: 15, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
           className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition"
         >
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
@@ -636,9 +636,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
         {/* Total Cash Inflow Metric Card */}
         <motion.div
-          initial={{ y: -50, opacity: 0 }}
+          initial={{ y: 15, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut", delay: 0.3 }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.15 }}
           className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition"
         >
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
@@ -655,9 +655,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
         {/* Combined Expenses Card */}
         <motion.div
-          initial={{ y: 50, opacity: 0 }}
+          initial={{ y: 15, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut", delay: 0.35 }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.2 }}
           className="bg-white border border-red-100/75 p-4 rounded-lg shadow-3xs hover:border-red-200 transition"
         >
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
@@ -674,9 +674,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
         {/* Net Pay/Profit Margin Metric Card */}
         <motion.div
-          initial={{ x: 150, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut", delay: 0.4 }}
+          initial={{ y: 15, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.25 }}
           className="bg-white border border-blue-100/70 p-4 rounded-lg shadow-3xs hover:border-blue-200 transition"
         >
           <div className="flex justify-between items-center text-slate-500 mb-1.5">
@@ -694,9 +694,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Revenue Trend Line Chart */}
         <motion.div
-          initial={{ x: -100, y: 100, opacity: 0 }}
-          animate={{ x: 0, y: 0, opacity: 1 }}
-          transition={{ duration: 0.7, ease: "easeOut", delay: 0.5 }}
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.55, ease: "easeOut", delay: 0.3 }}
           className="bg-white border border-blue-100/70 p-5 rounded-lg shadow-3xs hover:border-blue-200 transition lg:col-span-7 flex flex-col justify-between"
         >
           <div>
@@ -808,9 +808,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
         {/* Fulfillment & Pipeline Graphs */}
         <motion.div
-          initial={{ x: 100, y: 100, rotate: 6, opacity: 0 }}
-          animate={{ x: 0, y: 0, rotate: 0, opacity: 1 }}
-          transition={{ duration: 0.7, ease: "easeOut", delay: 0.6 }}
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.55, ease: "easeOut", delay: 0.35 }}
           className="bg-white border border-blue-100/70 p-5 rounded-lg shadow-3xs hover:border-blue-200 transition lg:col-span-5 flex flex-col justify-between"
         >
           <div>
@@ -978,9 +978,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 animate-tw-animate-css">
         {/* Top-Selling Inventory Items */}
         <motion.div
-          initial={{ y: 50, opacity: 0 }}
+          initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.6, ease: "easeOut", delay: 0.65 }}
+          transition={{ duration: 0.55, ease: "easeOut", delay: 0.4 }}
           className="bg-white border border-blue-100/70 p-5 rounded-lg shadow-3xs hover:border-blue-200 transition lg:col-span-7 flex flex-col justify-between"
           id="dashboard-top-selling-inventory-card"
         >
@@ -1080,9 +1080,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
         {/* Unpaid Invoices Fiscal Risk & Volume */}
         <motion.div
-          initial={{ y: 50, opacity: 0 }}
+          initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.6, ease: "easeOut", delay: 0.7 }}
+          transition={{ duration: 0.55, ease: "easeOut", delay: 0.45 }}
           className="bg-white border border-blue-100/70 p-5 rounded-lg shadow-3xs hover:border-blue-200 transition lg:col-span-5 flex flex-col justify-between"
           id="dashboard-unpaid-invoices-risk-card"
         >
@@ -1139,10 +1139,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-1">
         {/* Profitability Config Panel */}
         <motion.div
-          initial={{ rotateX: 90, opacity: 0 }}
-          animate={{ rotateX: 0, opacity: 1 }}
-          transition={{ duration: 0.6, ease: "easeOut", delay: 0.7 }}
-          style={{ transformPerspective: 1000 }}
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.55, ease: "easeOut", delay: 0.5 }}
           className="bg-white border border-blue-100 rounded-lg p-4 shadow-3xs lg:col-span-4 flex flex-col justify-between space-y-3"
         >
           <div>
@@ -1191,9 +1190,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
         {/* Report Metrics Summary Spreadsheet */}
         <motion.div
-          initial={{ y: 80, opacity: 0 }}
+          initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.6, ease: "easeOut", delay: 0.8 }}
+          transition={{ duration: 0.55, ease: "easeOut", delay: 0.55 }}
           className="bg-white border border-blue-100 rounded-lg p-4 shadow-3xs lg:col-span-8 space-y-3"
         >
           <h3 className="text-xs font-bold text-blue-900 uppercase tracking-wider">Report Metrics Summary Table</h3>
@@ -1222,9 +1221,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
       {/* Operator Session Security Trace Logs (System Session Audit Logs) */}
       <motion.div
-        initial={{ y: 100, opacity: 0 }}
+        initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ type: "spring", damping: 18, stiffness: 80, delay: 0.9 }}
+        transition={{ duration: 0.55, ease: "easeOut", delay: 0.6 }}
         className="mt-4 space-y-2 bg-white border border-slate-205 p-5 rounded-lg shadow-3xs hover:border-slate-300 transition"
       >
         <div className="flex items-center gap-1.5 border-b border-slate-100 pb-2.5 mb-2.5">
