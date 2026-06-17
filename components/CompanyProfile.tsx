@@ -6,6 +6,7 @@ import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineE
 import { useUserStore } from "../lib/store";
 import { Building, Mail, Phone, MapPin, Image as ImageIcon, Loader2, CheckCircle, ShieldAlert } from "lucide-react";
 import Image from "next/image";
+import SystemPermissions from "./SystemPermissions";
 
 interface CompanyData {
   ownerId: string;
@@ -282,7 +283,8 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
   }
 
   return (
-    <div className="max-w-xl mx-auto bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+    <>
+      <div className="max-w-xl mx-auto bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
       <div className="p-6 border-b border-slate-100 bg-slate-50/50">
         <h2 className="text-lg font-semibold text-slate-800">Company Profile Set-up</h2>
         <p className="text-xs text-slate-500 mt-1">
@@ -623,5 +625,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
         </button>
       </form>
     </div>
+    <SystemPermissions />
+    </>
   );
 }
