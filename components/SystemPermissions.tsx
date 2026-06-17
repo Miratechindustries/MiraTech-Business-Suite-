@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 export default function SystemPermissions() {
-  const [notificationStatus, setNotificationStatus] = useState<PermissionState | "default">("default");
+  const [notificationStatus, setNotificationStatus] = useState<"granted" | "denied" | "prompt" | "default">("default");
   const [isStandalone, setIsStandalone] = useState(false);
   const [storagePersisted, setStoragePersisted] = useState(false);
   const [storageQuota, setStorageQuota] = useState<{ usage: number; quota: number }>({ usage: 0, quota: 0 });
@@ -193,14 +193,14 @@ export default function SystemPermissions() {
                     <div>
                       <span className="text-indigo-600 font-bold block">iOS Safari Installation:</span>
                       1. Tap the Share button (<strong className="px-1 text-slate-800">⎙</strong>) in your safari taskbar.<br />
-                      2. Choose <strong className="text-slate-800">"Add to Home Screen"</strong>.<br />
+                      2. Choose <strong className="text-slate-800">&ldquo;Add to Home Screen&rdquo;</strong>.<br />
                       3. Launch directly from your app dock!
                     </div>
                   ) : browserType.isAndroid || browserType.isChrome ? (
                     <div>
                       <span className="text-indigo-600 font-bold block">Chrome & Android Installation:</span>
-                      1. Click the <strong className="text-slate-800">"..." (Three Dots)</strong> or top app menu.<br />
-                      2. Choose <strong className="text-slate-800">"Save Web App"</strong> or <strong className="text-slate-800">"Install Application"</strong>.<br />
+                      1. Click the <strong className="text-slate-800">&ldquo;...&rdquo; (Three Dots)</strong> or top app menu.<br />
+                      2. Choose <strong className="text-slate-800">&ldquo;Save Web App&rdquo;</strong> or <strong className="text-slate-800">&ldquo;Install Application&rdquo;</strong>.<br />
                       3. Active shortcut added instantly.
                     </div>
                   ) : (
