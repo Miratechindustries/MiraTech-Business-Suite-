@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import InstallPrompt from "../components/InstallPrompt";
+import InstallClientWrapper from "../components/InstallClientWrapper";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -43,7 +43,7 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="antialiased bg-slate-50 text-slate-900 min-h-screen">
         {children}
-        <InstallPrompt />
+        <InstallClientWrapper />
       </body>
     </html>
   );
