@@ -69,6 +69,20 @@
         "status": { "type": "string", "enum": ["completed", "refunded"] }
       },
       "required": ["ownerId", "number", "clientName", "amount", "status"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A notification dispatch for a business tenant.",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "error"] }
+      },
+      "required": ["businessId", "title", "message", "read"]
     }
   },
   "firestore": {
@@ -87,6 +101,10 @@
     "/companies/{companyId}/receipts/{receiptId}": {
       "schema": "Receipt",
       "description": "Receipts sub-directory."
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "System or tenant event notifications."
     }
   }
 }

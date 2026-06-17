@@ -6,14 +6,6 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    function userDocExists() {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-    
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    
     function isMiratechEmail() {
       return isSignedIn() && 
         request.auth.token != null && 
@@ -24,27 +16,8 @@ service cloud.firestore {
     function isMasterAdmin() {
       return isSignedIn() && (
         isMiratechEmail() ||
-        (userDocExists() && getUserData().get('role', 'STAFF') == 'MASTER_ADMIN') ||
-        (userDocExists() && getUserData().get('email', '').matches('(?i)miratechindustries@gmail\\.com'))
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'MASTER_ADMIN')
       );
-    }
-
-    function getUserBusinessId() {
-      return !userDocExists() ? '' : (
-        getUserData().get('businessId', '') != '' ? getUserData().get('businessId', '') : getUserData().get('companyId', '')
-      );
-    }
-
-    function isBusinessAdmin(businessId) {
-      return isSignedIn() && userDocExists() && 
-        getUserData().get('role', 'STAFF') == 'BUSINESS_ADMIN' && 
-        getUserBusinessId() == businessId;
-    }
-
-    function isStaff(businessId) {
-      return isSignedIn() && userDocExists() && 
-        getUserData().get('role', 'STAFF') == 'STAFF' && 
-        getUserBusinessId() == businessId;
     }
 
     // --- Collections ---
@@ -54,35 +27,33 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && (
         isMasterAdmin() ||
         request.auth.uid == companyId ||
-        getUserBusinessId() == companyId ||
-        (userDocExists() && (getUserData().get('businessId', '') == companyId || getUserData().get('companyId', '') == companyId))
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == companyId ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId
+        ))
       );
       
       match /{allSubcollections=**} {
         allow read, write: if isSignedIn() && (
           isMasterAdmin() ||
           request.auth.uid == companyId ||
-          getUserBusinessId() == companyId ||
-          (userDocExists() && (getUserData().get('businessId', '') == companyId || getUserData().get('companyId', '') == companyId))
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == companyId ||
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId
+          ))
         );
       }
     }
 
     // 2. Businesses
     match /businesses/{businessId} {
-      allow read: if isSignedIn() && (
-        isMasterAdmin() || 
-        request.auth.uid == businessId || 
-        getUserBusinessId() == businessId ||
-        (userDocExists() && (getUserData().get('businessId', '') == businessId || getUserData().get('companyId', '') == businessId))
-      );
-      allow create: if isSignedIn(); // Allow bootstrapping business on registration
-      allow update: if isSignedIn() && (
-        isMasterAdmin() || 
-        request.auth.uid == businessId || 
-        isBusinessAdmin(businessId) || 
-        getUserBusinessId() == businessId ||
-        (userDocExists() && (getUserData().get('businessId', '') == businessId || getUserData().get('companyId', '') == businessId))
+      allow read, write: if isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == businessId ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == businessId ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == businessId
+        ))
       );
     }
 
@@ -91,7 +62,10 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         request.auth.uid == userId || 
         isMasterAdmin() || 
-        (userDocExists() && getUserData().get('businessId', getUserData().get('companyId', '')) == resource.data.get('businessId', resource.data.get('companyId', '')))
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == resource.data.get('businessId', resource.data.get('companyId', '')) ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == resource.data.get('businessId', resource.data.get('companyId', ''))
+        ))
       );
       allow create, update: if isSignedIn() && (
         request.auth.uid == userId || 
@@ -102,32 +76,28 @@ service cloud.firestore {
 
     // 4. Multi-tenant flat collections (Expenses, Customers, Products, Audit Logs, etc.)
     match /{collectionName}/{docId} {
-      allow read: if isSignedIn() && (
+      allow read, write: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications']) && (
         isMasterAdmin() ||
-        (resource == null) ||
-        resource.data.get('businessId', '') == getUserBusinessId() ||
-        resource.data.get('companyId', '') == getUserBusinessId() ||
-        resource.data.get('businessId', '') == request.auth.uid ||
-        resource.data.get('companyId', '') == request.auth.uid ||
-        resource.data.get('ownerId', '') == request.auth.uid
-      );
-      
-      allow create: if isSignedIn() && (
-        isMasterAdmin() ||
-        request.resource.data.get('businessId', '') == getUserBusinessId() ||
-        request.resource.data.get('companyId', '') == getUserBusinessId() ||
-        request.resource.data.get('businessId', '') == request.auth.uid ||
-        request.resource.data.get('companyId', '') == request.auth.uid ||
-        request.resource.data.get('ownerId', '') == request.auth.uid
-      );
-      
-      allow update, delete: if isSignedIn() && (
-        isMasterAdmin() ||
-        resource.data.get('businessId', '') == getUserBusinessId() ||
-        resource.data.get('companyId', '') == getUserBusinessId() ||
-        resource.data.get('businessId', '') == request.auth.uid ||
-        resource.data.get('companyId', '') == request.auth.uid ||
-        resource.data.get('ownerId', '') == request.auth.uid
+        (resource != null && (
+          resource.data.get('businessId', '') == request.auth.uid ||
+          resource.data.get('companyId', '') == request.auth.uid ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+            resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+            resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
+            resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+            resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+          ))
+        )) ||
+        (request.resource != null && (
+          request.resource.data.get('businessId', '') == request.auth.uid ||
+          request.resource.data.get('companyId', '') == request.auth.uid ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+            request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+            request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
+            request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+            request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+          ))
+        ))
       );
     }
   }

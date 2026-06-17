@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { User } from "firebase/auth";
 import { googleSignIn, logout, auth, initAuth, emailSignIn, handleFirestoreError, OperationType } from "../lib/firebase";
-import { getDoc, doc } from "firebase/firestore";
+import { getDoc, doc, collection, query, where, orderBy, limit, onSnapshot, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
 import { 
@@ -30,7 +30,12 @@ import {
   X,
   Mail,
   Lock,
-  UserCog
+  UserCog,
+  Check,
+  Trash2,
+  AlertTriangle,
+  CheckCircle2,
+  Info
 } from "lucide-react";
 
 // Subcomponents
@@ -82,6 +87,253 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
   const { setCurrentUser, currentUser } = useUserStore();
 
+  // Notifications states
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const desktopBellRef = useRef<HTMLDivElement>(null);
+  const mobileBellRef = useRef<HTMLDivElement>(null);
+
+  // Real-time notifications listener
+  useEffect(() => {
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
+    const tenantId = currentUser?.companyId || currentUser?.businessId || user?.uid;
+    if (!tenantId) return;
+
+    const notificationsRef = collection(db, "notifications");
+    const q = query(
+      notificationsRef,
+      where("businessId", "==", tenantId),
+      orderBy("createdAt", "desc"),
+      limit(20)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      setNotifications(list);
+    }, (err) => {
+      console.error("Failed to fetch notifications in layout:", err);
+    });
+
+    return () => unsubscribe();
+  }, [user, currentUser]);
+
+  // Click outside detector
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        (desktopBellRef.current && !desktopBellRef.current.contains(event.target as Node)) &&
+        (mobileBellRef.current && !mobileBellRef.current.contains(event.target as Node))
+      ) {
+        setNotificationsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleMarkAllRead = async () => {
+    try {
+      const unread = notifications.filter(n => !n.read);
+      const promises = unread.map(n => updateDoc(doc(db, "notifications", n.id), { read: true }));
+      await Promise.all(promises);
+    } catch (err) {
+      console.error("Mark all read failed:", err);
+    }
+  };
+
+  const handleMarkRead = async (id: string, read: boolean) => {
+    try {
+      await updateDoc(doc(db, "notifications", id), { read });
+    } catch (err) {
+      console.error("Update notification failed:", err);
+    }
+  };
+
+  const handleDeleteNotification = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "notifications", id));
+    } catch (err) {
+      console.error("Delete notification failed:", err);
+    }
+  };
+
+  const handleGenerateTestNotification = async () => {
+    const tenantId = currentUser?.companyId || currentUser?.businessId || user?.uid;
+    if (!tenantId) return;
+    try {
+      const alertTypes: Array<"success" | "info" | "warning" | "error"> = ["success", "info", "warning", "error"];
+      const type = alertTypes[Math.floor(Math.random() * alertTypes.length)];
+      let message = "This is an automated system notification.";
+      let title = "Test System Alert";
+
+      if (type === "success") {
+        title = "Payment Confirmed";
+        message = "Invoice #INV-2049 has been successfully processed.";
+      } else if (type === "warning") {
+        title = "Inventory Alert";
+        message = "Minimal stock remaining for modern laptop bags.";
+      } else if (type === "error") {
+        title = "Backup Failure";
+        message = "Automated data recovery checkpoint was cancelled.";
+      } else {
+        title = "Security Checkpoint";
+        message = "Authorized personnel logged in from a new IP Address.";
+      }
+
+      await addDoc(collection(db, "notifications"), {
+        businessId: tenantId,
+        title,
+        message,
+        read: false,
+        createdAt: new Date().toISOString(),
+        type
+      });
+    } catch (err) {
+      console.error("Failed to generate test notification:", err);
+    }
+  };
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const renderNotificationsDropdown = (isMobile: boolean) => {
+    return (
+      <div 
+        id="notification-dropdown-panel"
+        className={`absolute z-100 mt-2 w-80 md:w-96 bg-white rounded-xl shadow-2xl border border-slate-200/90 overflow-hidden text-slate-705 font-sans transition-all duration-200 ease-out p-1
+          ${isMobile 
+            ? "right-0 top-10 origin-top-right" 
+            : "right-0 origin-top-right"
+          }`}
+      >
+        {/* Title */}
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div className="flex items-center gap-1.5">
+            <span className="font-extrabold text-[#0B1329] text-xs uppercase tracking-wider">Notifications</span>
+            {unreadCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold text-white bg-red-500">
+                {unreadCount} new
+              </span>
+            )}
+          </div>
+          <button 
+            type="button"
+            onClick={handleGenerateTestNotification}
+            className="text-[9px] font-extrabold px-2 py-1 text-slate-500 hover:text-blue-600 border border-slate-200 rounded-md hover:bg-slate-100 transition duration-150 cursor-pointer"
+          >
+            + Test Alert
+          </button>
+        </div>
+
+        {/* Scrollable list */}
+        <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+          {notifications.length === 0 ? (
+            <div className="py-8 px-4 flex flex-col items-center justify-center text-center">
+              <Bell className="h-8 w-8 text-slate-300 mb-2 animate-pulse" />
+              <p className="text-xs font-bold text-slate-500">All caught up!</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">There are no recent alerts for your organization.</p>
+            </div>
+          ) : (
+            notifications.map((n) => {
+              let Icon = Info;
+              let iconColor = "text-blue-500 bg-blue-50 border-blue-100";
+              if (n.type === "success") {
+                Icon = CheckCircle2;
+                iconColor = "text-emerald-500 bg-emerald-50 border-emerald-100";
+              } else if (n.type === "warning") {
+                Icon = AlertTriangle;
+                iconColor = "text-amber-500 bg-amber-50 border-amber-100";
+              } else if (n.type === "error") {
+                Icon = ShieldAlert;
+                iconColor = "text-rose-500 bg-rose-55 border-rose-100";
+              }
+
+              return (
+                <div 
+                  key={n.id} 
+                  className={`p-3 text-left transition select-none flex gap-3 relative hover:bg-slate-50/70 ${!n.read ? 'bg-blue-50/20' : ''}`}
+                >
+                  {/* Status Indicator Bar */}
+                  {!n.read && (
+                    <div className="absolute left-0 top-0 bottom-0 w-0.5" style={{ backgroundColor: company?.primaryColor || '#2563EB' }}></div>
+                  )}
+
+                  {/* Level Icon */}
+                  <div className={`p-1.5 h-7 w-7 rounded-lg border flex items-center justify-center flex-shrink-0 mt-0.5 ${iconColor}`}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+
+                  {/* Notification Content */}
+                  <div className="flex-1 min-w-0 pr-6">
+                    <p className="text-xs font-extrabold text-slate-800 leading-tight mb-0.5 flex items-center gap-1.5">
+                      {n.title}
+                    </p>
+                    <p className="text-[10px] text-slate-500 leading-normal">{n.message}</p>
+                    <span className="text-[8px] text-slate-400 font-bold tracking-wider uppercase mt-1.5 block">
+                      {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+
+                  {/* Action Panel */}
+                  <div className="absolute right-3 top-3 flex items-center gap-1.5">
+                    {!n.read ? (
+                      <button 
+                        type="button"
+                        onClick={() => handleMarkRead(n.id, true)}
+                        className="p-1 text-slate-400 hover:text-[#0B1329] hover:bg-slate-100 rounded-md transition cursor-pointer"
+                        title="Mark as read"
+                      >
+                        <Check className="h-3 w-3" />
+                      </button>
+                    ) : (
+                      <button 
+                        type="button"
+                        onClick={() => handleMarkRead(n.id, false)}
+                        className="p-1 text-slate-400 hover:text-[#0B1329] hover:bg-slate-100 rounded-md transition cursor-pointer"
+                        title="Mark as unread"
+                      >
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      </button>
+                    )}
+                    <button 
+                      type="button"
+                      onClick={() => handleDeleteNotification(n.id)}
+                      className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition cursor-pointer"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Action Bar */}
+        {notifications.length > 0 && (
+          <div className="p-2 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <button 
+              type="button"
+              onClick={handleMarkAllRead}
+              className="text-[10px] font-extrabold text-blue-600 hover:text-blue-800 px-2 py-1 flex items-center gap-1 cursor-pointer"
+            >
+              <Check className="h-3 w-3" /> Mark all read
+            </button>
+            <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider px-2">
+              Showing last 20 events
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   useEffect(() => {
     // Listen for auth state transitions
     const unsubscribe = initAuth(
@@ -91,13 +343,9 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
         setGoogleToken(token || cachedToken);
         if (currentUser) {
           try {
-            if (!auth.currentUser) {
-              console.log("DEBUG: Firebase Auth is not fully initialized yet. Waiting for auth state to settle.");
-              return;
-            }
             const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
             let userData: any = userDoc.exists()
-              ? userDoc.data()
+              ? { id: userDoc.id, ...userDoc.data() }
               : { id: currentUser.uid, email: currentUser.email || '', role: 'STAFF', companyId: '' };
             
             if (currentUser.email?.toLowerCase() === 'miratechindustries@gmail.com') {
@@ -336,7 +584,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     );
   }
 
-  const isMasterAdmin = currentUser?.role === 'MASTER_ADMIN' || user?.email?.toLowerCase() === 'miratechindustries@gmail.com';
+  const isMasterAdmin = currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' || user?.email?.toLowerCase() === 'miratechindustries@gmail.com';
 
   console.log("DEBUG: Rendering Business Dashboard, currentUser:", currentUser);
   return (
@@ -370,7 +618,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             { id: "reports", label: "Reports & Analytics", icon: BarChart3 },
             { id: "audit_center", label: "Audit Center", icon: ShieldCheck },
             { id: "audit", label: "Audit Logs", icon: ShieldAlert },
-            ...(currentUser?.role === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
+            ...(currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
             { id: "settings", label: "Settings", icon: Settings },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -445,10 +693,22 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             </div>
 
             {/* Notification Icon */}
-            <button className="relative p-1.5 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition cursor-pointer">
-              <Bell className="h-4 w-4 animate-none" />
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full border border-white" style={{ backgroundColor: company?.primaryColor || '#2563EB' }}></span>
-            </button>
+            <div className="relative" ref={desktopBellRef}>
+              <button 
+                type="button"
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                className="relative p-1.5 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition cursor-pointer"
+                title="Notifications"
+              >
+                <Bell className="h-4 w-4 animate-none" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-3.5 min-w-3.5 px-0.5 rounded-full text-[8px] font-extrabold text-white flex items-center justify-center border border-white animate-pulse" style={{ backgroundColor: '#EF4444' }}>
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              {notificationsOpen && renderNotificationsDropdown(false)}
+            </div>
 
             {/* User Profile circle */}
             <div 
@@ -481,6 +741,24 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
           </div>
 
           <div className="flex items-center gap-2.5">
+            {/* Mobile Notification Bell */}
+            <div className="relative" ref={mobileBellRef}>
+              <button 
+                type="button"
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                className="relative p-1.5 hover:bg-slate-50 text-slate-500 hover:text-slate-700 rounded-full transition cursor-pointer"
+                title="Notifications"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-3.5 min-w-3.5 px-0.5 rounded-full text-[8px] font-extrabold text-white flex items-center justify-center border border-white animate-pulse" style={{ backgroundColor: '#EF4444' }}>
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              {notificationsOpen && renderNotificationsDropdown(true)}
+            </div>
+
             <div 
               onClick={() => setActiveTab("settings")}
               className="h-7 w-7 rounded-full text-white font-extrabold text-[10px] flex items-center justify-center cursor-pointer shadow-3xs transition hover:opacity-90"
@@ -530,7 +808,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                   { id: "reports", label: "Reports & Analytics", icon: BarChart3 },
                   { id: "audit_center", label: "Audit Center", icon: ShieldCheck },
                   { id: "audit", label: "Audit Logs", icon: ShieldAlert },
-                  ...(currentUser?.role === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
+                  ...(currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
                   { id: "settings", label: "Settings", icon: Settings },
                 ].map((tab) => {
                   const Icon = tab.icon;

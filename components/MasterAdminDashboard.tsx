@@ -54,7 +54,7 @@ export default function MasterAdminDashboard() {
     fetchCounts();
   }, []);
 
-  if (currentUser?.role !== 'MASTER_ADMIN' && currentUser?.email?.toLowerCase() !== 'miratechindustries@gmail.com') {
+  if (currentUser?.role?.toUpperCase() !== 'MASTER_ADMIN' && currentUser?.email?.toLowerCase() !== 'miratechindustries@gmail.com') {
     return <div className="p-10 text-center font-sans text-slate-500">Access Denied</div>;
   }
 

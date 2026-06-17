@@ -35,7 +35,7 @@ export default function AuditLogs({ userLogsOnly = false }: AuditLogsProps = {})
 
   // Determine if the operator has Master Admin credentials
   const isMasterAdmin = 
-    currentUser?.role === "MASTER_ADMIN" || 
+    currentUser?.role?.toUpperCase() === "MASTER_ADMIN" || 
     auth.currentUser?.email?.toLowerCase() === "miratechindustries@gmail.com";
 
   useEffect(() => {

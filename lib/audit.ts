@@ -54,4 +54,47 @@ export async function logAction(action: string, detail: string, businessId: stri
   }
 
   await addDoc(collection(db, "audit_logs"), payload);
+
+  // Auto-generate a multi-tenant notification from the audit log
+  try {
+    let type: "info" | "success" | "warning" | "error" = "info";
+    const lowercaseAction = action.toLowerCase();
+    
+    if (
+      lowercaseAction.includes("create") || 
+      lowercaseAction.includes("add") || 
+      lowercaseAction.includes("success") || 
+      lowercaseAction.includes("paid") || 
+      lowercaseAction.includes("complete")
+    ) {
+      type = "success";
+    } else if (
+      lowercaseAction.includes("delete") || 
+      lowercaseAction.includes("remove") || 
+      lowercaseAction.includes("reject") || 
+      lowercaseAction.includes("cancel") || 
+      lowercaseAction.includes("error") || 
+      lowercaseAction.includes("fail")
+    ) {
+      type = "error";
+    } else if (
+      lowercaseAction.includes("update") || 
+      lowercaseAction.includes("edit") || 
+      lowercaseAction.includes("modify") || 
+      lowercaseAction.includes("warn")
+    ) {
+      type = "warning";
+    }
+
+    await addDoc(collection(db, "notifications"), {
+      businessId,
+      title: action,
+      message: detail,
+      read: false,
+      createdAt: new Date().toISOString(),
+      type
+    });
+  } catch (err) {
+    console.error("Failed to write to notifications collection from audit log:", err);
+  }
 }

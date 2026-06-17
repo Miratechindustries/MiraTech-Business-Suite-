@@ -154,7 +154,7 @@ export default function AuditCenter() {
   });
 
   const isMasterAdmin = 
-    currentUser?.role === "MASTER_ADMIN" || 
+    currentUser?.role?.toUpperCase() === "MASTER_ADMIN" || 
     auth.currentUser?.email?.toLowerCase() === "miratechindustries@gmail.com";
 
   // Load user business & bootstrap tenant profiles if master admin

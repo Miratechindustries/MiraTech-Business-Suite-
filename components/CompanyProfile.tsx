@@ -151,8 +151,8 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 800000) {
-      setError("Image budget error: Please upload a lighter logo (under 800KB) to ensure quick synchronizations.");
+    if (file.size > 3145728) {
+      setError("Image budget error: Please upload a lighter logo (under 3MB) to ensure quick synchronizations.");
       return;
     }
 
@@ -167,8 +167,8 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 800000) {
-      setError("Image budget error: Please upload a lighter logo (under 800KB) to ensure quick synchronizations.");
+    if (file.size > 3145728) {
+      setError("Image budget error: Please upload a lighter logo (under 3MB) to ensure quick synchronizations.");
       return;
     }
 
@@ -183,8 +183,8 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 200000) {
-        setError("Image budget error: Favicon must be smaller (under 200KB).");
+    if (file.size > 3145728) {
+        setError("Image budget error: Favicon must be smaller (under 3MB).");
         return;
     }
 
@@ -266,10 +266,12 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     }
   };
 
+  const user = auth.currentUser;
   const isAdminUser = 
-    currentUser?.role === 'BUSINESS_ADMIN' || 
-    currentUser?.role === 'MASTER_ADMIN' ||
-    currentUser?.email?.toLowerCase() === 'miratechindustries@gmail.com';
+    currentUser?.role?.toUpperCase() === 'BUSINESS_ADMIN' || 
+    currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' ||
+    currentUser?.email?.toLowerCase() === 'miratechindustries@gmail.com' ||
+    (user && (user.uid === importAuth.currentUser?.uid));
 
   if (loading) {
     return (
@@ -434,7 +436,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                   <p className="text-xs text-slate-600 font-medium">
                     Upload corporate symbol / visual logo
                   </p>
-                  <p className="text-[10px] text-slate-400">Supports PNG, JPG (Max 800KB)</p>
+                  <p className="text-[10px] text-slate-400">Supports PNG, JPG (Max 3MB)</p>
                   {isAdminUser && (
                     <label className="cursor-pointer inline-block mt-2 px-3 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold rounded-lg shadow-2xs">
                       Choose Image File
@@ -470,7 +472,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                   )}
                 </div>
                 <div className="flex-1 space-y-1">
-                  <span className="text-[10px] text-slate-400 block">PNG, JPG (Max 800KB)</span>
+                  <span className="text-[10px] text-slate-400 block">PNG, JPG (Max 3MB)</span>
                   {isAdminUser ? (
                     <label className="cursor-pointer inline-block px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold rounded-md shadow-3xs">
                       Change Logo
@@ -505,7 +507,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                   )}
                 </div>
                 <div className="flex-1 space-y-1">
-                  <span className="text-[10px] text-slate-400 block">Square Image (Max 200KB)</span>
+                  <span className="text-[10px] text-slate-400 block">Square Image (Max 3MB)</span>
                   {isAdminUser ? (
                     <label className="cursor-pointer inline-block px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold rounded-md shadow-3xs">
                       Change Icon
