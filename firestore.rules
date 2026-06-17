@@ -1,6 +1,11 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Global Safety Net (Strictly Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // --- Helpers ---
     function isSignedIn() {
       return request.auth != null;
@@ -10,7 +15,7 @@ service cloud.firestore {
       return isSignedIn() && 
         request.auth.token != null && 
         'email' in request.auth.token && 
-        request.auth.token.email.matches('(?i)miratechindustries@gmail\\.com');
+        request.auth.token.email == 'miratechindustries@gmail.com';
     }
 
     function isMasterAdmin() {
@@ -76,27 +81,39 @@ service cloud.firestore {
 
     // 4. Multi-tenant flat collections (Expenses, Customers, Products, Audit Logs, etc.)
     match /{collectionName}/{docId} {
-      allow read, write: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications']) && (
+      allow read: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications']) && (
         isMasterAdmin() ||
-        (resource != null && (
-          resource.data.get('businessId', '') == request.auth.uid ||
-          resource.data.get('companyId', '') == request.auth.uid ||
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-            resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-            resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
-            resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-            resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
-          ))
-        )) ||
-        (request.resource != null && (
-          request.resource.data.get('businessId', '') == request.auth.uid ||
-          request.resource.data.get('companyId', '') == request.auth.uid ||
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-            request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-            request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
-            request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-            request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
-          ))
+        resource.data.get('businessId', '') == request.auth.uid ||
+        resource.data.get('companyId', '') == request.auth.uid ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
+          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+        ))
+      );
+
+      allow create, update: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications']) && (
+        isMasterAdmin() ||
+        request.resource.data.get('businessId', '') == request.auth.uid ||
+        request.resource.data.get('companyId', '') == request.auth.uid ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
+          request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+        ))
+      );
+
+      allow delete: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications']) && (
+        isMasterAdmin() ||
+        resource.data.get('businessId', '') == request.auth.uid ||
+        resource.data.get('companyId', '') == request.auth.uid ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
+          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
         ))
       );
     }

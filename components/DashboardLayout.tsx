@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { User } from "firebase/auth";
 import { googleSignIn, logout, auth, initAuth, emailSignIn, handleFirestoreError, OperationType } from "../lib/firebase";
-import { getDoc, doc, collection, query, where, orderBy, limit, onSnapshot, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
+import { getDoc, doc, collection, query, where, orderBy, limit, onSnapshot, updateDoc, deleteDoc, addDoc, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
 import { 
@@ -344,9 +344,33 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
         if (currentUser) {
           try {
             const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-            let userData: any = userDoc.exists()
-              ? { id: userDoc.id, ...userDoc.data() }
-              : { id: currentUser.uid, email: currentUser.email || '', role: 'STAFF', companyId: '' };
+            let userData: any;
+
+            const isGoogleUser = currentUser.providerData?.some(p => p.providerId === 'google.com') || false;
+            
+            if (!userDoc.exists()) {
+              // If user profile is not saved in Firestore at all (meaning no company is assigned either),
+              // we auto-register them as a STAFF user with empty companyId so they appear in User Management roster.
+              const isMaster = currentUser.email?.toLowerCase() === 'miratechindustries@gmail.com';
+              const newUserPayload = {
+                email: currentUser.email || '',
+                role: isMaster ? 'MASTER_ADMIN' : 'STAFF',
+                companyId: '',
+                businessId: '',
+                isGoogleUser,
+                status: 'ACTIVE',
+                createdAt: new Date().toISOString()
+              };
+              await setDoc(doc(db, 'users', currentUser.uid), newUserPayload);
+              userData = { id: currentUser.uid, ...newUserPayload };
+              console.log("DEBUG: Auto-registered user in Firestore:", userData);
+            } else {
+              userData = { id: userDoc.id, ...userDoc.data() };
+              // Support legacy businessId mapping
+              if (!userData.companyId && userData.businessId) {
+                userData.companyId = userData.businessId;
+              }
+            }
             
             if (currentUser.email?.toLowerCase() === 'miratechindustries@gmail.com') {
               userData = { ...userData, role: 'MASTER_ADMIN' };
