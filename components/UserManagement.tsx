@@ -33,6 +33,9 @@ export default function UserManagement() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editRole, setEditRole] = useState<Role>('STAFF');
+  const [editCompanyId, setEditCompanyId] = useState('');
 
   const fetchData = async () => {
     try {
@@ -45,6 +48,27 @@ export default function UserManagement() {
       setUsers(usersData);
     } catch (err) {
       console.error("Error loading user management directory:", err);
+    }
+  };
+
+  const startEdit = (user: any) => {
+    setEditingUserId(user.id);
+    setEditRole(user.role || 'STAFF');
+    setEditCompanyId(user.companyId || '');
+  };
+
+  const saveEdit = async (userId: string) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), {
+        role: editRole,
+        companyId: editCompanyId,
+        businessId: editCompanyId, // Supporting legacy
+      });
+      fetchData();
+      setEditingUserId(null);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update user');
     }
   };
 
@@ -313,18 +337,41 @@ export default function UserManagement() {
                     <tr key={u.id} className="hover:bg-slate-50/45 transition">
                       <td className="p-3 font-semibold text-slate-800">{u.email}</td>
                       <td className="p-3 font-bold text-[10px]">
-                        <span className={`px-2 py-0.5 rounded-full font-bold uppercase border tracking-wider ${
-                          u.role === 'MASTER_ADMIN' 
-                            ? 'bg-rose-50 text-rose-700 border-rose-100' 
-                            : u.role === 'BUSINESS_ADMIN' 
-                              ? 'bg-blue-50 text-blue-700 border-blue-105' 
-                              : 'bg-amber-50 text-amber-700 border-amber-105'
-                        }`}>
-                          {u.role || 'STAFF'}
-                        </span>
+                        {editingUserId === u.id ? (
+                          <select 
+                            value={editRole} 
+                            onChange={(e) => setEditRole(e.target.value as Role)}
+                            className="text-[10px] font-bold border border-slate-300 rounded p-1"
+                          >
+                            <option value="STAFF">STAFF</option>
+                            <option value="BUSINESS_ADMIN">BUSINESS_ADMIN</option>
+                            <option value="MASTER_ADMIN">MASTER_ADMIN</option>
+                          </select>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded-full font-bold uppercase border tracking-wider ${
+                            u.role === 'MASTER_ADMIN' 
+                              ? 'bg-rose-50 text-rose-700 border-rose-100' 
+                              : u.role === 'BUSINESS_ADMIN' 
+                                ? 'bg-blue-50 text-blue-700 border-blue-105' 
+                                : 'bg-amber-50 text-amber-700 border-amber-105'
+                          }`}>
+                            {u.role || 'STAFF'}
+                          </span>
+                        )}
                       </td>
                       <td className="p-3 font-medium text-slate-600">
-                        {companies.find(c => c.id === u.companyId)?.name || 'Direct / System Node'}
+                        {editingUserId === u.id ? (
+                          <select 
+                            value={editCompanyId} 
+                            onChange={(e) => setEditCompanyId(e.target.value)}
+                            className="text-[10px] font-bold border border-slate-300 rounded p-1 w-full"
+                          >
+                            <option value="">Direct / System Node</option>
+                            {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        ) : (
+                          companies.find(c => c.id === u.companyId)?.name || 'Direct / System Node'
+                        )}
                       </td>
                       <td className="p-3 font-mono text-xs">
                         {u.rawPassword ? (
@@ -348,33 +395,41 @@ export default function UserManagement() {
                         )}
                       </td>
                       <td className="p-3 text-right pr-6 space-x-2">
-                        {u.role !== 'MASTER_ADMIN' && u.email?.toLowerCase() !== 'miratechindustries@gmail.com' ? (
+                        {editingUserId === u.id ? (
                           <>
-                            {u.status === 'DEACTIVATED' ? (
-                              <button 
-                                onClick={() => handleActivate(u.id)} 
-                                className="text-[11px] font-extrabold text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 px-2 py-1 rounded transition cursor-pointer"
-                              >
-                                Activate
-                              </button>
-                            ) : (
-                              <button 
-                                onClick={() => handleDeactivate(u.id)} 
-                                className="text-[11px] font-extrabold text-slate-550 hover:text-slate-705 hover:bg-slate-100/70 px-2 py-1 rounded transition cursor-pointer"
-                              >
-                                Deactivate
-                              </button>
-                            )}
-                            <button 
-                              onClick={() => handleDeleteUser(u.id)} 
-                              className="inline-flex items-center justify-center p-1.5 text-red-550 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                              title="Permanently Delete User"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <button onClick={() => saveEdit(u.id)} className="text-[11px] font-extrabold text-blue-600 hover:text-blue-800">Save</button>
+                            <button onClick={() => setEditingUserId(null)} className="text-[11px] font-extrabold text-slate-500 hover:text-slate-700">Cancel</button>
                           </>
                         ) : (
-                          <span className="text-[10px] text-slate-400 font-semibold italic">Locked System super</span>
+                          <>
+                            <button onClick={() => startEdit(u)} className="text-[11px] font-extrabold text-indigo-600 hover:text-indigo-800">Edit</button>
+                            {u.role !== 'MASTER_ADMIN' && u.email?.toLowerCase() !== 'miratechindustries@gmail.com' && (
+                                <>
+                                  {u.status === 'DEACTIVATED' ? (
+                                    <button 
+                                      onClick={() => handleActivate(u.id)} 
+                                      className="text-[11px] font-extrabold text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 px-2 py-1 rounded transition cursor-pointer"
+                                    >
+                                      Activate
+                                    </button>
+                                  ) : (
+                                    <button 
+                                      onClick={() => handleDeactivate(u.id)} 
+                                      className="text-[11px] font-extrabold text-slate-550 hover:text-slate-705 hover:bg-slate-100/70 px-2 py-1 rounded transition cursor-pointer"
+                                    >
+                                      Deactivate
+                                    </button>
+                                  )}
+                                  <button 
+                                    onClick={() => handleDeleteUser(u.id)} 
+                                    className="inline-flex items-center justify-center p-1.5 text-red-550 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                                    title="Permanently Delete User"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                            )}
+                          </>
                         )}
                       </td>
                     </tr>
