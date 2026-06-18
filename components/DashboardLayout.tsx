@@ -35,7 +35,8 @@ import {
   Trash2,
   AlertTriangle,
   CheckCircle2,
-  Info
+  Info,
+  Coins
 } from "lucide-react";
 
 // Subcomponents
@@ -53,6 +54,7 @@ import ReportsAnalytics from "./ReportsAnalytics";
 import AuditLogs from "./AuditLogs";
 import MasterAdminDashboard from "./MasterAdminDashboard";
 import MasterAdminLayout from "./MasterAdminLayout";
+import PayrollAndHR from "./PayrollAndHR";
 
 interface CompanyData {
   ownerId: string;
@@ -668,6 +670,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
             { id: "inventory", label: "Inventory", icon: Box },
             { id: "clients", label: "Clients", icon: Users },
+            { id: "payroll", label: "HR and Payroll", icon: Coins },
             { id: "quotations", label: "Quotations", icon: FileText },
             { id: "invoices", label: "Invoices", icon: Receipt },
             { id: "receipts", label: "Receipts", icon: CheckSquare },
@@ -858,6 +861,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
                   { id: "inventory", label: "Inventory", icon: Box },
                   { id: "clients", label: "Clients", icon: Users },
+                  { id: "payroll", label: "HR and Payroll", icon: Coins },
                   { id: "quotations", label: "Quotations", icon: FileText },
                   { id: "invoices", label: "Invoices", icon: Receipt },
                   { id: "receipts", label: "Receipts", icon: CheckSquare },
@@ -974,6 +978,8 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                 {activeTab === "inventory" && <Inventory />}
 
                 {activeTab === "clients" && <Customers />}
+
+                {activeTab === "payroll" && <PayrollAndHR />}
 
                 {activeTab === "quotations" && <Quotations />}
 

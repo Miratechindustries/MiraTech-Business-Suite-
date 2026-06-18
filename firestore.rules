@@ -1,45 +1,50 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Global Safety Net (Strictly Default-Deny Catch-All)
+
+    // =========================================================================
+    // PRINCIPLE 1: Default-Deny Access Control (Zero Trust Firewall)
+    // Global lock: explicitly block any unrouted access or wildcard paths. No
+    // client can query or read documents unless explicitly allowed in sub-rules.
+    // =========================================================================
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // --- Helpers ---
+    // =========================================================================
+    // PRINCIPLE 2: Cryptographic Identity & Active Session Validation (Authentication)
+    // Ensures that only validated sessions are capable of traversing rules.
+    // =========================================================================
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null && request.auth.uid != null;
     }
     
     function isMiratechEmail() {
       return isSignedIn() && (
-        (request.auth.token.email != null && request.auth.token.email == 'miratechindustries@gmail.com') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('email', '') == 'miratechindustries@gmail.com')
+        (request.auth.token.email != null && request.auth.token.email.matches('(?i)miratechindustries@gmail.com')) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('email', '').matches('(?i)miratechindustries@gmail.com'))
       );
     }
 
     function isMasterAdmin() {
       return isSignedIn() && (
         isMiratechEmail() ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'MASTER_ADMIN')
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF').matches('(?i)MASTER_ADMIN'))
       );
     }
 
+    // =========================================================================
+    // PRINCIPLE 3 & 4: Tenant Boundary Isolation & Role-Based Least Privilege (RBAC Engine)
+    // Validates that standard administrators can only read/edit their assigned core profiles.
+    // =========================================================================
     function isAuthorizedAdminForCompany(companyId) {
       return isSignedIn() && (
         isMasterAdmin() ||
         request.auth.uid == companyId ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          (
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'BUSINESS_ADMIN' || 
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'Business Admin' || 
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'business_admin' || 
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'business admin' || 
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'Business_Admin' || 
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'BUSINESS-ADMIN' || 
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'business-admin' || 
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'Business-Admin'
-          ) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF').matches('(?i)(BUSINESS_ADMIN|BUSINESS-ADMIN|BUSINESS ADMIN)') && (
             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == companyId ||
             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId
           )
@@ -47,13 +52,15 @@ service cloud.firestore {
       );
     }
 
-    // --- Collections ---
-
-    // 1. Companies & Nested subcollections (Quotation, Invoice, Receipt)
+    // =========================================================================
+    // PATH SEGMENTATION: Companies & Nested Subcollections
+    // =========================================================================
     match /companies/{companyId} {
       allow read: if isSignedIn() && (
         isMasterAdmin() ||
+        request.auth.token.email == 'miratechindustries@gmail.com' ||
         request.auth.uid == companyId ||
+        isAuthorizedAdminForCompany(companyId) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == companyId ||
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId
@@ -83,7 +90,6 @@ service cloud.firestore {
       }
     }
 
-    // 2. Businesses
     match /businesses/{businessId} {
       allow read: if isSignedIn() && (
         isMasterAdmin() ||
@@ -97,7 +103,10 @@ service cloud.firestore {
       allow write: if isAuthorizedAdminForCompany(businessId);
     }
 
-    // 3. Users (Individual profile)
+    // =========================================================================
+    // PRINCIPLE 7: Privilege Escalation Prevention & Anti-Tampering (Defense-in-depth)
+    // Block standard users from promoting their own security context or changing tenants.
+    // =========================================================================
     match /users/{userId} {
       allow read: if isSignedIn() && (
         request.auth.uid == userId || 
@@ -107,16 +116,68 @@ service cloud.firestore {
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == resource.data.get('businessId', resource.data.get('companyId', ''))
         ))
       );
-      allow create, update: if isSignedIn() && (
-        request.auth.uid == userId || 
+      
+      allow create: if isSignedIn() && (
+        request.auth.uid == userId && (
+          isMasterAdmin() || (
+            request.resource.data.get('role', 'STAFF').matches('(?i)STAFF')
+          )
+        ) ||
         isMasterAdmin()
       );
+      
+      allow update: if isSignedIn() && (
+        request.auth.uid == userId && (
+          isMasterAdmin() || (
+            (!request.resource.data.keys().hasAny(['role']) || request.resource.data.get('role', 'STAFF') == resource.data.get('role', 'STAFF')) &&
+            (!request.resource.data.keys().hasAny(['businessId']) || request.resource.data.get('businessId', '') == resource.data.get('businessId', '')) &&
+            (!request.resource.data.keys().hasAny(['companyId']) || request.resource.data.get('companyId', '') == resource.data.get('companyId', ''))
+          )
+        ) || 
+        isMasterAdmin()
+      );
+      
       allow delete: if isSignedIn() && isMasterAdmin();
     }
 
-    // 4. Multi-tenant flat collections (Expenses, Customers, Products, Audit Logs, etc.)
+    // =========================================================================
+    // PRINCIPLE 5: Non-Repudiation Immutable Logging (Auditing Firewall)
+    // Strictly write-once/append-only. Nobody can delete or tamper with audit records.
+    // =========================================================================
+    match /audit_logs/{logId} {
+      allow read: if isSignedIn() && (
+        isMasterAdmin() ||
+        resource.data.get('businessId', '') == request.auth.uid ||
+        resource.data.get('companyId', '') == request.auth.uid ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
+          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+        ))
+      );
+      
+      allow create: if isSignedIn() && (
+        isMasterAdmin() ||
+        request.resource.data.get('businessId', '') == request.auth.uid ||
+        request.resource.data.get('companyId', '') == request.auth.uid ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
+          request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+        ))
+      );
+      
+      allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // PRINCIPLE 6: Deep Content & Payload Schema Inspection
+    // Enforcing required tenant structures on insertions to block malformed/orphan injections.
+    // =========================================================================
     match /{collectionName}/{docId} {
-      allow read: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications', 'general_ledger', 'journal_entries']) && (
+      allow read: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'notifications', 'general_ledger', 'journal_entries', 'employees', 'payslips']) && (
         isMasterAdmin() ||
         resource.data.get('businessId', '') == request.auth.uid ||
         resource.data.get('companyId', '') == request.auth.uid ||
@@ -128,19 +189,22 @@ service cloud.firestore {
         ))
       );
 
-      allow create, update: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications', 'general_ledger', 'journal_entries']) && (
-        isMasterAdmin() ||
-        request.resource.data.get('businessId', '') == request.auth.uid ||
-        request.resource.data.get('companyId', '') == request.auth.uid ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-          request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-          request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
-          request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-          request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
-        ))
+      allow create, update: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'notifications', 'general_ledger', 'journal_entries', 'employees', 'payslips']) && (
+        (request.resource.data.get('businessId', '') != '' || request.resource.data.get('companyId', '') != '') &&
+        (
+          isMasterAdmin() ||
+          request.resource.data.get('businessId', '') == request.auth.uid ||
+          request.resource.data.get('companyId', '') == request.auth.uid ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+            request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+            request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
+            request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+            request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+          ))
+        )
       );
 
-      allow delete: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications', 'general_ledger', 'journal_entries']) && (
+      allow delete: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'notifications', 'general_ledger', 'journal_entries', 'employees', 'payslips']) && (
         isMasterAdmin() ||
         resource.data.get('businessId', '') == request.auth.uid ||
         resource.data.get('companyId', '') == request.auth.uid ||

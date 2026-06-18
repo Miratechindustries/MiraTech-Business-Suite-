@@ -153,9 +153,9 @@ export default async function safeHtml2Canvas(element: HTMLElement, options: any
     for (let i = 0; i < rules.length; i++) {
       const rule = rules[i];
       if (rule && rule.cssText && /oklch|oklab/i.test(rule.cssText)) {
-        // If it's a style rule, we let it through if we can convert its cssText dynamically,
-        // but if we are not converting cssText globally or if it's an unsupported block, we filter it.
-        // To be absolutely safe, we will rewrite cssText via the CSSRule.prototype interceptor.
+        // Force-filter rules containing oklch/oklab to prevent html2canvas CSS parser from crashing.
+        // getComputedStyle is already intercepted and proxied to return safe rgb/rgba fallbacks.
+        continue;
       }
       filtered.push(rule);
     }

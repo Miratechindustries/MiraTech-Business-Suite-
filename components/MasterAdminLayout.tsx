@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useUserStore } from "../lib/store";
 import { logout } from "../lib/firebase";
-import { LayoutDashboard, Users, Building2, ShieldAlert, LogOut, FileText } from "lucide-react";
+import { LayoutDashboard, Users, Building2, ShieldAlert, LogOut, FileText, ShieldCheck } from "lucide-react";
 import LoadingSkeleton from "./LoadingSkeleton";
 
 const MasterAdminDashboard = dynamic(() => import("./MasterAdminDashboard"), { loading: () => <LoadingSkeleton /> });
@@ -12,6 +12,7 @@ const UserManagement = dynamic(() => import("./UserManagement"), { loading: () =
 const AuditLogs = dynamic(() => import("./AuditLogs"), { loading: () => <LoadingSkeleton /> });
 const CompanyCreation = dynamic(() => import("./CompanyCreation"), { loading: () => <LoadingSkeleton /> });
 const CompaniesTable = dynamic(() => import("./CompaniesTable"), { loading: () => <LoadingSkeleton /> });
+const SecurityOperations = dynamic(() => import("./SecurityOperations"), { loading: () => <LoadingSkeleton /> });
 
 export default function MasterAdminLayout() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -55,6 +56,7 @@ export default function MasterAdminLayout() {
     { id: "companies", label: "Companies", icon: Building2 },
     { id: "createCompany", label: "Create Company", icon: FileText },
     { id: "logs", label: "Audit Logs", icon: ShieldAlert },
+    { id: "security", label: "Cyber Security Shield", icon: ShieldCheck },
   ];
 
   const NavItem = ({ tab }: { tab: typeof navItems[0] }) => {
@@ -159,6 +161,7 @@ export default function MasterAdminLayout() {
           {activeTab === "companies" && <CompaniesTable />}
           {activeTab === "createCompany" && <CompanyCreation />}
           {activeTab === "logs" && <AuditLogs />}
+          {activeTab === "security" && <SecurityOperations />}
         </main>
       </div>
     </div>
