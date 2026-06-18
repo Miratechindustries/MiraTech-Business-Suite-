@@ -20,6 +20,7 @@ interface CompanyData {
   primaryColor: string;
   secondaryColor: string;
   useCompanyLetterhead?: boolean;
+  inactivityTimeout?: number;
 }
 
 interface CompanyProfileProps {
@@ -96,6 +97,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
           setPrimaryColor(data.primaryColor || "#0F172A");
           setSecondaryColor(data.secondaryColor || "#3B82F6");
           setUseCompanyLetterhead(data.useCompanyLetterhead || false);
+          if (typeof data.inactivityTimeout === "number") {
+            setInactivityTimeout(data.inactivityTimeout);
+            localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
+          }
           localStorage.setItem(`miratech_offline_company_${user.uid}`, JSON.stringify(data));
           if (onCompanyLoaded) onCompanyLoaded(data);
         } else {
@@ -112,6 +117,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             setPrimaryColor(data.primaryColor || "#0F172A");
             setSecondaryColor(data.secondaryColor || "#3B82F6");
             setUseCompanyLetterhead(data.useCompanyLetterhead || false);
+            if (typeof data.inactivityTimeout === "number") {
+              setInactivityTimeout(data.inactivityTimeout);
+              localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
+            }
             if (onCompanyLoaded) onCompanyLoaded(data);
           } else {
             if (onCompanyLoaded) onCompanyLoaded(null);
@@ -133,6 +142,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             setPrimaryColor(data.primaryColor || "#0F172A");
             setSecondaryColor(data.secondaryColor || "#3B82F6");
             setUseCompanyLetterhead(data.useCompanyLetterhead || false);
+            if (typeof data.inactivityTimeout === "number") {
+              setInactivityTimeout(data.inactivityTimeout);
+              localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
+            }
             if (onCompanyLoaded) onCompanyLoaded(data);
           } else {
             if (onCompanyLoaded) onCompanyLoaded(null);
@@ -217,6 +230,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
       primaryColor,
       secondaryColor,
       useCompanyLetterhead,
+      inactivityTimeout,
     };
 
     const companyDocPath = `companies/${user.uid}`;
@@ -267,10 +281,18 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     }
   };
 
+  const normalizeRole = (role?: string) => {
+    if (!role) return "";
+    return role.toLowerCase().replace(/[\s_-]+/g, "");
+  };
+
   const user = auth.currentUser;
+  const isRoleBusinessAdmin = normalizeRole(currentUser?.role) === "businessadmin";
+  const isRoleMasterAdmin = normalizeRole(currentUser?.role) === "masteradmin";
+
   const isAdminUser = 
-    currentUser?.role?.toUpperCase() === 'BUSINESS_ADMIN' || 
-    currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' ||
+    isRoleBusinessAdmin || 
+    isRoleMasterAdmin ||
     currentUser?.email?.toLowerCase() === 'miratechindustries@gmail.com' ||
     (user && (user.uid === importAuth.currentUser?.uid));
 

@@ -12,10 +12,10 @@ service cloud.firestore {
     }
     
     function isMiratechEmail() {
-      return isSignedIn() && 
-        request.auth.token != null && 
-        'email' in request.auth.token && 
-        request.auth.token.email == 'miratechindustries@gmail.com';
+      return isSignedIn() && (
+        (request.auth.token != null && 'email' in request.auth.token && request.auth.token.email == 'miratechindustries@gmail.com') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('email', '') == 'miratechindustries@gmail.com')
+      );
     }
 
     function isMasterAdmin() {
@@ -25,11 +25,33 @@ service cloud.firestore {
       );
     }
 
+    function isAuthorizedAdminForCompany(companyId) {
+      return isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == companyId ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'BUSINESS_ADMIN' || 
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'Business Admin' || 
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'business_admin' || 
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'business admin' || 
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'Business_Admin' || 
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'BUSINESS-ADMIN' || 
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'business-admin' || 
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF') == 'Business-Admin'
+          ) && (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == companyId ||
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId
+          )
+        )
+      );
+    }
+
     // --- Collections ---
 
     // 1. Companies & Nested subcollections (Quotation, Invoice, Receipt)
     match /companies/{companyId} {
-      allow read, write: if isSignedIn() && (
+      allow read: if isSignedIn() && (
         isMasterAdmin() ||
         request.auth.uid == companyId ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
@@ -38,8 +60,19 @@ service cloud.firestore {
         ))
       );
       
+      allow write: if isAuthorizedAdminForCompany(companyId);
+      
       match /{allSubcollections=**} {
-        allow read, write: if isSignedIn() && (
+        allow read: if isSignedIn() && (
+          isMasterAdmin() ||
+          request.auth.uid == companyId ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == companyId ||
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId
+          ))
+        );
+        
+        allow write: if isSignedIn() && (
           isMasterAdmin() ||
           request.auth.uid == companyId ||
           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
@@ -52,7 +85,7 @@ service cloud.firestore {
 
     // 2. Businesses
     match /businesses/{businessId} {
-      allow read, write: if isSignedIn() && (
+      allow read: if isSignedIn() && (
         isMasterAdmin() ||
         request.auth.uid == businessId ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
@@ -60,6 +93,8 @@ service cloud.firestore {
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == businessId
         ))
       );
+      
+      allow write: if isAuthorizedAdminForCompany(businessId);
     }
 
     // 3. Users (Individual profile)
@@ -81,7 +116,7 @@ service cloud.firestore {
 
     // 4. Multi-tenant flat collections (Expenses, Customers, Products, Audit Logs, etc.)
     match /{collectionName}/{docId} {
-      allow read: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications']) && (
+      allow read: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications', 'general_ledger', 'journal_entries']) && (
         isMasterAdmin() ||
         resource.data.get('businessId', '') == request.auth.uid ||
         resource.data.get('companyId', '') == request.auth.uid ||
@@ -93,7 +128,7 @@ service cloud.firestore {
         ))
       );
 
-      allow create, update: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications']) && (
+      allow create, update: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications', 'general_ledger', 'journal_entries']) && (
         isMasterAdmin() ||
         request.resource.data.get('businessId', '') == request.auth.uid ||
         request.resource.data.get('companyId', '') == request.auth.uid ||
@@ -105,7 +140,7 @@ service cloud.firestore {
         ))
       );
 
-      allow delete: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications']) && (
+      allow delete: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'audit_logs', 'notifications', 'general_ledger', 'journal_entries']) && (
         isMasterAdmin() ||
         resource.data.get('businessId', '') == request.auth.uid ||
         resource.data.get('companyId', '') == request.auth.uid ||

@@ -61,6 +61,7 @@ interface CompanyData {
   phone: string;
   address: string;
   letterheadLogo: string;
+  inactivityTimeout?: number;
 }
 
 interface DashboardLayoutProps {
@@ -83,6 +84,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   const [remainingTime, setRemainingTime] = useState(60);
 
   const lastActivityRef = useRef<number>(Date.now());
+  const companyUnsubscribeRef = useRef<(() => void) | null>(null);
   const isWarningShownRef = useRef<boolean>(false);
 
   const { setCurrentUser, currentUser } = useUserStore();
@@ -117,7 +119,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
       });
       setNotifications(list);
     }, (err) => {
-      console.error("Failed to fetch notifications in layout:", err);
+      console.warn("[DashboardLayout Info] Notifications lookup transition pattern:", err.message);
     });
 
     return () => unsubscribe();
@@ -381,20 +383,40 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             setCurrentUser(userData);
             console.log("DEBUG: setCurrentUser called with:", userData);
 
-            // Dynamically load company profile to populate sidebar / branding
+            // Dynamically listen to company profile to populate sidebar / branding in real time
             const targetCompanyId = userData.companyId || userData.businessId || currentUser.uid;
+            if (companyUnsubscribeRef.current) {
+              companyUnsubscribeRef.current();
+              companyUnsubscribeRef.current = null;
+            }
             if (targetCompanyId) {
-              const compSnap = await getDoc(doc(db, "companies", targetCompanyId));
-              if (compSnap.exists()) {
-                setCompany(compSnap.data() as CompanyData);
-              } else {
-                const bizSnap = await getDoc(doc(db, "businesses", targetCompanyId));
-                if (bizSnap.exists()) {
-                  setCompany(bizSnap.data() as CompanyData);
+              companyUnsubscribeRef.current = onSnapshot(doc(db, "companies", targetCompanyId), (compSnap) => {
+                if (compSnap.exists()) {
+                  const data = compSnap.data() as CompanyData;
+                  setCompany(data);
+                  if (typeof data.inactivityTimeout === "number") {
+                    localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
+                  }
                 } else {
-                  setCompany(null);
+                  // Fallback to businesses
+                  const unsubBiz = onSnapshot(doc(db, "businesses", targetCompanyId), (bizSnap) => {
+                    if (bizSnap.exists()) {
+                      const data = bizSnap.data() as CompanyData;
+                      setCompany(data);
+                      if (typeof data.inactivityTimeout === "number") {
+                        localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
+                      }
+                    } else {
+                      setCompany(null);
+                    }
+                  }, (err) => {
+                    console.warn("[DashboardLayout Info] Reading business profile locally or waiting for replication:", err.message);
+                  });
+                  companyUnsubscribeRef.current = unsubBiz;
                 }
-              }
+              }, (err) => {
+                console.warn("[DashboardLayout Info] Reading company profile locally or waiting for replication:", err.message);
+              });
             }
           } catch (err) {
             handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`);
@@ -412,7 +434,12 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
         setAuthLoading(false);
       }
     );
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (companyUnsubscribeRef.current) {
+        companyUnsubscribeRef.current();
+      }
+    };
   }, [setCurrentUser]);
 
   useEffect(() => {
@@ -427,6 +454,11 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
     const getLimit = () => {
       if (typeof window === "undefined") return 900;
+      if (company && typeof company.inactivityTimeout === "number") {
+        const timeout = company.inactivityTimeout;
+        localStorage.setItem("mira_inactivity_timeout", String(timeout));
+        return timeout;
+      }
       const stored = localStorage.getItem("mira_inactivity_timeout");
       return stored ? Number(stored) : 900; // default 15 minutes
     };
