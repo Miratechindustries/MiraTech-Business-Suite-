@@ -13,7 +13,7 @@ service cloud.firestore {
     
     function isMiratechEmail() {
       return isSignedIn() && (
-        (request.auth.token != null && 'email' in request.auth.token && request.auth.token.email == 'miratechindustries@gmail.com') ||
+        (request.auth.token.email != null && request.auth.token.email == 'miratechindustries@gmail.com') ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('email', '') == 'miratechindustries@gmail.com')
       );
     }
