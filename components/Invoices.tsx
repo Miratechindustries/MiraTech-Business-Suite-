@@ -40,6 +40,7 @@ interface CompanyDetails {
   address: string;
   letterheadLogo: string;
   useCompanyLetterhead?: boolean;
+  letterheadWidthFit?: boolean;
 }
 
 interface Customer {
@@ -972,7 +973,7 @@ export default function Invoices() {
                     <img
                       src={company.letterheadLogo}
                       alt="Corporate Banner Letterhead"
-                      className="w-full h-auto max-h-[48mm] object-contain block border-b border-slate-200"
+                      className={`w-full ${company.letterheadWidthFit ? 'h-[48mm] object-cover' : 'h-auto max-h-[48mm] object-contain'} block border-b border-slate-200`}
                     />
                     <div className="px-[20mm] pt-4 flex justify-between items-end border-b-2 border-slate-900 pb-4">
                       <div>

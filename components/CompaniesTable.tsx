@@ -42,6 +42,11 @@ export default function CompaniesTable() {
   const [editPrimaryColor, setEditPrimaryColor] = useState('#0F172A');
   const [editSecondaryColor, setEditSecondaryColor] = useState('#3B82F6');
   const [editLockedFeatures, setEditLockedFeatures] = useState<string[]>([]);
+  const [editLogo, setEditLogo] = useState('');
+  const [editLetterheadLogo, setEditLetterheadLogo] = useState('');
+  const [editFavicon, setEditFavicon] = useState('');
+  const [editLetterheadWidthFit, setEditLetterheadWidthFit] = useState(false);
+  const [editUseCompanyLetterhead, setEditUseCompanyLetterhead] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -87,6 +92,11 @@ export default function CompaniesTable() {
     setEditPrimaryColor(company.primaryColor || '#0F172A');
     setEditSecondaryColor(company.secondaryColor || '#3B82F6');
     setEditLockedFeatures(company.lockedFeatures || []);
+    setEditLogo(company.logo || '');
+    setEditLetterheadLogo(company.letterheadLogo || '');
+    setEditFavicon(company.favicon || '');
+    setEditLetterheadWidthFit(company.letterheadWidthFit || false);
+    setEditUseCompanyLetterhead(company.useCompanyLetterhead || false);
     setSuccessMsg(null);
     setError(null);
   };
@@ -107,7 +117,12 @@ export default function CompaniesTable() {
         address: editAddress,
         primaryColor: editPrimaryColor,
         secondaryColor: editSecondaryColor,
-        lockedFeatures: editLockedFeatures
+        lockedFeatures: editLockedFeatures,
+        logo: editLogo,
+        letterheadLogo: editLetterheadLogo,
+        favicon: editFavicon,
+        letterheadWidthFit: editLetterheadWidthFit,
+        useCompanyLetterhead: editUseCompanyLetterhead
       };
 
       // 1. Update in companies collection
@@ -433,6 +448,152 @@ export default function CompaniesTable() {
                         className="flex-1 px-2.5 py-1 border border-slate-200 rounded-md font-mono text-[11px] uppercase"
                       />
                     </div>
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-3">
+                  <span className="block font-bold text-slate-700 text-[11px] uppercase tracking-wider">
+                    🖼️ Brand Image Assets
+                  </span>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Logo Upload */}
+                    <div className="space-y-1.5">
+                      <label className="block font-bold text-slate-655 text-[10px] uppercase">
+                        Company Logo
+                      </label>
+                      <div className="h-16 w-full bg-white border border-slate-200 rounded-lg flex items-center justify-center p-1 overflow-hidden relative group">
+                        {editLogo ? (
+                          <img
+                            src={editLogo}
+                            alt="Logo"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-[9px] text-slate-400 font-bold uppercase">No Logo</span>
+                        )}
+                      </div>
+                      <label className="block cursor-pointer text-center px-1.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-[10px] text-slate-700 font-bold rounded-md shadow-3xs transition">
+                        Upload Logo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 3145728) {
+                                alert("Image must be smaller than 3MB.");
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onloadend = () => setEditLogo(reader.result as string);
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {/* Letterhead Upload */}
+                    <div className="space-y-1.5">
+                      <label className="block font-bold text-slate-655 text-[10px] uppercase">
+                        Letterhead Logo
+                      </label>
+                      <div className="h-16 w-full bg-white border border-slate-200 rounded-lg flex items-center justify-center p-1 overflow-hidden relative group">
+                        {editLetterheadLogo ? (
+                          <img
+                            src={editLetterheadLogo}
+                            alt="Letterhead"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-[9px] text-slate-400 font-bold uppercase">No Letterhead</span>
+                        )}
+                      </div>
+                      <label className="block cursor-pointer text-center px-1.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-[10px] text-slate-700 font-bold rounded-md shadow-3xs transition">
+                        Upload Logo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 3145728) {
+                                alert("Image must be smaller than 3MB.");
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onloadend = () => setEditLetterheadLogo(reader.result as string);
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {/* Favicon/Icon Upload */}
+                    <div className="space-y-1.5">
+                      <label className="block font-bold text-slate-655 text-[10px] uppercase">
+                        Favicon (Icon)
+                      </label>
+                      <div className="h-16 w-full bg-white border border-slate-200 rounded-lg flex items-center justify-center p-1 overflow-hidden relative group">
+                        {editFavicon ? (
+                          <img
+                            src={editFavicon}
+                            alt="Favicon"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-[9px] text-slate-400 font-bold uppercase">No Icon</span>
+                        )}
+                      </div>
+                      <label className="block cursor-pointer text-center px-1.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-[10px] text-slate-700 font-bold rounded-md shadow-3xs transition">
+                        Upload Icon
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 3145728) {
+                                alert("Image must be smaller than 3MB.");
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onloadend = () => setEditFavicon(reader.result as string);
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200/60 space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={editUseCompanyLetterhead}
+                        onChange={(e) => setEditUseCompanyLetterhead(e.target.checked)}
+                        className="rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="font-bold text-[10px] text-slate-700">Extend Letterhead as Full-Width Top Banner</span>
+                    </label>
+
+                    {editUseCompanyLetterhead && (
+                      <label className="flex items-center gap-2 cursor-pointer select-none pl-5 animate-fade-in">
+                        <input
+                          type="checkbox"
+                          checked={editLetterheadWidthFit}
+                          onChange={(e) => setEditLetterheadWidthFit(e.target.checked)}
+                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="font-bold text-[10px] text-slate-700">Stretched Width Fit (Full Width & Cover)</span>
+                      </label>
+                    )}
                   </div>
                 </div>
 

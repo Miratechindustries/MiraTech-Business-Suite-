@@ -20,6 +20,7 @@ interface CompanyData {
   primaryColor: string;
   secondaryColor: string;
   useCompanyLetterhead?: boolean;
+  letterheadWidthFit?: boolean;
   inactivityTimeout?: number;
 }
 
@@ -61,6 +62,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
   const [primaryColor, setPrimaryColor] = useState("#0F172A");
   const [secondaryColor, setSecondaryColor] = useState("#3B82F6");
   const [useCompanyLetterhead, setUseCompanyLetterhead] = useState(false);
+  const [letterheadWidthFit, setLetterheadWidthFit] = useState(false);
   const [inactivityTimeout, setInactivityTimeout] = useState(900); // 15 mins default
 
   useEffect(() => {
@@ -97,6 +99,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
           setPrimaryColor(data.primaryColor || "#0F172A");
           setSecondaryColor(data.secondaryColor || "#3B82F6");
           setUseCompanyLetterhead(data.useCompanyLetterhead || false);
+          setLetterheadWidthFit(data.letterheadWidthFit || false);
           if (typeof data.inactivityTimeout === "number") {
             setInactivityTimeout(data.inactivityTimeout);
             localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
@@ -117,6 +120,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             setPrimaryColor(data.primaryColor || "#0F172A");
             setSecondaryColor(data.secondaryColor || "#3B82F6");
             setUseCompanyLetterhead(data.useCompanyLetterhead || false);
+            setLetterheadWidthFit(data.letterheadWidthFit || false);
             if (typeof data.inactivityTimeout === "number") {
               setInactivityTimeout(data.inactivityTimeout);
               localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
@@ -142,6 +146,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             setPrimaryColor(data.primaryColor || "#0F172A");
             setSecondaryColor(data.secondaryColor || "#3B82F6");
             setUseCompanyLetterhead(data.useCompanyLetterhead || false);
+            setLetterheadWidthFit(data.letterheadWidthFit || false);
             if (typeof data.inactivityTimeout === "number") {
               setInactivityTimeout(data.inactivityTimeout);
               localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
@@ -230,6 +235,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
       primaryColor,
       secondaryColor,
       useCompanyLetterhead,
+      letterheadWidthFit,
       inactivityTimeout,
     };
 
@@ -551,7 +557,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
           </div>
 
           {/* Letterhead stretching Option Selection Checkbox Card */}
-          <div className="p-4 border border-blue-100 rounded-xl bg-blue-50/30 space-y-2 mt-2">
+          <div className="p-4 border border-blue-100 rounded-xl bg-blue-50/30 space-y-3 mt-2">
             <div className="flex items-start gap-3">
               <input
                 id="useCompanyLetterhead"
@@ -570,6 +576,27 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                 </p>
               </div>
             </div>
+
+            {useCompanyLetterhead && (
+              <div className="flex items-start gap-3 pl-7 border-t border-blue-100/30 pt-2 animate-fade-in">
+                <input
+                  id="letterheadWidthFit"
+                  type="checkbox"
+                  disabled={!isAdminUser}
+                  checked={letterheadWidthFit}
+                  onChange={(e) => setLetterheadWidthFit(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 text-blue-600 border-slate-300 rounded-sm focus:ring-blue-500 cursor-pointer disabled:opacity-50"
+                />
+                <div className="space-y-1">
+                  <label htmlFor="letterheadWidthFit" className="block text-xs font-bold text-slate-800 uppercase tracking-wider cursor-pointer select-none">
+                    Stretched Fit (Full Width & Cover)
+                  </label>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Check this option if your letterhead logo banner should stretch and crop/cover the entire printable landscape (instead of contain/leaving blanks).
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
