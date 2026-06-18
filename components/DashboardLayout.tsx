@@ -62,6 +62,7 @@ interface CompanyData {
   address: string;
   letterheadLogo: string;
   inactivityTimeout?: number;
+  lockedFeatures?: string[];
 }
 
 interface DashboardLayoutProps {
@@ -944,39 +945,57 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
               </button>
             </div>
           ) : (
-            <>
-              {/* Render Active View Tab */}
-              {activeTab === "dashboard" && (
-                <Dashboard
-                  googleToken={googleToken}
-                  onGoogleSignInNeeded={handleGoogleLogin}
-                />
+            <div className="relative">
+              {company?.lockedFeatures?.includes(activeTab) && !isMasterAdmin && (
+                <div className="absolute inset-x-0 top-0 bottom-0 min-h-[450px] bg-sky-550/10 backdrop-blur-lg rounded-2xl flex flex-col items-center justify-center p-8 text-center z-30 border border-blue-200/50 shadow-md animate-fade-in">
+                  <div className="p-4 bg-blue-600 text-white rounded-full border-4 border-white shadow-xl mb-4 animate-pulse flex items-center justify-center">
+                    <Lock className="h-8 w-8" />
+                  </div>
+                  <div className="max-w-md space-y-3">
+                    <h3 className="text-lg font-extrabold text-blue-900 tracking-tight font-sans">
+                      This page has been locked.
+                    </h3>
+                    <p className="text-xs text-blue-800 font-semibold leading-relaxed bg-blue-50/90 py-2.5 px-4 rounded-xl border border-blue-150">
+                      Please request <strong className="text-blue-950 font-bold underline">MiraTech Admin</strong> for assistance with unlocking your packages.
+                    </p>
+                  </div>
+                </div>
               )}
 
-              {activeTab === "inventory" && <Inventory />}
+              <div className={company?.lockedFeatures?.includes(activeTab) && !isMasterAdmin ? "blur-md pointer-events-none select-none transition-all duration-300" : ""}>
+                {/* Render Active View Tab */}
+                {activeTab === "dashboard" && (
+                  <Dashboard
+                    googleToken={googleToken}
+                    onGoogleSignInNeeded={handleGoogleLogin}
+                  />
+                )}
 
-              {activeTab === "clients" && <Customers />}
+                {activeTab === "inventory" && <Inventory />}
 
-              {activeTab === "quotations" && <Quotations />}
+                {activeTab === "clients" && <Customers />}
 
-              {activeTab === "invoices" && <Invoices />}
+                {activeTab === "quotations" && <Quotations />}
 
-              {activeTab === "receipts" && <Receipts />}
+                {activeTab === "invoices" && <Invoices />}
 
-              {activeTab === "transactions" && <Transactions />}
+                {activeTab === "receipts" && <Receipts />}
 
-              {activeTab === "reports" && <ReportsAnalytics />}
+                {activeTab === "transactions" && <Transactions />}
 
-              {activeTab === "audit_center" && <AuditCenter />}
+                {activeTab === "reports" && <ReportsAnalytics />}
 
-              {activeTab === "audit" && <AuditLogs />}
-              {activeTab === "admin" && <MasterAdminDashboard />}
+                {activeTab === "audit_center" && <AuditCenter />}
 
-              {activeTab === "settings" && (
-                 <CompanyProfile onCompanyLoaded={(data) => setCompany(data)} />
-               )}
-             </>
-           )}
+                {activeTab === "audit" && <AuditLogs />}
+                {activeTab === "admin" && <MasterAdminDashboard />}
+
+                {activeTab === "settings" && (
+                   <CompanyProfile onCompanyLoaded={(data) => setCompany(data)} />
+                 )}
+              </div>
+            </div>
+          )}
          </main>
        </div>
      </div>

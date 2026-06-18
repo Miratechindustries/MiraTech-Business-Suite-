@@ -41,6 +41,7 @@ export default function CompaniesTable() {
   const [editAddress, setEditAddress] = useState('');
   const [editPrimaryColor, setEditPrimaryColor] = useState('#0F172A');
   const [editSecondaryColor, setEditSecondaryColor] = useState('#3B82F6');
+  const [editLockedFeatures, setEditLockedFeatures] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -85,6 +86,7 @@ export default function CompaniesTable() {
     setEditAddress(company.address || '');
     setEditPrimaryColor(company.primaryColor || '#0F172A');
     setEditSecondaryColor(company.secondaryColor || '#3B82F6');
+    setEditLockedFeatures(company.lockedFeatures || []);
     setSuccessMsg(null);
     setError(null);
   };
@@ -104,7 +106,8 @@ export default function CompaniesTable() {
         phone: editPhone,
         address: editAddress,
         primaryColor: editPrimaryColor,
-        secondaryColor: editSecondaryColor
+        secondaryColor: editSecondaryColor,
+        lockedFeatures: editLockedFeatures
       };
 
       // 1. Update in companies collection
@@ -430,6 +433,81 @@ export default function CompaniesTable() {
                         className="flex-1 px-2.5 py-1 border border-slate-200 rounded-md font-mono text-[11px] uppercase"
                       />
                     </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100">
+                  <span className="block font-bold text-slate-700 text-xs mb-1">
+                    🔐 Access Governance & Locked Features
+                  </span>
+                  <p className="text-[10px] text-slate-400 mb-3">
+                    Check the features/pages you wish to LOCK for this company. Locked pages will show a locked warning display overlay with a blurred background.
+                  </p>
+
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setEditLockedFeatures(["inventory", "clients", "transactions", "reports", "audit_center", "audit"])}
+                      className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 text-[9px] font-bold rounded-md transition"
+                    >
+                      Lock Non-Core (Leave Invoice/Quotation/Receipts)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditLockedFeatures([])}
+                      className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded-md transition"
+                    >
+                      Unlock All Features
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditLockedFeatures(["dashboard", "inventory", "clients", "quotations", "invoices", "receipts", "transactions", "reports", "audit_center", "audit", "settings"])}
+                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-750 text-[9px] font-bold rounded-md transition"
+                    >
+                      Lock All Features
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    {[
+                      { id: "dashboard", label: "Dashboard" },
+                      { id: "inventory", label: "Inventory" },
+                      { id: "clients", label: "Clients/Customers" },
+                      { id: "quotations", label: "Quotations" },
+                      { id: "invoices", label: "Invoices & Ledger" },
+                      { id: "receipts", label: "Receipts" },
+                      { id: "transactions", label: "Transactions" },
+                      { id: "reports", label: "Reports & Analytics" },
+                      { id: "audit_center", label: "Audit Center" },
+                      { id: "audit", label: "Audit Logs" },
+                      { id: "settings", label: "Settings" },
+                    ].map((feat) => {
+                      const isLocked = editLockedFeatures.includes(feat.id);
+                      return (
+                        <label
+                          key={feat.id}
+                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer select-none transition ${
+                            isLocked
+                              ? "bg-red-50 border-red-200 text-red-800"
+                              : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isLocked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setEditLockedFeatures((prev) => [...prev, feat.id]);
+                              } else {
+                                setEditLockedFeatures((prev) => prev.filter((x) => x !== feat.id));
+                              }
+                            }}
+                            className="rounded text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="font-semibold text-[10px]">{feat.label}</span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
