@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import InstallClientWrapper from "../components/InstallClientWrapper";
+import LegalCompliance from "../components/LegalCompliance";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -44,6 +45,7 @@ export default function RootLayout({
       <body className="antialiased bg-slate-50 text-slate-900 min-h-screen">
         {children}
         <InstallClientWrapper />
+        <LegalCompliance />
       </body>
     </html>
   );
