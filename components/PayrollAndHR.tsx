@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Building2, CalendarDays, ClipboardList, BookOpen, ShieldCheck, FileSpreadsheet, Send, TrendingUp, Calculator, Clock } from "lucide-react";
+import { Users, Building2, CalendarDays, ClipboardList, BookOpen, ShieldCheck, FileSpreadsheet, Send, TrendingUp, Calculator, Clock, History } from "lucide-react";
 import Payroll from "./Payroll"; // Reuse existing payroll logic
+import PayrollHistoricalLogs from "./PayrollHistoricalLogs";
 
 // Simple HR sub-components placeholders for structure
 const HRManagement = () => (
@@ -27,7 +28,7 @@ const HRManagement = () => (
 );
 
 export default function PayrollAndHR() {
-  const [activeModule, setActiveModule] = useState<"payroll" | "hr">("payroll");
+  const [activeModule, setActiveModule] = useState<"payroll" | "hr" | "history">("payroll");
 
   return (
     <div className="space-y-6">
@@ -46,10 +47,17 @@ export default function PayrollAndHR() {
           <Users className="w-4 h-4" />
           HR
         </button>
+        <button
+          onClick={() => setActiveModule("history")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition ${activeModule === 'history' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}
+        >
+          <History className="w-4 h-4" />
+          Historical Logs
+        </button>
       </div>
 
       <div>
-        {activeModule === "payroll" ? <Payroll /> : <HRManagement />}
+        {activeModule === "payroll" ? <Payroll /> : activeModule === "hr" ? <HRManagement /> : <PayrollHistoricalLogs />}
       </div>
     </div>
   );

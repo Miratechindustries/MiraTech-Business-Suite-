@@ -145,7 +145,7 @@ service cloud.firestore {
     // Strictly write-once/append-only. Nobody can delete or tamper with audit records.
     // =========================================================================
     match /audit_logs/{logId} {
-      allow read: if isSignedIn() && (
+      allow get: if isSignedIn() && (
         isMasterAdmin() ||
         resource.data.get('businessId', '') == request.auth.uid ||
         resource.data.get('companyId', '') == request.auth.uid ||
@@ -154,6 +154,15 @@ service cloud.firestore {
           resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
           resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
           resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+        ))
+      );
+
+      allow list: if isSignedIn() && (
+        isMasterAdmin() ||
+        resource.data.get('businessId', '') == request.auth.uid ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
         ))
       );
       
@@ -177,7 +186,7 @@ service cloud.firestore {
     // Enforcing required tenant structures on insertions to block malformed/orphan injections.
     // =========================================================================
     match /{collectionName}/{docId} {
-      allow read: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'notifications', 'general_ledger', 'journal_entries', 'employees', 'payslips']) && (
+      allow get: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'notifications', 'general_ledger', 'journal_entries', 'employees', 'payslips']) && (
         isMasterAdmin() ||
         resource.data.get('businessId', '') == request.auth.uid ||
         resource.data.get('companyId', '') == request.auth.uid ||
@@ -186,6 +195,15 @@ service cloud.firestore {
           resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
           resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
           resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+        ))
+      );
+
+      allow list: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'notifications', 'general_ledger', 'journal_entries', 'employees', 'payslips']) && (
+        isMasterAdmin() ||
+        resource.data.get('businessId', '') == request.auth.uid ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
+          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
         ))
       );
 

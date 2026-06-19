@@ -5,7 +5,7 @@ import { collection, getCountFromServer } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useUserStore } from '../lib/store';
 import { LogOut, Users, Building2, ShieldAlert } from "lucide-react";
-import { logout } from '../lib/firebase';
+import { logout, auth } from '../lib/firebase';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell, Legend, BarChart, Bar, CartesianGrid } from 'recharts';
 import { motion } from "motion/react";
 import AuditLogs from './AuditLogs';
@@ -34,6 +34,15 @@ export default function MasterAdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const isMasterAdmin = 
+      currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' || 
+      auth.currentUser?.email?.toLowerCase() === 'miratechindustries@gmail.com';
+
+    if (!isMasterAdmin) {
+      setLoading(false);
+      return;
+    }
+
     async function fetchCounts() {
         try {
             const companiesSnapshot = await getCountFromServer(collection(db, 'companies'));
@@ -52,7 +61,7 @@ export default function MasterAdminDashboard() {
         }
     }
     fetchCounts();
-  }, []);
+  }, [currentUser]);
 
   if (currentUser?.role?.toUpperCase() !== 'MASTER_ADMIN' && currentUser?.email?.toLowerCase() !== 'miratechindustries@gmail.com') {
     return <div className="p-10 text-center font-sans text-slate-500">Access Denied</div>;
