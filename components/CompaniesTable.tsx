@@ -26,6 +26,7 @@ import {
   X,
   Plus
 } from "lucide-react";
+import { SUBSCRIPTION_PLANS, getLockedFeaturesForPlan } from '../lib/subscriptions';
 
 export default function CompaniesTable() {
   const [companies, setCompanies] = useState<any[]>([]);
@@ -42,6 +43,8 @@ export default function CompaniesTable() {
   const [editPrimaryColor, setEditPrimaryColor] = useState('#0F172A');
   const [editSecondaryColor, setEditSecondaryColor] = useState('#3B82F6');
   const [editLockedFeatures, setEditLockedFeatures] = useState<string[]>([]);
+  const [editSubscriptionPlanId, setEditSubscriptionPlanId] = useState('starter');
+  const [editSubscriptionStatus, setEditSubscriptionStatus] = useState('trialing');
   const [editLogo, setEditLogo] = useState('');
   const [editLetterheadLogo, setEditLetterheadLogo] = useState('');
   const [editFavicon, setEditFavicon] = useState('');
@@ -92,6 +95,8 @@ export default function CompaniesTable() {
     setEditPrimaryColor(company.primaryColor || '#0F172A');
     setEditSecondaryColor(company.secondaryColor || '#3B82F6');
     setEditLockedFeatures(company.lockedFeatures || []);
+    setEditSubscriptionPlanId(company.subscriptionPlanId || 'starter');
+    setEditSubscriptionStatus(company.subscriptionStatus || 'trialing');
     setEditLogo(company.logo || '');
     setEditLetterheadLogo(company.letterheadLogo || '');
     setEditFavicon(company.favicon || '');
@@ -117,7 +122,9 @@ export default function CompaniesTable() {
         address: editAddress,
         primaryColor: editPrimaryColor,
         secondaryColor: editSecondaryColor,
-        lockedFeatures: editLockedFeatures,
+        lockedFeatures: getLockedFeaturesForPlan(editSubscriptionPlanId),
+        subscriptionPlanId: editSubscriptionPlanId,
+        subscriptionStatus: editSubscriptionStatus,
         logo: editLogo,
         letterheadLogo: editLetterheadLogo,
         favicon: editFavicon,
@@ -257,6 +264,7 @@ export default function CompaniesTable() {
                 <th className="p-4 pl-6">Company Name</th>
                 <th className="p-4">Primary Contact & Support</th>
                 <th className="p-4">Active Staff</th>
+                <th className="p-4">Subscription Plan</th>
                 <th className="p-4">Brand Asset Color</th>
                 <th className="p-4">Registration Date</th>
                 <th className="p-4 pr-6 text-right">Actions</th>
@@ -301,6 +309,28 @@ export default function CompaniesTable() {
                     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-150 text-slate-700">
                       <span>{getActiveUserCount(c.id)} accounts</span>
                     </span>
+                  </td>
+
+                  {/* Subscription Plan Column */}
+                  <td className="p-4">
+                    <div className="space-y-0.5">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase border tracking-tight ${
+                        c.subscriptionPlanId === 'enterprise'
+                          ? 'bg-purple-50 text-purple-700 border-purple-150'
+                          : c.subscriptionPlanId === 'elite'
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-150'
+                            : c.subscriptionPlanId === 'professional'
+                              ? 'bg-blue-50 text-blue-700 border-blue-150'
+                              : c.subscriptionPlanId === 'growth'
+                                ? 'bg-amber-50 text-amber-700 border-amber-150'
+                                : 'bg-slate-50 text-slate-700 border-slate-150'
+                      }`}>
+                        {SUBSCRIPTION_PLANS.find(p => p.id === (c.subscriptionPlanId || 'starter'))?.name || 'Starter'}
+                      </span>
+                      <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest pl-0.5">
+                        Status: {c.subscriptionStatus || 'trialing'}
+                      </div>
+                    </div>
                   </td>
 
                   {/* Brand Color Theme */}
@@ -597,37 +627,46 @@ export default function CompaniesTable() {
                   </div>
                 </div>
 
+                <div className="pt-3 border-t border-slate-105">
+                  <span className="block font-bold text-slate-800 text-xs mb-1 bg-blue-50/50 p-2.5 rounded-lg border border-blue-105 flex items-center justify-between">
+                    <span>💳 Corporate Subscription Setup</span>
+                  </span>
+                  <div className="grid grid-cols-2 gap-3 mt-2 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-605 mb-1">Assigned Plan Option</label>
+                      <select
+                        value={editSubscriptionPlanId}
+                        onChange={(e) => setEditSubscriptionPlanId(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-205 rounded-lg bg-slate-50/30 font-bold"
+                      >
+                        {SUBSCRIPTION_PLANS.map(p => (
+                          <option key={p.id} value={p.id}>{p.name} - E{p.price}/mo</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-605 mb-1">Billing Status</label>
+                      <select
+                        value={editSubscriptionStatus}
+                        onChange={(e) => setEditSubscriptionStatus(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-205 rounded-lg bg-slate-50/30 font-bold"
+                      >
+                        <option value="trialing">14-Day Free Trial</option>
+                        <option value="active">Active Subscription</option>
+                        <option value="cancelled">Cancelled Plan</option>
+                        <option value="unpaid">Unpaid / Suspended</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="pt-3 border-t border-slate-100">
                   <span className="block font-bold text-slate-700 text-xs mb-1">
-                    🔐 Access Governance & Locked Features
+                    🔐 Access Governance & Locked Features (Aligned automatically with plan)
                   </span>
                   <p className="text-[10px] text-slate-400 mb-3">
-                    Check the features/pages you wish to LOCK for this company. Locked pages will show a locked warning display overlay with a blurred background.
+                    The following features are automatically configured, allowed, or restricted based on the corporate subscription plan selected above.
                   </p>
-
-                  <div className="flex flex-wrap gap-1.5 mb-3">
-                    <button
-                      type="button"
-                      onClick={() => setEditLockedFeatures(["inventory", "clients", "transactions", "reports", "audit_center", "audit"])}
-                      className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 text-[9px] font-bold rounded-md transition"
-                    >
-                      Lock Non-Core (Leave Invoice/Quotation/Receipts)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditLockedFeatures([])}
-                      className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded-md transition"
-                    >
-                      Unlock All Features
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditLockedFeatures(["dashboard", "inventory", "clients", "quotations", "invoices", "receipts", "transactions", "reports", "audit_center", "audit", "settings"])}
-                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-750 text-[9px] font-bold rounded-md transition"
-                    >
-                      Lock All Features
-                    </button>
-                  </div>
 
                   <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
                     {[
@@ -642,31 +681,26 @@ export default function CompaniesTable() {
                       { id: "audit_center", label: "Audit Center" },
                       { id: "audit", label: "Audit Logs" },
                       { id: "settings", label: "Settings" },
+                      { id: "subscriptions", label: "Subscriptions Panel" },
                     ].map((feat) => {
-                      const isLocked = editLockedFeatures.includes(feat.id);
+                      const isLocked = getLockedFeaturesForPlan(editSubscriptionPlanId).includes(feat.id);
                       return (
-                        <label
+                        <div
                           key={feat.id}
-                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer select-none transition ${
+                          className={`flex items-center gap-2 p-2 rounded-lg border transition ${
                             isLocked
-                              ? "bg-red-50 border-red-200 text-red-800"
-                              : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700"
+                              ? "bg-red-50/60 border-red-150 text-red-650 opacity-60"
+                              : "bg-emerald-50/40 border-emerald-150 text-emerald-800"
                           }`}
                         >
                           <input
                             type="checkbox"
-                            checked={isLocked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setEditLockedFeatures((prev) => [...prev, feat.id]);
-                              } else {
-                                setEditLockedFeatures((prev) => prev.filter((x) => x !== feat.id));
-                              }
-                            }}
-                            className="rounded text-indigo-600 focus:ring-indigo-500"
+                            checked={!isLocked}
+                            readOnly
+                            className="rounded text-indigo-600 focus:ring-0 cursor-not-allowed pointer-events-none"
                           />
-                          <span className="font-semibold text-[10px]">{feat.label}</span>
-                        </label>
+                          <span className="font-semibold text-[10px]">{feat.label} {isLocked ? '(Locked)' : '(Allowed)'}</span>
+                        </div>
                       );
                     })}
                   </div>

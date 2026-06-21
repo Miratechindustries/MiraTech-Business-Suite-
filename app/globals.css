@@ -40,34 +40,4 @@
   ::-webkit-scrollbar-thumb {
     @apply bg-blue-200 rounded-full hover:bg-blue-300;
   }
-
-  @media print {
-    body {
-      background-color: white !important;
-    }
-    /* Hide everything by default during print */
-    body > * {
-      display: none !important;
-    }
-    /* Only display the payroll-print-container and its contents */
-    #payroll-print-container,
-    #payroll-print-container * {
-      display: block !important;
-    }
-    #payroll-print-container {
-      position: absolute;
-      left: 0;
-      top: 0;
-      width: 100% !important;
-      max-width: 100% !important;
-      padding: 0 !important;
-      margin: 0 !important;
-      box-shadow: none !important;
-      border: none !important;
-    }
-    .no-print {
-      display: none !important;
-    }
-  }
 }
-

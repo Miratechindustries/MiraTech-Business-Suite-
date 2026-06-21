@@ -8,6 +8,7 @@ import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import firebaseConfig from '../firebase-applet-config.json';
 import { Role } from '../lib/types';
 import { logAction } from '../lib/audit';
+import { SUBSCRIPTION_PLANS } from '../lib/subscriptions';
 import { 
   Users, 
   Plus, 
@@ -113,6 +114,26 @@ export default function UserManagement() {
       // 1. Check if email is already listed locally
       if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
         throw new Error('This email address is already registered in the system.');
+      }
+
+      // Check Plan capacity limits
+      const comp = companies.find(c => c.id === selectedCompanyId);
+      if (comp) {
+        const planId = comp.subscriptionPlanId || 'starter';
+        const plan = SUBSCRIPTION_PLANS.find(p => p.id === planId) || SUBSCRIPTION_PLANS[0];
+        
+        const companyUsers = users.filter(u => u.companyId === selectedCompanyId && u.status !== 'DEACTIVATED');
+        if (role === 'BUSINESS_ADMIN') {
+          const adminCount = companyUsers.filter(u => u.role === 'BUSINESS_ADMIN').length;
+          if (adminCount >= plan.maxAdmin) {
+            throw new Error(`The company's active subscription (${plan.name}) allows a maximum of ${plan.maxAdmin} Administrator user account(s). This limit has been reached. Please upgrade the company's subscription plan.`);
+          }
+        } else if (role === 'STAFF') {
+          const staffCount = companyUsers.filter(u => u.role === 'STAFF').length;
+          if (staffCount >= plan.maxStaff) {
+            throw new Error(`The company's active subscription (${plan.name}) allows a maximum of ${plan.maxStaff} Staff user account(s). This limit has been reached. Please upgrade the company's subscription plan.`);
+          }
+        }
       }
 
       // 2. Auth Creation

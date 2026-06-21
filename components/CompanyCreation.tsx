@@ -6,6 +6,7 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { db } from '../lib/firebase';
 import firebaseConfig from '../firebase-applet-config.json';
+import { SUBSCRIPTION_PLANS, getLockedFeaturesForPlan } from '../lib/subscriptions';
 import { 
   Building2, 
   User, 
@@ -40,6 +41,7 @@ export default function CompanyCreation() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [subscriptionPlanId, setSubscriptionPlanId] = useState('starter');
 
   // Primary Admin Account
   const [adminEmail, setAdminEmail] = useState('');
@@ -139,7 +141,12 @@ export default function CompanyCreation() {
         secondaryColor: "#3B82F6",
         favicon: "",
         logo: "",
-        letterheadLogo: ""
+        letterheadLogo: "",
+        subscriptionPlanId,
+        subscriptionStatus: 'trialing',
+        subscriptionTrialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        subscriptionTrialStartedAt: new Date().toISOString(),
+        lockedFeatures: getLockedFeaturesForPlan(subscriptionPlanId)
       };
 
       await setDoc(doc(db, 'companies', adminUid), companyPayload);
@@ -306,6 +313,21 @@ export default function CompanyCreation() {
                   placeholder="e.g. Block A, 12 Tech Drive, Sandton, Johannesburg" 
                   className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 focus:bg-white focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-100 transition" 
                 />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Initial Subscription Tier (14-Day Trial Included)</label>
+                <select
+                  value={subscriptionPlanId}
+                  onChange={(e) => setSubscriptionPlanId(e.target.value)}
+                  className="w-full text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 focus:bg-white focus:outline-hidden transition"
+                >
+                  {SUBSCRIPTION_PLANS.map(plan => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name} - E{plan.price.toLocaleString()}/mo
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>

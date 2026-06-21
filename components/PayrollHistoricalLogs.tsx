@@ -39,8 +39,9 @@ export default function PayrollHistoricalLogs() {
         const targetElement = silent ? document.getElementById('hidden-pdf-container') : pdfAreaRef.current;
         if (!targetElement) { resolve(); return; }
         
-        try {
+          try {
           const canvas = await safeHtml2canvas(targetElement, { scale: 2, useCORS: true });
+          if (!canvas) throw new Error("Canvas generation failed");
           const imgData = canvas.toDataURL("image/jpeg", 0.95);
           const pdf = new jsPDF("p", "mm", "a4");
           const imgWidth = 210;
@@ -49,6 +50,7 @@ export default function PayrollHistoricalLogs() {
           pdf.save(`${log.employeeName || "Payslip"}.pdf`);
         } catch (err) {
           console.error("PDF generation failed:", err);
+          alert("Failed to generate PDF. Please try again.");
         } finally {
           if (!silent) setSelectedLog(null);
           resolve();
@@ -146,22 +148,56 @@ export default function PayrollHistoricalLogs() {
       
       {/* PDF Generation/Preview Hidden Area */}
       {selectedLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6">
-            <div className="flex justify-between items-center mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full p-6">
+            <div className="flex justify-between items-center mb-4 no-print">
                <h3 className="text-lg font-bold">Payslip Preview</h3>
                <button onClick={() => setSelectedLog(null)} className="text-slate-500 hover:text-slate-900 cursor-pointer">
                  <X className="w-5 h-5" />
                </button>
             </div>
-            <div ref={pdfAreaRef} className="p-4 border rounded-lg bg-slate-50">
-              {/* Simplified Payslip Template */}
-              <h2 className="text-xl font-bold mb-2">Payslip: {selectedLog.employeeName}</h2>
-              <p>Period: {selectedLog.payPeriod}</p>
-              <p>Net Amount: ${selectedLog.netSalary}</p>
-              <p>Adjustments: {selectedLog.adjustments || "None"}</p>
+            <div ref={pdfAreaRef} className="w-full bg-white text-slate-850 p-6 shadow-2xl border border-slate-200 rounded-lg flex flex-col gap-3 min-h-[640px] text-[10px] font-sans">
+                {/* Template Header */}
+                <div className="border-b border-slate-900 pb-2 mb-2 flex justify-between">
+                    <div>
+                        <h2 className="text-xl font-black uppercase tracking-tight">ABC Company</h2>
+                        <p className="text-2xs text-slate-500 whitespace-pre-line">{"Street Address\nCity, State, Zip"}</p>
+                    </div>
+                    <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900">PAYSLIP</h2>
+                </div>
+                
+                {/* Pay period / Date */}
+                <div className="grid grid-cols-2 gap-4 bg-slate-100 p-2 font-bold border border-slate-300 rounded-md">
+                    <div>Pay Period: <span className="font-normal">{selectedLog.payPeriod}</span></div>
+                    <div>Date of Payment: <span className="font-normal">{selectedLog.date?.toDate ? new Date(selectedLog.date?.toDate()).toLocaleDateString() : "N/A"}</span></div>
+                </div>
+
+                {/* Employee Information */}
+                <div className="border border-slate-900 rounded-md overflow-hidden">
+                    <div className="bg-slate-800 text-white font-bold p-1 px-2 text-center text-xs">Employee Information</div>
+                    <div className="grid grid-cols-2 gap-x-4 p-2 text-[10px]">
+                    <div>Name: <span className="font-bold">{selectedLog.employeeName}</span></div>
+                    <div>Department: <span className="font-bold">N/A</span></div>
+                    <div>Employee ID: <span className="font-bold">N/A</span></div>
+                    <div>Role: <span className="font-bold">N/A</span></div>
+                    </div>
+                </div>
+
+                {/* Financial Table */}
+                <div className="border border-slate-900 rounded-md overflow-hidden text-[10px]">
+                    <div className="bg-slate-800 text-white font-bold p-1 text-center">Summary</div>
+                    <div className="p-2 space-y-1">
+                        <div className="flex justify-between font-bold"><span>Net Pay</span> <span>${selectedLog.netSalary.toFixed(2)}</span></div>
+                        <div className="flex justify-between"><span>Adjustments</span> <span>{selectedLog.adjustments || "—"}</span></div>
+                    </div>
+                </div>
+                
+                {/* Footer */}
+                <div className="mt-auto text-center text-[8px] text-slate-400 font-medium">
+                    Powered by MiraTech Industries ©
+                </div>
             </div>
-            <div className="flex gap-2 mt-4">
+            <div className="flex gap-2 mt-4 no-print">
               <button 
                   onClick={() => handleExportPDF(selectedLog)}
                   className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 cursor-pointer"

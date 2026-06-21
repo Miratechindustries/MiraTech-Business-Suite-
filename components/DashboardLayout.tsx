@@ -36,7 +36,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Info,
-  Coins
+  Coins,
+  CreditCard
 } from "lucide-react";
 
 // Subcomponents
@@ -55,6 +56,7 @@ import AuditLogs from "./AuditLogs";
 import MasterAdminDashboard from "./MasterAdminDashboard";
 import MasterAdminLayout from "./MasterAdminLayout";
 import PayrollAndHR from "./PayrollAndHR";
+import SubscriptionsView from "./SubscriptionsView";
 
 interface CompanyData {
   ownerId: string;
@@ -680,6 +682,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             { id: "audit", label: "Audit Logs", icon: ShieldAlert },
             ...(currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
             { id: "settings", label: "Settings", icon: Settings },
+            { id: "subscriptions", label: "Subscriptions", icon: CreditCard },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -871,6 +874,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                   { id: "audit", label: "Audit Logs", icon: ShieldAlert },
                   ...(currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
                   { id: "settings", label: "Settings", icon: Settings },
+                  { id: "subscriptions", label: "Subscriptions", icon: CreditCard },
                 ].map((tab) => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
@@ -957,10 +961,10 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                   </div>
                   <div className="max-w-md space-y-3">
                     <h3 className="text-lg font-extrabold text-blue-900 tracking-tight font-sans">
-                      This page has been locked.
+                      Module Locked Under Your Plan
                     </h3>
                     <p className="text-xs text-blue-800 font-semibold leading-relaxed bg-blue-50/90 py-2.5 px-4 rounded-xl border border-blue-150">
-                      Please request <strong className="text-blue-950 font-bold underline">MiraTech Admin</strong> for assistance with unlocking your packages.
+                      This workflow is restricted under your current tier. Head of operations? You can upgrade your plan instantly in the <strong className="text-blue-950 font-bold underline cursor-pointer" onClick={() => setActiveTab('subscriptions')}>Subscriptions Settings</strong> pane!
                     </p>
                   </div>
                 </div>
@@ -999,6 +1003,8 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                 {activeTab === "settings" && (
                    <CompanyProfile onCompanyLoaded={(data) => setCompany(data)} />
                  )}
+
+                {activeTab === "subscriptions" && <SubscriptionsView />}
               </div>
             </div>
           )}
