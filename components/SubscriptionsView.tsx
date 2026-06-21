@@ -28,7 +28,9 @@ import {
   FileText,
   User,
   Hash,
-  Lock
+  Lock,
+  RefreshCw,
+  XCircle
 } from 'lucide-react';
 
 interface PaymentMethod {
@@ -67,6 +69,9 @@ export default function SubscriptionsView() {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>(PAYMENT_METHODS[0]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transactionCode, setTransactionCode] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'failed'>('idle');
+  const [simulateDecline, setSimulateDecline] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
 
   // Payment Form Fields
   const [momoPhone, setMomoPhone] = useState('');
@@ -117,6 +122,9 @@ export default function SubscriptionsView() {
     setSelectedPlan(plan);
     setError(null);
     setSuccess(null);
+    setPaymentStatus('idle');
+    setSimulateDecline(false);
+    setDeclineReason('');
     // Preset mock data
     setMomoPhone(company.phone || '7600 0000');
     setCardName(currentUser.name || 'Company Director');
@@ -126,37 +134,49 @@ export default function SubscriptionsView() {
     e.preventDefault();
     if (!selectedPlan || !currentUser?.companyId) return;
 
-    setIsProcessing(true);
-    setError(null);
-
     // Form Validators
     if (selectedMethod.category === 'momo' && !momoPhone) {
       setError("Please input an active Mobile Account Number.");
-      setIsProcessing(false);
       return;
     }
     if (selectedMethod.category === 'card' && (!cardNumber || !cardCvv || !cardExpiry)) {
       setError("Please complete all card details fields securely.");
-      setIsProcessing(false);
       return;
     }
     if (selectedMethod.category === 'remit' && (!remitSender || !remitMtcn)) {
       setError("Verification requires Swaziland/Global reference check: Sender Name and Reference MTCN are mandatory.");
-      setIsProcessing(false);
       return;
     }
     if (selectedMethod.id === 'eft' && !popFileSimulated) {
       setError("EFT settlement requires selecting/uploading your direct proof deposit slip PDF.");
-      setIsProcessing(false);
       return;
     }
+
+    setIsProcessing(true);
+    setPaymentStatus('processing');
+    setError(null);
 
     // Generate a random mock reference authorization code
     const generatedRef = 'TXN-' + Math.floor(100000 + Math.random() * 900000);
     setTransactionCode(generatedRef);
 
-    // Dynamic timeout to simulate gateway verification handshakes
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Dynamic timeout to simulate gateway verification handshakes (3 seconds)
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    if (simulateDecline) {
+      let reason = "The card issuer declined the request with error (Insufficient Funds).";
+      if (selectedMethod.category === 'momo') {
+        reason = `Failed push prompt lookup to Swazi MTN (+268 ${momoPhone}). Please verify handset PIN code or available wallet balance.`;
+      } else if (selectedMethod.category === 'bank') {
+        reason = "Unable to parse direct EFT slip. The banking reference verification code was unrecognized.";
+      } else if (selectedMethod.category === 'remit') {
+        reason = `Remittance transaction MTCN PIN (${remitMtcn}) has already been claimed or has expired.`;
+      }
+      setDeclineReason(reason);
+      setPaymentStatus('failed');
+      setIsProcessing(false);
+      return;
+    }
 
     try {
       const planLockedFeats = getLockedFeaturesForPlan(selectedPlan.id);
@@ -187,9 +207,8 @@ export default function SubscriptionsView() {
 
       setCompany(prev => ({ ...prev, ...updateData }));
       setSuccess(`Transaction Processed Securely! Workspace upgraded to "${selectedPlan.name}" with real-time provisioning.`);
-      
-      // Close modal
-      setSelectedPlan(null);
+      setPaymentStatus('success');
+
       // reset form variables
       setCardNumber('');
       setCardCvv('');
@@ -199,6 +218,8 @@ export default function SubscriptionsView() {
     } catch (err: any) {
       console.error(err);
       setError("The integration gateway service declined your connection: " + err.message);
+      setDeclineReason(err.message || "Gateway Connection Dropped unexpectedly.");
+      setPaymentStatus('failed');
     } finally {
       setIsProcessing(false);
     }
@@ -541,344 +562,516 @@ export default function SubscriptionsView() {
             </div>
 
             {/* Right container: Payment options & dynamic forms */}
-            <div className="md:w-7/12 p-6 md:p-8 flex flex-col justify-between font-sans">
-              <div>
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Interactive Swaziland & Global Gateway</h3>
-                    <p className="text-xs text-slate-500 font-medium">Select your financial engine of choice below to authenticate your subscription payment.</p>
+            <div className="md:w-7/12 p-6 md:p-8 flex flex-col justify-between font-sans min-h-[480px]">
+              {paymentStatus === 'idle' ? (
+                <div>
+                  <div className="flex justify-between items-start mb-5">
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Interactive Swaziland & Global Gateway</h3>
+                      <p className="text-xs text-slate-500 font-medium">Select your financial engine of choice below to authenticate your subscription payment.</p>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => setSelectedPlan(null)}
+                      className="p-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer transition text-xs"
+                    >
+                      Close
+                    </button>
                   </div>
-                  <button 
-                    type="button" 
-                    onClick={() => setSelectedPlan(null)}
-                    className="p-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer transition text-xs"
-                  >
-                    Close
-                  </button>
-                </div>
 
-                {/* Gateway Error display */}
-                {error && (
-                  <div className="flex items-start gap-2.5 p-3 bg-red-50 text-red-700 border border-red-200 rounded-xl mb-4 text-xs font-semibold">
-                    <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                  </div>
-                )}
+                  {/* Gateway Error display */}
+                  {error && (
+                    <div className="flex items-start gap-2.5 p-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl mb-4 text-xs font-semibold animate-shake">
+                      <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
+                      <span>{error}</span>
+                    </div>
+                  )}
 
-                {/* Payment Channel categories select tabs */}
-                <div className="grid grid-cols-4 gap-2 mb-4 font-sans">
-                  {[
-                    { id: 'momo', label: 'Momo & Wallet', icon: Smartphone },
-                    { id: 'card', label: 'Credit Card', icon: CreditCard },
-                    { id: 'bank', label: 'Bank (EFT)', icon: Building },
-                    { id: 'remit', label: 'Remittances', icon: Globe }
-                  ].map(cat => {
-                    // Filter methods matching active category
-                    const matchedMethods = PAYMENT_METHODS.filter(m => m.category === cat.id);
-                    const isActiveCategory = selectedMethod.category === cat.id;
-                    const CatIcon = cat.icon;
+                  {/* Payment Channel categories select tabs */}
+                  <div className="grid grid-cols-4 gap-2 mb-4 font-sans">
+                    {[
+                      { id: 'momo', label: 'Momo & Wallet', icon: Smartphone },
+                      { id: 'card', label: 'Credit Card', icon: CreditCard },
+                      { id: 'bank', label: 'Bank (EFT)', icon: Building },
+                      { id: 'remit', label: 'Remittances', icon: Globe }
+                    ].map(cat => {
+                      const isActiveCategory = selectedMethod.category === cat.id;
+                      const CatIcon = cat.icon;
 
-                    return (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => {
-                          const firstOfCat = PAYMENT_METHODS.find(m => m.category === cat.id);
-                          if (firstOfCat) setSelectedMethod(firstOfCat);
-                        }}
-                        className={`p-2 py-2.5 border rounded-xl flex flex-col items-center gap-1.5 transition text-center cursor-pointer ${
-                          isActiveCategory 
-                            ? 'bg-blue-50 border-blue-600 text-blue-900 font-extrabold' 
-                            : 'bg-white border-slate-200 hover:bg-slate-50/70 text-slate-600'
-                        }`}
-                      >
-                        <CatIcon className={`w-4 h-4 ${isActiveCategory ? 'text-blue-700' : 'text-slate-400'}`} />
-                        <span className="text-[9px] uppercase tracking-wider font-semibold">{cat.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Sub-Methods List under active category */}
-                <div className="mb-6 font-sans">
-                  <label className="block text-[10px] font-black text-slate-450 uppercase tracking-widest mb-1.5">Specific Payment Method</label>
-                  <div className="grid grid-cols-2 md:grid-cols-2 gap-2">
-                    {PAYMENT_METHODS.filter(m => m.category === selectedMethod.category).map(method => {
-                      const isSelected = selectedMethod.id === method.id;
                       return (
                         <button
-                          key={method.id}
+                          key={cat.id}
                           type="button"
-                          onClick={() => setSelectedMethod(method)}
-                          className={`p-2 px-3 border rounded-lg text-left transition text-xs cursor-pointer flex flex-col justify-between h-14 ${
-                            isSelected 
-                              ? 'bg-slate-900 border-slate-900 text-white font-extrabold shadow-sm' 
-                              : 'bg-slate-50 border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-semibold'
+                          onClick={() => {
+                            const firstOfCat = PAYMENT_METHODS.find(m => m.category === cat.id);
+                            if (firstOfCat) setSelectedMethod(firstOfCat);
+                          }}
+                          className={`p-2 py-2.5 border rounded-xl flex flex-col items-center gap-1.5 transition text-center cursor-pointer ${
+                            isActiveCategory 
+                              ? 'bg-blue-50 border-blue-600 text-blue-900 font-extrabold' 
+                              : 'bg-white border-slate-200 hover:bg-slate-50/70 text-slate-600'
                           }`}
                         >
-                          <div className="flex items-center justify-between w-full">
-                            <span>{method.name}</span>
-                            {isSelected && <div className="h-1.5 w-1.5 rounded-full bg-emerald-400"></div>}
-                          </div>
-                          <span className={`text-[8.5px] mt-1 block ${isSelected ? 'text-slate-400 font-semibold' : 'text-slate-400 font-medium'}`}>{method.logoPlaceholder}</span>
+                          <CatIcon className={`w-4 h-4 ${isActiveCategory ? 'text-blue-700' : 'text-slate-400'}`} />
+                          <span className="text-[9px] uppercase tracking-wider font-semibold">{cat.label}</span>
                         </button>
                       );
                     })}
                   </div>
-                </div>
 
-                {/* DYNAMIC FORMS ACCORDING TO SELECTION */}
-                <form onSubmit={handleProcessPayment} className="space-y-4">
-                  {/* Momo, Unayo, M-Pesa, eMoolah View Form */}
-                  {selectedMethod.category === 'momo' && (
-                    <div className="space-y-3 bg-slate-50 p-4 border border-slate-200 rounded-xl font-sans">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <Smartphone className="w-4 h-4 text-blue-600" />
-                        <h4 className="text-xs font-bold text-slate-800">{selectedMethod.name} Payout Authentication</h4>
-                      </div>
-                      <p className="text-[10.5px] text-slate-500 leading-relaxed mb-3">
-                        We will push an interactive PIN confirmation request overlay dialog directly to your registered handset. Confirm the deposit of <strong className="text-slate-850 font-extrabold">E{selectedPlan.price.toLocaleString()}</strong> to complete.
-                      </p>
-                      
+                  {/* Sub-Methods List under active category */}
+                  <div className="mb-4 font-sans">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Specific Payment Method</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {PAYMENT_METHODS.filter(m => m.category === selectedMethod.category).map(method => {
+                        const isSelected = selectedMethod.id === method.id;
+                        return (
+                          <button
+                            key={method.id}
+                            type="button"
+                            onClick={() => setSelectedMethod(method)}
+                            className={`p-2 px-3 border rounded-lg text-left transition text-xs cursor-pointer flex flex-col justify-between h-14 ${
+                              isSelected 
+                                ? 'bg-slate-900 border-slate-900 text-white font-extrabold shadow-sm' 
+                                : 'bg-slate-50 border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-semibold'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <span>{method.name}</span>
+                              {isSelected && <div className="h-1.5 w-1.5 rounded-full bg-emerald-400"></div>}
+                            </div>
+                            <span className={`text-[8.5px] mt-1 block ${isSelected ? 'text-slate-400 font-semibold' : 'text-slate-450 font-medium'}`}>{method.logoPlaceholder}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Gateway Simulator Switcher */}
+                  <div className="mb-4 p-3 bg-amber-50/80 border border-amber-200 rounded-xl flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-600" />
                       <div>
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Handset Mobile Number</label>
-                        <div className="relative">
-                          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs font-extrabold text-slate-400 select-none">
-                            +268
-                          </span>
-                          <input 
-                            type="text" 
-                            required
-                            placeholder="7600 1234 / 7900 1234"
-                            value={momoPhone}
-                            onChange={(e) => setMomoPhone(e.target.value)}
-                            className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg pl-14 pr-3 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
-                          />
-                        </div>
+                        <span className="font-bold text-slate-800 text-[11px] block">Interactive Gateway Simulator</span>
+                        <span className="text-[10px] text-slate-500 font-medium">Toggle outcome to inspect clean Success & Decline flows.</span>
                       </div>
                     </div>
-                  )}
+                    <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1">
+                      <button
+                        type="button"
+                        onClick={() => setSimulateDecline(false)}
+                        className={`px-2 py-1 text-[9px] font-black uppercase rounded-md transition cursor-pointer ${!simulateDecline ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+                      >
+                        Success
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSimulateDecline(true)}
+                        className={`px-2 py-1 text-[9px] font-black uppercase rounded-md transition cursor-pointer ${simulateDecline ? 'bg-rose-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
 
-                  {/* Visa / Mastercard Forms */}
-                  {selectedMethod.category === 'card' && (
-                    <div className="space-y-3 bg-slate-50 p-4 border border-slate-200 rounded-xl font-sans">
-                      <div className="flex items-center gap-2 justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <CreditCard className="w-4 h-4 text-blue-600" />
-                          <h4 className="text-xs font-bold text-slate-800 font-sans">Secure Merchant Card Input Panel</h4>
+                  {/* DYNAMIC FORMS ACCORDING TO SELECTION */}
+                  <form onSubmit={handleProcessPayment} className="space-y-4">
+                    {/* Momo, Unayo, M-Pesa, eMoolah View Form */}
+                    {selectedMethod.category === 'momo' && (
+                      <div className="space-y-3 bg-slate-50 p-4 border border-slate-200 rounded-xl font-sans">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <Smartphone className="w-4 h-4 text-blue-600" />
+                          <h4 className="text-xs font-bold text-slate-800">{selectedMethod.name} Payout Authentication</h4>
                         </div>
-                        <span className="text-[10px] bg-slate-200 text-slate-650 font-extrabold uppercase px-2 py-0.5 rounded-md border border-slate-300">
-                          {selectedMethod.logoPlaceholder}
-                        </span>
-                      </div>
-
-                      {/* Cool Credit Card Visualizer */}
-                      <div className="bg-gradient-to-br from-slate-800 to-indigo-950 p-4 rounded-xl text-white space-y-4 shadow-sm border border-slate-750 font-mono relative overflow-hidden">
-                        <div className="absolute right-3 top-3 opacity-10 font-bold text-4xl select-none uppercase">{selectedMethod.logoPlaceholder}</div>
-                        <div className="flex justify-between items-start">
-                          <span className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">Workspace Gateway Tokenizer</span>
-                          <Lock className="w-3.5 h-3.5 text-emerald-400" />
-                        </div>
-                        <div className="text-sm font-bold tracking-widest py-1.5 whitespace-pre placeholder-slate-500">
-                          {cardNumber ? cardNumber.replace(/(\d{4})/g, '$1 ').trim() : '•••• •••• •••• ••••'}
-                        </div>
-                        <div className="flex justify-between items-end text-[9px]">
-                          <div>
-                            <span className="text-slate-400 block uppercase font-bold text-[7px]">Cardholder Name</span>
-                            <span className="font-bold text-xs capitalize">{cardName || 'Director Name'}</span>
-                          </div>
-                          <div className="text-right font-sans">
-                            <span className="text-slate-300 block uppercase font-bold text-[7px]">Expires</span>
-                            <span className="font-mono font-bold tracking-widest">{cardExpiry || 'MM/YY'}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 text-xs">
+                        <p className="text-[10.5px] text-slate-500 leading-relaxed mb-3">
+                          We will push an interactive PIN confirmation request overlay dialog directly to your registered handset. Confirm the deposit of <strong className="text-slate-850 font-extrabold">E{selectedPlan.price.toLocaleString()}</strong> to complete.
+                        </p>
+                        
                         <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cardholder Full Name</label>
-                          <input 
-                            type="text" 
-                            required
-                            placeholder="Name as printed on credentials card"
-                            value={cardName}
-                            onChange={(e) => setCardName(e.target.value)}
-                            className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
-                          />
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="col-span-2">
-                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">16-Digit Card Number</label>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Handset Mobile Number</label>
+                          <div className="relative">
+                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs font-extrabold text-slate-400 select-none">
+                              +268
+                            </span>
                             <input 
                               type="text" 
                               required
-                              maxLength={16}
-                              placeholder="4111 0000 0000 0000"
-                              value={cardNumber}
-                              onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, ''))}
+                              placeholder="7600 1234 / 7900 1234"
+                              value={momoPhone}
+                              onChange={(e) => setMomoPhone(e.target.value)}
+                              className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg pl-14 pr-3 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Visa / Mastercard Forms */}
+                    {selectedMethod.category === 'card' && (
+                      <div className="space-y-3 bg-slate-50 p-4 border border-slate-200 rounded-xl font-sans">
+                        <div className="flex items-center gap-2 justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <CreditCard className="w-4 h-4 text-blue-600" />
+                            <h4 className="text-xs font-bold text-slate-800 font-sans">Secure Merchant Card Input Panel</h4>
+                          </div>
+                          <span className="text-[10px] bg-slate-200 text-slate-650 font-extrabold uppercase px-2 py-0.5 rounded-md border border-slate-300">
+                            {selectedMethod.logoPlaceholder}
+                          </span>
+                        </div>
+
+                        {/* Cool Credit Card Visualizer */}
+                        <div className="bg-gradient-to-br from-slate-800 to-indigo-950 p-4 rounded-xl text-white space-y-4 shadow-sm border border-slate-750 font-mono relative overflow-hidden">
+                          <div className="absolute right-3 top-3 opacity-10 font-bold text-4xl select-none uppercase">{selectedMethod.logoPlaceholder}</div>
+                          <div className="flex justify-between items-start">
+                            <span className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">Workspace Gateway Tokenizer</span>
+                            <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                          </div>
+                          <div className="text-sm font-bold tracking-widest py-1.5 whitespace-pre placeholder-slate-500">
+                            {cardNumber ? cardNumber.replace(/(\d{4})/g, '$1 ').trim() : '•••• •••• •••• ••••'}
+                          </div>
+                          <div className="flex justify-between items-end text-[9px]">
+                            <div>
+                              <span className="text-slate-400 block uppercase font-bold text-[7px]">Cardholder Name</span>
+                              <span className="font-bold text-xs capitalize">{cardName || 'Director Name'}</span>
+                            </div>
+                            <div className="text-right font-sans">
+                              <span className="text-slate-300 block uppercase font-bold text-[7px]">Expires</span>
+                              <span className="font-mono font-bold tracking-widest">{cardExpiry || 'MM/YY'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cardholder Full Name</label>
+                            <input 
+                              type="text" 
+                              required
+                              placeholder="Name as printed on credentials card"
+                              value={cardName}
+                              onChange={(e) => setCardName(e.target.value)}
+                              className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="col-span-2">
+                              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">16-Digit Card Number</label>
+                              <input 
+                                type="text" 
+                                required
+                                maxLength={16}
+                                placeholder="4111 0000 0000 0000"
+                                value={cardNumber}
+                                onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, ''))}
+                                className="w-full text-xs font-mono bg-white border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Expiry Date</label>
+                              <input 
+                                type="text" 
+                                required
+                                maxLength={5}
+                                placeholder="MM/YY"
+                                value={cardExpiry}
+                                onChange={(e) => setCardExpiry(e.target.value)}
+                                className="w-full text-xs font-mono text-center bg-white border border-slate-200 rounded-lg px-2 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">CVV / Security Code</label>
+                              <input 
+                                type="password" 
+                                required
+                                maxLength={3}
+                                placeholder="•••"
+                                value={cardCvv}
+                                onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
+                                className="w-full text-xs font-mono text-center bg-white border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
+                              />
+                            </div>
+                            <div className="flex items-end text-[10px] text-slate-450 font-semibold pb-2 select-none">
+                              🔒 VISA Secure / MC ID check
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bank Transfer (EFT) Form */}
+                    {selectedMethod.id === 'eft' && (
+                      <div className="space-y-3 bg-slate-50 p-4 border border-slate-200 rounded-xl text-xs font-sans">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Building className="w-4 h-4 text-blue-600" />
+                          <h4 className="text-xs font-bold text-slate-800">Swaziland Corporate Banking Direct Details</h4>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-normal mb-3">
+                          Submit a direct electronic bank transfer (EFT) to the platform provider account below. You must upload a proof of payment slip.
+                        </p>
+                        
+                        <div className="grid grid-cols-2 gap-2 bg-white border border-slate-200 rounded-xl p-3 font-semibold text-slate-700">
+                          <div>
+                            <span className="text-[8px] text-slate-400 block uppercase">Bank Name</span>
+                            <span>Standard Bank Eswatini</span>
+                          </div>
+                          <div>
+                            <span className="text-[8px] text-slate-400 block uppercase">Account Number</span>
+                            <span className="font-mono text-slate-800">90912192019</span>
+                          </div>
+                          <div>
+                            <span className="text-[8px] text-slate-400 block uppercase">Branch Code</span>
+                            <span className="font-mono text-slate-800">660500</span>
+                          </div>
+                          <div>
+                            <span className="text-[8px] text-slate-400 block uppercase">Account Type</span>
+                            <span>Corporate Cheque</span>
+                          </div>
+                          <div className="col-span-2 pt-1 border-t border-slate-100 flex justify-between items-center text-[10px] mt-2">
+                            <span className="text-slate-450">Required Payment Reference:</span>
+                            <span className="bg-blue-50 px-2 py-0.5 rounded text-blue-800 font-bold uppercase">{company?.name?.slice(0, 5) || 'SUB'}-EST</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 pt-2">
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Upload EFT confirmation Transfer Slip</label>
+                          {popFileSimulated ? (
+                            <div className="flex items-center justify-between p-2.5 bg-blue-50 border border-blue-200 text-blue-850 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-blue-500" />
+                                <span className="font-mono text-[10px] font-bold">{popFileSimulated}</span>
+                              </div>
+                              <button 
+                                type="button" 
+                                onClick={() => setPopFileSimulated(null)}
+                                className="text-xs text-red-500 font-extrabold hover:underline"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ) : (
+                            <div 
+                              onClick={() => setPopFileSimulated('EFT_Proof_SUB_' + (company?.name || 'Workspace').replace(/\s+/g, '_') + '.pdf')}
+                              className="border-2 border-dashed border-slate-250 hover:border-slate-400 hover:bg-slate-100/50 rounded-xl p-4 text-center cursor-pointer transition-all"
+                            >
+                              <Upload className="w-6 h-6 text-slate-400 mx-auto mb-1.5" />
+                              <p className="text-[10px] text-slate-500 font-bold">Click here to attach Proof of Payment slip</p>
+                              <p className="text-[8.5px] text-slate-400 mt-0.5">Supports PDF, PNG, JPG (Max 5MB)</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Western Union, MoneyGram, Mukuru view forms */}
+                    {selectedMethod.category === 'remit' && (
+                      <div className="space-y-3 bg-slate-50 p-4 border border-slate-200 rounded-xl text-xs font-sans font-medium">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <Globe className="w-4 h-4 text-blue-600" />
+                          <h4 className="text-xs font-bold text-slate-800">{selectedMethod.name} Settlement Input</h4>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-normal mb-3">
+                          Submit physical remittance deposits at any partner branch or online wallet. Provide the money transfer reference code (MTCN / pin code) below for real-time ledger allocation.
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Sender Full Name (Remitter)</label>
+                            <input 
+                              type="text" 
+                              required
+                              placeholder="Jane Doe"
+                              value={remitSender}
+                              onChange={(e) => setRemitSender(e.target.value)}
+                              className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Transfer Code reference (MTCN / PIN)</label>
+                            <input 
+                              type="text" 
+                              required
+                              placeholder="e.g. 8-Digit or 10-Digit PIN"
+                              value={remitMtcn}
+                              onChange={(e) => setRemitMtcn(e.target.value)}
                               className="w-full text-xs font-mono bg-white border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
                             />
                           </div>
-                          <div>
-                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Expiry Date</label>
-                            <input 
-                              type="text" 
-                              required
-                              maxLength={5}
-                              placeholder="MM/YY"
-                              value={cardExpiry}
-                              onChange={(e) => setCardExpiry(e.target.value)}
-                              className="w-full text-xs font-mono text-center bg-white border border-slate-200 rounded-lg px-2 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">CVV / Security Code</label>
-                            <input 
-                              type="password" 
-                              required
-                              maxLength={3}
-                              placeholder="•••"
-                              value={cardCvv}
-                              onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
-                              className="w-full text-xs font-mono text-center bg-white border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
-                            />
-                          </div>
-                          <div className="flex items-end text-[10px] text-slate-450 font-semibold pb-2 select-none">
-                            🔒 VISA Secure / MC ID check
-                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Bank Transfer (EFT) Form */}
-                  {selectedMethod.id === 'eft' && (
-                    <div className="space-y-3 bg-slate-50 p-4 border border-slate-200 rounded-xl text-xs font-sans">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Building className="w-4 h-4 text-blue-600" />
-                        <h4 className="text-xs font-bold text-slate-800">Swaziland Corporate Banking Direct Details</h4>
-                      </div>
-                      <p className="text-[10px] text-slate-500 leading-normal mb-3">
-                        Submit a direct electronic bank transfer (EFT) to the platform provider account below. You must upload a proof of payment slip.
-                      </p>
-                      
-                      <div className="grid grid-cols-2 gap-2 bg-white border border-slate-200 rounded-xl p-3 font-semibold text-slate-700">
-                        <div>
-                          <span className="text-[8px] text-slate-400 block uppercase">Bank Name</span>
-                          <span>Standard Bank Eswatini</span>
-                        </div>
-                        <div>
-                          <span className="text-[8px] text-slate-400 block uppercase">Account Number</span>
-                          <span className="font-mono text-slate-800">90912192019</span>
-                        </div>
-                        <div>
-                          <span className="text-[8px] text-slate-400 block uppercase">Branch Code</span>
-                          <span className="font-mono text-slate-800">660500</span>
-                        </div>
-                        <div>
-                          <span className="text-[8px] text-slate-400 block uppercase">Account Type</span>
-                          <span>Corporate Cheque</span>
-                        </div>
-                        <div className="col-span-2 pt-1 border-t border-slate-100 flex justify-between items-center text-[10px] mt-2">
-                          <span className="text-slate-450">Required Payment Reference:</span>
-                          <span className="bg-blue-50 px-2 py-0.5 rounded text-blue-800 font-bold uppercase">{company?.name?.slice(0, 5) || 'SUB'}-EST</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5 pt-2">
-                        <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Upload EFT confirmation Transfer Slip</label>
-                        {popFileSimulated ? (
-                          <div className="flex items-center justify-between p-2.5 bg-blue-50 border border-blue-200 text-blue-850 rounded-lg">
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-blue-500" />
-                              <span className="font-mono text-[10px] font-bold">{popFileSimulated}</span>
-                            </div>
-                            <button 
-                              type="button" 
-                              onClick={() => setPopFileSimulated(null)}
-                              className="text-xs text-red-500 font-extrabold hover:underline"
-                            >
-                              Remove
-                            </button>
-                          </div>
+                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-4">
+                      <button 
+                        type="button" 
+                        onClick={() => setSelectedPlan(null)}
+                        className="px-4 py-2 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                      >
+                        Cancel Upgrade
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isProcessing}
+                        className="px-6 py-2.5 bg-slate-900 border border-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold rounded-xl transition cursor-pointer select-none flex items-center gap-2 min-w-[150px] justify-center shadow-3xs disabled:opacity-50"
+                      >
+                        {isProcessing ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Authorization...
+                          </>
                         ) : (
-                          <div 
-                            onClick={() => setPopFileSimulated('EFT_Proof_SUB_' + (company?.name || 'Workspace').replace(/\s+/g, '_') + '.pdf')}
-                            className="border-2 border-dashed border-slate-250 hover:border-slate-400 hover:bg-slate-100/50 rounded-xl p-4 text-center cursor-pointer transition-all"
-                          >
-                            <Upload className="w-6 h-6 text-slate-400 mx-auto mb-1.5" />
-                            <p className="text-[10px] text-slate-500 font-bold">Click here to attach Proof of Payment slip</p>
-                            <p className="text-[8.5px] text-slate-400 mt-0.5">Supports PDF, PNG, JPG (Max 5MB)</p>
-                          </div>
+                          `Authorize E${selectedPlan.price.toLocaleString()}`
                         )}
-                      </div>
+                      </button>
                     </div>
-                  )}
+                  </form>
+                </div>
+              ) : null}
 
-                  {/* Western Union, MoneyGram, Mukuru view forms */}
-                  {selectedMethod.category === 'remit' && (
-                    <div className="space-y-3 bg-slate-50 p-4 border border-slate-200 rounded-xl text-xs font-sans font-medium">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <Globe className="w-4 h-4 text-blue-600" />
-                        <h4 className="text-xs font-bold text-slate-800">{selectedMethod.name} Settlement Input</h4>
-                      </div>
-                      <p className="text-[10px] text-slate-500 leading-normal mb-3">
-                        Submit physical remittance deposits at any partner branch or online wallet. Provide the money transfer reference code (MTCN / pin code) below for real-time ledger allocation.
-                      </p>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Sender Full Name (Remitter)</label>
-                          <input 
-                            type="text" 
-                            required
-                            placeholder="Jane Doe"
-                            value={remitSender}
-                            onChange={(e) => setRemitSender(e.target.value)}
-                            className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Transfer Code reference (MTCN / PIN)</label>
-                          <input 
-                            type="text" 
-                            required
-                            placeholder="e.g. 8-Digit or 10-Digit PIN"
-                            value={remitMtcn}
-                            onChange={(e) => setRemitMtcn(e.target.value)}
-                            className="w-full text-xs font-mono bg-white border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-hidden focus:border-blue-500 transition"
-                          />
-                        </div>
-                      </div>
+              {/* PAYMENT PROCESSING SPINNER DISPLAY */}
+              {paymentStatus === 'processing' && (
+                <div className="flex flex-col items-center justify-center py-16 text-center space-y-6 flex-1">
+                  <div className="relative">
+                    {/* Animated Gateway Spinner halo */}
+                    <div className="w-24 h-24 rounded-full border-4 border-slate-100 border-t-blue-600 animate-spin flex items-center justify-center">
+                      <Smartphone className="w-9 h-9 text-blue-600 animate-pulse" />
                     </div>
-                  )}
+                    <span className="absolute -bottom-1 -right-1 flex h-4 w-4">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500"></span>
+                    </span>
+                  </div>
 
-                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-4">
-                    <button 
-                      type="button" 
-                      onClick={() => setSelectedPlan(null)}
-                      className="px-4 py-2 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                  <div className="space-y-2">
+                    <h4 className="text-base font-extrabold text-slate-950 tracking-tight animate-pulse">Conducting Handshake Verification</h4>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                      Connecting with corporate Eswatini clearing databases via <strong className="text-slate-800">{selectedMethod.name}</strong>...
+                    </p>
+                  </div>
+
+                  <div className="w-full max-w-xs bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-left space-y-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    <div className="flex justify-between items-center text-emerald-600">
+                      <span>1. Session Tokenization</span>
+                      <Check className="w-4 h-4 text-emerald-500" />
+                    </div>
+                    <div className="flex justify-between items-center text-emerald-600">
+                      <span>2. Credentials Exchange</span>
+                      <Check className="w-4 h-4 text-emerald-500" />
+                    </div>
+                    <div className="flex justify-between items-center text-blue-600">
+                      <span className="animate-pulse">3. Security Clearing Approval</span>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* PAYMENT SUCCESS SPINNER DISPLAY */}
+              {paymentStatus === 'success' && (
+                <div className="flex flex-col items-center justify-center py-12 text-center space-y-6 flex-1">
+                  <div className="relative">
+                    {/* Glowing outer rotating spinner ring, with happy tick inside */}
+                    <div className="w-24 h-24 rounded-full bg-emerald-50 border-4 border-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-100/50 relative overflow-hidden animate-bounce">
+                      <Check className="w-11 h-11 text-emerald-600 stroke-[3px]" />
+                    </div>
+                    <span className="absolute -top-1 -right-1 bg-emerald-600 text-white p-1 rounded-full animate-pulse">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="text-lg font-black text-slate-900 tracking-tight">Gateway Authorized!</h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                      The transaction cleared successfully. Your company workspace billing metrics have been provisioned instantly.
+                    </p>
+                  </div>
+
+                  {/* Transaction info board */}
+                  <div className="w-full max-w-sm bg-slate-50 border border-slate-200 rounded-xl p-4 text-left space-y-2.5 text-xs text-slate-700">
+                    <div className="flex justify-between pb-2 border-b border-slate-200 text-[9px] uppercase tracking-wider font-extrabold text-slate-400">
+                      <span>Gateway Receipt</span>
+                      <span className="font-mono text-slate-500">{transactionCode}</span>
+                    </div>
+                    <div className="flex justify-between font-bold">
+                      <span className="text-slate-450">Subscribed Tier:</span>
+                      <span className="text-blue-700">{selectedPlan.name}</span>
+                    </div>
+                    <div className="flex justify-between font-bold">
+                      <span className="text-slate-450">Payment Engine:</span>
+                      <span>{selectedMethod.name}</span>
+                    </div>
+                    <div className="flex justify-between font-bold">
+                      <span className="text-slate-450">Settled Amount:</span>
+                      <span className="text-base font-black text-slate-950">E{selectedPlan.price.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPlan(null);
+                      setPaymentStatus('idle');
+                    }}
+                    className="w-full max-w-xs py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition shadow-md shadow-emerald-200/40 cursor-pointer uppercase tracking-wider"
+                  >
+                    Open Workspace Dashboard
+                  </button>
+                </div>
+              )}
+
+              {/* PAYMENT FAILED/DECLINED SPINNER DISPLAY */}
+              {paymentStatus === 'failed' && (
+                <div className="flex flex-col items-center justify-center py-12 text-center space-y-6 flex-1">
+                  <div className="relative">
+                    {/* Pulsating red validation failed spinner circle */}
+                    <div className="w-24 h-24 rounded-full bg-rose-50 border-4 border-rose-500 flex items-center justify-center shadow-lg shadow-rose-150/40 relative animate-pulse">
+                      <X className="w-11 h-11 text-rose-600 stroke-[3px]" />
+                    </div>
+                    <span className="absolute -top-1 -right-1 bg-rose-600 text-white p-1 rounded-full">
+                      <AlertTriangle className="w-4 h-4" />
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="text-lg font-black text-rose-700 tracking-tight">Handshake Authentication Declined</h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                      The network transaction gateway declined the connection request.
+                    </p>
+                  </div>
+
+                  {/* Failure detailed description pane */}
+                  <div className="w-full max-w-sm bg-rose-50/70 border border-rose-150 rounded-xl p-4 text-left text-xs font-medium text-rose-800">
+                    <p className="font-bold text-rose-900 text-[10.5px] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 animate-bounce" /> 
+                      Decline Reason Logged
+                    </p>
+                    <p className="text-[11px] text-rose-700 leading-relaxed italic pr-2">
+                      &quot;{declineReason}&quot;
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2.5 w-full max-w-sm pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentStatus('idle')}
+                      className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
                     >
-                      Cancel Upgrade
+                      <RefreshCw className="w-3.5 h-3.5 text-slate-500" /> Try Again
                     </button>
                     <button
-                      type="submit"
-                      disabled={isProcessing}
-                      className="px-6 py-2 bg-slate-900 border border-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold rounded-xl transition cursor-pointer select-none flex items-center gap-2 min-w-[140px] justify-center shadow-3xs disabled:opacity-50"
+                      type="button"
+                      onClick={() => {
+                        setSelectedPlan(null);
+                        setPaymentStatus('idle');
+                      }}
+                      className="flex-1 py-3 bg-slate-950 hover:bg-slate-800 text-white text-xs font-black rounded-xl transition cursor-pointer"
                     >
-                      {isProcessing ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Authorization...
-                        </>
-                      ) : (
-                        `Authorize E${selectedPlan.price.toLocaleString()}`
-                      )}
+                      Dismiss Checkout
                     </button>
                   </div>
-                </form>
-              </div>
+                </div>
+              )}
+
             </div>
 
           </div>

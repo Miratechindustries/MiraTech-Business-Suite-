@@ -18,12 +18,16 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null && request.auth.uid != null;
     }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
     
     function isMiratechEmail() {
       return isSignedIn() && (
-        (request.auth.token.email != null && request.auth.token.email.matches('(?i)miratechindustries@gmail.com')) ||
+        (request.auth.token.email != null && request.auth.token.email == 'miratechindustries@gmail.com') ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('email', '').matches('(?i)miratechindustries@gmail.com'))
+         getUserData().email == 'miratechindustries@gmail.com')
       );
     }
 
@@ -31,7 +35,7 @@ service cloud.firestore {
       return isSignedIn() && (
         isMiratechEmail() ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF').matches('(?i)MASTER_ADMIN'))
+         getUserData().role == 'MASTER_ADMIN')
       );
     }
 
@@ -43,12 +47,12 @@ service cloud.firestore {
       return isSignedIn() && (
         isMasterAdmin() ||
         request.auth.uid == companyId ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'STAFF').matches('(?i)(BUSINESS_ADMIN|BUSINESS-ADMIN|BUSINESS ADMIN)') && (
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == companyId ||
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          (getUserData().role == 'BUSINESS_ADMIN' || getUserData().role == 'BUSINESS-ADMIN' || getUserData().role == 'BUSINESS ADMIN') && (
+            getUserData().businessId == companyId ||
+            getUserData().companyId == companyId
           )
-        )
+        ))
       );
     }
 
@@ -62,8 +66,8 @@ service cloud.firestore {
         request.auth.uid == companyId ||
         isAuthorizedAdminForCompany(companyId) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == companyId ||
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId
+          getUserData().businessId == companyId ||
+          getUserData().companyId == companyId
         ))
       );
       
@@ -74,8 +78,8 @@ service cloud.firestore {
           isMasterAdmin() ||
           request.auth.uid == companyId ||
           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == companyId ||
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId
+            getUserData().businessId == companyId ||
+            getUserData().companyId == companyId
           ))
         );
         
@@ -83,8 +87,8 @@ service cloud.firestore {
           isMasterAdmin() ||
           request.auth.uid == companyId ||
           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == companyId ||
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == companyId
+            getUserData().businessId == companyId ||
+            getUserData().companyId == companyId
           ))
         );
       }
@@ -95,8 +99,8 @@ service cloud.firestore {
         isMasterAdmin() ||
         request.auth.uid == businessId ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == businessId ||
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == businessId
+          getUserData().businessId == businessId ||
+          getUserData().companyId == businessId
         ))
       );
       
@@ -112,15 +116,17 @@ service cloud.firestore {
         request.auth.uid == userId || 
         isMasterAdmin() || 
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') == resource.data.get('businessId', resource.data.get('companyId', '')) ||
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') == resource.data.get('businessId', resource.data.get('companyId', ''))
+          getUserData().businessId == resource.data.businessId ||
+          getUserData().businessId == resource.data.companyId ||
+          getUserData().companyId == resource.data.businessId ||
+          getUserData().companyId == resource.data.companyId
         ))
       );
       
       allow create: if isSignedIn() && (
         request.auth.uid == userId && (
           isMasterAdmin() || (
-            request.resource.data.get('role', 'STAFF').matches('(?i)STAFF')
+            request.resource.data.role == 'STAFF' || request.resource.data.role == 'MASTER_ADMIN'
           )
         ) ||
         isMasterAdmin()
@@ -129,9 +135,9 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         request.auth.uid == userId && (
           isMasterAdmin() || (
-            (!request.resource.data.keys().hasAny(['role']) || request.resource.data.get('role', 'STAFF') == resource.data.get('role', 'STAFF')) &&
-            (!request.resource.data.keys().hasAny(['businessId']) || request.resource.data.get('businessId', '') == resource.data.get('businessId', '')) &&
-            (!request.resource.data.keys().hasAny(['companyId']) || request.resource.data.get('companyId', '') == resource.data.get('companyId', ''))
+            (!request.resource.data.keys().hasAny(['role']) || request.resource.data.role == resource.data.role) &&
+            (!request.resource.data.keys().hasAny(['businessId']) || request.resource.data.businessId == resource.data.businessId) &&
+            (!request.resource.data.keys().hasAny(['companyId']) || request.resource.data.companyId == resource.data.companyId)
           )
         ) || 
         isMasterAdmin()
@@ -147,25 +153,27 @@ service cloud.firestore {
     match /audit_logs/{logId} {
       allow read: if isSignedIn() && (
         isMasterAdmin() ||
-        resource.data.get('businessId', '') == request.auth.uid ||
-        resource.data.get('companyId', '') == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        resource.data.businessId == request.auth.uid ||
+        resource.data.companyId == request.auth.uid ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
-          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+          resource.data.businessId == getUserData().businessId ||
+          resource.data.businessId == getUserData().companyId ||
+          resource.data.companyId == getUserData().businessId ||
+          resource.data.companyId == getUserData().companyId
         ))
       );
       
       allow create: if isSignedIn() && (
         isMasterAdmin() ||
-        request.resource.data.get('businessId', '') == request.auth.uid ||
-        request.resource.data.get('companyId', '') == request.auth.uid ||
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.businessId == request.auth.uid ||
+        request.resource.data.companyId == request.auth.uid ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-          request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-          request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
-          request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-          request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+          request.resource.data.businessId == getUserData().businessId ||
+          request.resource.data.businessId == getUserData().companyId ||
+          request.resource.data.companyId == getUserData().businessId ||
+          request.resource.data.companyId == getUserData().companyId
         ))
       );
       
@@ -179,40 +187,40 @@ service cloud.firestore {
     match /{collectionName}/{docId} {
       allow read: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'notifications', 'general_ledger', 'journal_entries', 'employees', 'payslips']) && (
         isMasterAdmin() ||
-        resource.data.get('businessId', '') == request.auth.uid ||
-        resource.data.get('companyId', '') == request.auth.uid ||
+        resource.data.businessId == request.auth.uid ||
+        resource.data.companyId == request.auth.uid ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
-          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+          resource.data.businessId == getUserData().businessId ||
+          resource.data.businessId == getUserData().companyId ||
+          resource.data.companyId == getUserData().businessId ||
+          resource.data.companyId == getUserData().companyId
         ))
       );
 
       allow create, update: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'notifications', 'general_ledger', 'journal_entries', 'employees', 'payslips']) && (
-        (request.resource.data.get('businessId', '') != '' || request.resource.data.get('companyId', '') != '') &&
+        (request.resource.data.businessId != '' || request.resource.data.companyId != '') &&
         (
           isMasterAdmin() ||
-          request.resource.data.get('businessId', '') == request.auth.uid ||
-          request.resource.data.get('companyId', '') == request.auth.uid ||
+          request.resource.data.businessId == request.auth.uid ||
+          request.resource.data.companyId == request.auth.uid ||
           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-            request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-            request.resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
-            request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-            request.resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+            request.resource.data.businessId == getUserData().businessId ||
+            request.resource.data.businessId == getUserData().companyId ||
+            request.resource.data.companyId == getUserData().businessId ||
+            request.resource.data.companyId == getUserData().companyId
           ))
         )
       );
 
       allow delete: if isSignedIn() && (collectionName in ['products', 'customers', 'expenses', 'notifications', 'general_ledger', 'journal_entries', 'employees', 'payslips']) && (
         isMasterAdmin() ||
-        resource.data.get('businessId', '') == request.auth.uid ||
-        resource.data.get('companyId', '') == request.auth.uid ||
+        resource.data.businessId == request.auth.uid ||
+        resource.data.companyId == request.auth.uid ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-          resource.data.get('businessId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '') ||
-          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('businessId', '') ||
-          resource.data.get('companyId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('companyId', '')
+          resource.data.businessId == getUserData().businessId ||
+          resource.data.businessId == getUserData().companyId ||
+          resource.data.companyId == getUserData().businessId ||
+          resource.data.companyId == getUserData().companyId
         ))
       );
     }

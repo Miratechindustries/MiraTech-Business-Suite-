@@ -510,6 +510,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   };
 
   const handleGoogleLogin = async () => {
+    setAuthError("");
     try {
       setAuthLoading(true);
       const res = await googleSignIn();
@@ -517,8 +518,15 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
         setUser(res.user);
         setGoogleToken(res.accessToken);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Sign-in process disrupted:", err);
+      if (err.code === 'auth/popup-closed-by-user') {
+        setAuthError("Sign-in was canceled because the Google popup was closed before completing.");
+      } else if (err.code === 'auth/blocked-by-popup-killer') {
+        setAuthError("The sign-in popup was blocked by your browser. Please allow popups for this site and try again.");
+      } else {
+        setAuthError(err.message || "An error occurred during Google sign-in. Please try again.");
+      }
     } finally {
       setAuthLoading(false);
     }

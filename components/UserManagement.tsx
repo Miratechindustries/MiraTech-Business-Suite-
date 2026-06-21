@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, collection, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -43,12 +43,22 @@ export default function UserManagement() {
       const companiesSnapshot = await getDocs(collection(db, 'companies'));
       const companiesData = companiesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setCompanies(companiesData);
+    } catch (err: any) {
+      console.error("Error loading companies in user management directory:", err);
+      try {
+        handleFirestoreError(err, OperationType.LIST, 'companies');
+      } catch (r) {}
+    }
 
+    try {
       const usersSnapshot = await getDocs(collection(db, 'users'));
       const usersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUsers(usersData);
-    } catch (err) {
-      console.error("Error loading user management directory:", err);
+    } catch (err: any) {
+      console.error("Error loading users in user management directory:", err);
+      try {
+        handleFirestoreError(err, OperationType.LIST, 'users');
+      } catch (r) {}
     }
   };
 
@@ -67,9 +77,12 @@ export default function UserManagement() {
       });
       fetchData();
       setEditingUserId(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to update user');
+      setError('Failed to update user');
+      try {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+      } catch (r) {}
     }
   };
 

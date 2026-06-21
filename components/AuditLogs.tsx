@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Search, Loader2, Calendar, ShieldCheck, User, RefreshCw, Key, ShieldAlert, X, Copy, Check, Terminal, Cpu, Database, Network } from "lucide-react";
-import { auth, db } from "../lib/firebase";
+import { auth, db, handleFirestoreError, OperationType } from "../lib/firebase";
 import { collection, query, where, getDocs, getDoc, doc } from "firebase/firestore";
 import { useUserStore } from "../lib/store";
 import { motion, AnimatePresence } from "motion/react";
@@ -48,9 +48,12 @@ export default function AuditLogs({ userLogsOnly = false }: AuditLogsProps = {})
           } else {
             setBusinessId(auth.currentUser.uid);
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error(e);
           setBusinessId(auth.currentUser.uid);
+          try {
+            handleFirestoreError(e, OperationType.GET, `users/${auth.currentUser.uid}`);
+          } catch (r) {}
         }
     }
     loadBusiness();
@@ -98,6 +101,9 @@ export default function AuditLogs({ userLogsOnly = false }: AuditLogsProps = {})
     } catch (err: any) {
       console.error("[AuditLogs Module] Failure querying system records:", err);
       setError(err?.message || "Internal failure querying security records from Firestore.");
+      try {
+        handleFirestoreError(err, OperationType.LIST, "audit_logs");
+      } catch (r) {}
     } finally {
       setRefreshing(false);
     }
