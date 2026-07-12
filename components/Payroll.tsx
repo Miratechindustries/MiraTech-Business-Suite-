@@ -33,6 +33,8 @@ import {
 import Image from "next/image";
 import { motion } from "motion/react";
 import * as XLSX from "xlsx";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -112,6 +114,7 @@ export default function Payroll() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [payslipsHistory, setPayslipsHistory] = useState<Payslip[]>([]);
+  const [selectedPayslips, setSelectedPayslips] = useState<Set<string>>(new Set());
   const [companyDetails, setCompanyDetails] = useState<CompanyDetails | null>(null);
 
   // Loading states
@@ -967,6 +970,25 @@ export default function Payroll() {
                 <FileSpreadsheet className="w-4 h-4" />
                 Export Archives (.xlsx)
               </button>
+              <button
+                onClick={generateBulkZip}
+                disabled={selectedPayslips.size === 0}
+                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white text-xs font-bold py-2 px-3 rounded-xl shadow-xs transition cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                Bulk ZIP PDF
+              </button>
+              <button
+                onClick={async () => {
+                  // Monthly generation logic
+                  addToast("Generating monthly payslips...", "info");
+                  // Add logic here
+                }}
+                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 px-3 rounded-xl shadow-xs transition cursor-pointer"
+              >
+                <Clock className="w-4 h-4" />
+                Generate Monthly
+              </button>
             </div>
           </div>
 
@@ -974,6 +996,19 @@ export default function Payroll() {
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-[#F8FAFC] border-b border-slate-200 text-slate-400 text-3xs font-black uppercase tracking-wider">
                 <tr>
+                  <th className="p-4">
+                    <input 
+                      type="checkbox"
+                      checked={selectedPayslips.size === payslipsHistory.length && payslipsHistory.length > 0}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedPayslips(new Set(payslipsHistory.map(p => p.id!)));
+                        } else {
+                          setSelectedPayslips(new Set());
+                        }
+                      }}
+                    />
+                  </th>
                   <th className="p-4">Employee</th>
                   <th className="p-4">Period</th>
                   <th className="p-4">Basic Salary</th>
@@ -996,6 +1031,18 @@ export default function Payroll() {
                 ) : (
                   filteredHistory.map((ps, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/50">
+                      <td className="p-4">
+                        <input 
+                          type="checkbox"
+                          checked={selectedPayslips.has(ps.id!)}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedPayslips);
+                            if (e.target.checked) newSelected.add(ps.id!);
+                            else newSelected.delete(ps.id!);
+                            setSelectedPayslips(newSelected);
+                          }}
+                        />
+                      </td>
                       <td className="p-4">
                         <div>
                           <p className="font-bold text-slate-900">{ps.employeeName}</p>

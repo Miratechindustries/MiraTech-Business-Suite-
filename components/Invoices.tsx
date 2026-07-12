@@ -192,6 +192,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
   const [search, setSearch] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
 
   const generateNextInvoiceNumber = () => {
     let nextNum = departmentId ? `INV-${departmentId.toUpperCase()}-1001` : "INV-1001";
@@ -564,6 +565,29 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
     }
   };
 
+  const handleBatchStatusUpdate = async (newStatus: "paid" | "unpaid") => {
+    const user = auth.currentUser;
+    if (!user) return;
+    
+    try {
+      setSubmitting(true);
+      await Promise.all(Array.from(selectedInvoices).map(async (id) => {
+        await updateDoc(doc(db, "companies", user.uid, "invoices", id), {
+          status: newStatus,
+        });
+      }));
+      addToast(`Updated ${selectedInvoices.size} invoices to ${newStatus}`, "success");
+      setSelectedInvoices(new Set());
+      fetchInvoicesAndCompany();
+    } catch (err) {
+      console.error(err);
+      addToast("Failed to batch update invoice statuses", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+
   const exportInvoicesToExcel = () => {
     const data = invoices.flatMap(inv => 
       inv.items.map(item => ({
@@ -654,20 +678,26 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
             Please fill in your <strong>Company Profile</strong> tab before creating documents to populate the corporate letterhead details!
           </div>
         ) : (
-          <div className="flex gap-2">
-            <button
-               onClick={exportInvoicesToExcel}
-               className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-xs font-bold cursor-pointer shadow-3xs transition"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5" /> Export Excel
-            </button>
-            <button
-              onClick={handleOpenCreateInvoice}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold cursor-pointer shadow-3xs transition"
-            >
-              <Plus className="h-3.5 w-3.5" /> Create Invoice
-            </button>
-          </div>
+            <div className="flex gap-2">
+              {selectedInvoices.size > 0 && (
+                <div className="flex items-center gap-1 bg-white border border-blue-200 rounded-md p-0.5">
+                  <button onClick={() => handleBatchStatusUpdate("paid")} className="px-2 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded cursor-pointer">Mark Paid</button>
+                  <button onClick={() => handleBatchStatusUpdate("unpaid")} className="px-2 py-1 text-xs font-bold text-amber-700 hover:bg-amber-50 rounded cursor-pointer">Mark Unpaid</button>
+                </div>
+              )}
+              <button
+                 onClick={exportInvoicesToExcel}
+                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-xs font-bold cursor-pointer shadow-3xs transition"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" /> Export Excel
+              </button>
+              <button
+                onClick={handleOpenCreateInvoice}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold cursor-pointer shadow-3xs transition"
+              >
+                <Plus className="h-3.5 w-3.5" /> Create Invoice
+              </button>
+            </div>
         )}
       </div>
 
@@ -745,6 +775,19 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
           <table className="high-density-table w-full text-left border-collapse">
             <thead>
               <tr>
+                <th className="p-4">
+                  <input 
+                    type="checkbox"
+                    checked={selectedInvoices.size === filteredInvoices.length && filteredInvoices.length > 0}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedInvoices(new Set(filteredInvoices.map(inv => inv.id!)));
+                      } else {
+                        setSelectedInvoices(new Set());
+                      }
+                    }}
+                  />
+                </th>
                 <th>Invoice No.</th>
                 <th>Client</th>
                 <th>Due Date</th>
@@ -757,6 +800,18 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
             <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
               {filteredInvoices.map((inv) => (
                 <tr key={inv.id} className="hover:bg-slate-50/50">
+                  <td className="p-4">
+                        <input 
+                          type="checkbox"
+                          checked={selectedInvoices.has(inv.id!)}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedInvoices);
+                            if (e.target.checked) newSelected.add(inv.id!);
+                            else newSelected.delete(inv.id!);
+                            setSelectedInvoices(newSelected);
+                          }}
+                        />
+                  </td>
                   <td className="py-3.5 px-4 font-mono font-semibold text-slate-800">{inv.number}</td>
                   <td className="py-3.5 px-4">
                     <div className="font-semibold">{inv.clientName}</div>

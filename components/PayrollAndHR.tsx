@@ -663,10 +663,10 @@ const HRManagement = () => {
                   </div>
                 </div>
                 
-                <button
+                  <button
                   type="button"
                   onClick={() => setSelectedEmployee(null)}
-                  className="p-1 px-3 py-1.5 bg-slate-150 border border-slate-250 text-slate-500 rounded-lg text-xs font-bold hover:text-slate-800 transition"
+                  className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
                 >
                   <X className="w-4 h-4 inline" /> Close
                 </button>

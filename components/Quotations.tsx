@@ -203,6 +203,7 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
   const [search, setSearch] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [selectedQuotations, setSelectedQuotations] = useState<Set<string>>(new Set());
 
   const generateNextQuotationNumber = () => {
     let nextNum = departmentId ? `QT-${departmentId.toUpperCase()}-1001` : "QT-1001";
@@ -655,6 +656,28 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
     }
   };
 
+  const handleBatchStatusUpdate = async (newStatus: "pending" | "accepted" | "declined") => {
+    const user = auth.currentUser;
+    if (!user) return;
+    
+    try {
+      setSubmitting(true);
+      await Promise.all(Array.from(selectedQuotations).map(async (id) => {
+        await updateDoc(doc(db, "companies", user.uid, "quotations", id), {
+          status: newStatus,
+        });
+      }));
+      addToast(`Updated ${selectedQuotations.size} quotations to ${newStatus}`, "success");
+      setSelectedQuotations(new Set());
+      fetchQuotationsAndCompany();
+    } catch (err) {
+      console.error(err);
+      addToast("Failed to batch update quotation statuses", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     const user = auth.currentUser;
     if (!user) return;
@@ -740,7 +763,9 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
     const matchesSearch =
       q.clientName.toLowerCase().includes(search.toLowerCase()) ||
       q.number.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter === "all" ? true : q.status === filter;
+    const matchesFilter = filter === "all" ? true : 
+      filter === "approvals" ? (q.approvalStatus === "pending_admin" || q.approvalStatus === "pending_hr" || q.approvalStatus === "pending_final") : 
+      q.status === filter;
     
     let matchesDate = true;
     if (startDate) {
@@ -764,12 +789,21 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
             Please fill in your <strong>Company Profile</strong> tab before creating documents to populate the corporate letterhead details!
           </div>
         ) : (
-          <button
-            onClick={handleOpenCreateQuotation}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold cursor-pointer shadow-3xs transition"
-          >
-            <Plus className="h-3.5 w-3.5" /> Create Quotation
-          </button>
+          <div className="flex gap-2">
+              {selectedQuotations.size > 0 && (
+                <div className="flex items-center gap-1 bg-white border border-blue-200 rounded-md p-0.5">
+                  <button onClick={() => handleBatchStatusUpdate("accepted")} className="px-2 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded cursor-pointer">Mark Accepted</button>
+                  <button onClick={() => handleBatchStatusUpdate("declined")} className="px-2 py-1 text-xs font-bold text-red-700 hover:bg-red-50 rounded cursor-pointer">Mark Declined</button>
+                  <button onClick={() => handleBatchStatusUpdate("pending")} className="px-2 py-1 text-xs font-bold text-amber-700 hover:bg-amber-50 rounded cursor-pointer">Mark Pending</button>
+                </div>
+              )}
+            <button
+              onClick={handleOpenCreateQuotation}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold cursor-pointer shadow-3xs transition"
+            >
+              <Plus className="h-3.5 w-3.5" /> Create Quotation
+            </button>
+          </div>
         )}
       </div>
 
@@ -788,7 +822,7 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
           />
         </div>
         <div className="flex gap-1.5 self-start md:self-auto overflow-x-auto w-full md:w-auto">
-          {["all", "pending", "accepted", "declined"].map((tab) => (
+          {["all", "pending", "accepted", "declined", "approvals"].map((tab) => (
             <button
               key={tab}
               onClick={() => setFilter(tab)}
@@ -798,7 +832,7 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
                   : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
               }`}
             >
-              {tab}
+              {tab === "approvals" ? "Pending Approvals" : tab}
             </button>
           ))}
         </div>
@@ -847,6 +881,19 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
           <table className="high-density-table w-full text-left border-collapse">
             <thead>
               <tr>
+                <th className="p-4">
+                  <input 
+                    type="checkbox"
+                    checked={selectedQuotations.size === filteredQuots.length && filteredQuots.length > 0}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedQuotations(new Set(filteredQuots.map(q => q.id!)));
+                      } else {
+                        setSelectedQuotations(new Set());
+                      }
+                    }}
+                  />
+                </th>
                 <th>Quote No.</th>
                 <th>Client</th>
                 <th>Validity Date</th>
@@ -859,6 +906,18 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
             <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
               {filteredQuots.map((q) => (
                 <tr key={q.id} className="hover:bg-slate-50/50">
+                  <td className="p-4">
+                        <input 
+                          type="checkbox"
+                          checked={selectedQuotations.has(q.id!)}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedQuotations);
+                            if (e.target.checked) newSelected.add(q.id!);
+                            else newSelected.delete(q.id!);
+                            setSelectedQuotations(newSelected);
+                          }}
+                        />
+                  </td>
                   <td className="py-3.5 px-4 font-mono font-semibold text-slate-800">{q.number}</td>
                   <td className="py-3.5 px-4">
                     <div className="font-semibold">{q.clientName}</div>

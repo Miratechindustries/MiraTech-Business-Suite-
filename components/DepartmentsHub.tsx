@@ -19,6 +19,7 @@ import {
   Building2,
   TrendingUp
 } from "lucide-react";
+import { SUBSCRIPTION_PLANS } from "../lib/subscriptions";
 
 interface DepartmentConfig {
   id: string;
@@ -56,7 +57,25 @@ export default function DepartmentsHub({ company, onSelectTab }: DepartmentsHubP
     "sales", "finance", "hr", "inventory", "projects", "reports", "support", "procurement", "marketing", "audit", "executive"
   ];
 
-  const activeDeps = DEPARTMENTS.filter(dep => enabledModules.includes(dep.id));
+  const plan = SUBSCRIPTION_PLANS.find(p => p.id === company?.subscriptionPlanId) || SUBSCRIPTION_PLANS[0];
+  const allowedFeatures = plan.features;
+
+  const DEPT_FEATURE_MAP: Record<string, string> = {
+    'sales': 'quotations',
+    'finance': 'transactions',
+    'hr': 'payroll',
+    'inventory': 'inventory',
+    'reports': 'reports',
+    'audit': 'audit'
+  };
+
+  const activeDeps = DEPARTMENTS.filter(dep => {
+    const isEnabled = enabledModules.includes(dep.id);
+    const feature = DEPT_FEATURE_MAP[dep.id];
+    // If feature exists, it must be in plan.features. If not, allowed by default for this basic mapping.
+    const featureAllowed = feature ? allowedFeatures.includes(feature) : true;
+    return isEnabled && featureAllowed;
+  });
 
   // Determine user-specific default department greeting
   const getUserGreeting = () => {
