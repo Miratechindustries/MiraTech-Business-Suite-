@@ -217,9 +217,22 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
       const list: any[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
-        // Standard users only see notifications associated with their own activities.
-        // Master Admin can see everything.
-        if (!isMasterAdmin && data.userId && data.userId !== user.uid) {
+        
+        // Tailored notifications logic:
+        // 1. Master Admin can see everything.
+        // 2. Standard users see notifications for their own activities.
+        // 3. Department admins can see all notifications for their department.
+        
+        let hasAccess = false;
+        if (isMasterAdmin) {
+          hasAccess = true;
+        } else if (data.userId && data.userId === user.uid) {
+          hasAccess = true;
+        } else if (data.departmentId && currentUser?.departments?.includes(data.departmentId) && currentUser?.canReceiveApprovalNotifications) {
+          hasAccess = true;
+        }
+
+        if (!hasAccess) {
           return;
         }
         list.push({ id: docSnap.id, ...data });

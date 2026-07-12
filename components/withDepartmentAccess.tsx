@@ -54,7 +54,7 @@ export function useDepartmentAccess(departmentType: string): DepartmentAccessRes
           ];
         } else {
           // Fallback default modules
-          modules = ["hr", "finance", "sales", "inventory", "reports", "audit"];
+          modules = ["hr", "finance", "sales", "inventory", "reports", "audit", "marketing"];
         }
         setEnabledModules(modules);
 
