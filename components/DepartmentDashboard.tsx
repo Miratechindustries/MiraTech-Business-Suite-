@@ -84,6 +84,231 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
   const [products, setProducts] = useState<any[]>([]);
   const [selectedKpi, setSelectedKpi] = useState<any | null>(null);
   const [kpiSearch, setKpiSearch] = useState("");
+
+  const exportKpiPdf = (kpi: any, list: any[]) => {
+    if (!kpi) return;
+    const doc = new jsPDF("p", "mm", "a4");
+
+    // Corporate Letterhead & Palette
+    const primaryColor = [15, 23, 42]; // deep slate (#0f172a)
+    const accentColor = [79, 70, 229]; // indigo (#4f46e5)
+    
+    // Document Margins & Limits
+    const marginX = 15;
+    let currentY = 15;
+
+    // 1. Draw elegant Header
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.rect(marginX, currentY, 180, 1.5, "F");
+    currentY += 6;
+
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("MIRATECH INDUSTRIES REPORT ENGINE", marginX, currentY);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(115, 115, 115); // neutral-400
+    const genDate = new Date().toUTCString();
+    doc.text(`GENERATED ON (UTC): ${genDate}`, 210 - marginX - 70, currentY, { align: "right" });
+    doc.text(`DEPARTMENT: ${departmentType.toUpperCase()}`, 210 - marginX, currentY, { align: "right" });
+
+    currentY += 8;
+
+    // Subheader
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(accentColor[0], accentColor[1], accentColor[2]);
+    doc.text("REGISTRY ANALYTICAL LEDGER EXPORT", marginX, currentY);
+    
+    currentY += 6;
+
+    // Divider
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.line(marginX, currentY, 210 - marginX, currentY);
+
+    currentY += 8;
+
+    // 2. Core KPI Summary Card Block
+    doc.setFillColor(248, 250, 252); // slate-50
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.rect(marginX, currentY, 180, 22, "FD");
+
+    // KPI text content
+    doc.setTextColor(100, 116, 139); // slate-500
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text(kpi.label.toUpperCase(), marginX + 6, currentY + 7);
+
+    doc.setTextColor(accentColor[0], accentColor[1], accentColor[2]);
+    doc.setFontSize(18);
+    doc.text(kpi.value || "N/A", marginX + 6, currentY + 16);
+
+    // Trend Info
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Status: ${kpi.change}`, 210 - marginX - 6, currentY + 14, { align: "right" });
+
+    currentY += 28;
+
+    // 3. Ledger Table Header & Records
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text("LEDGER RECORD NODES", marginX, currentY);
+    currentY += 6;
+
+    const label = kpi.label;
+    let headers: string[] = [];
+    let rows: string[][] = [];
+
+    if (label.includes("Employee") || label.includes("Payroll")) {
+      headers = ["Staff Name", "Classification / Role", "Basic Salary (USD)"];
+      rows = list.map(item => [
+        item.name || "N/A",
+        item.role || "Staff",
+        `$${(Number(item.basicSalary) || 0).toLocaleString()}`
+      ]);
+    } else if (label.includes("Pipeline") || label.includes("Quotation")) {
+      headers = ["Reference", "Date", "Enterprise Lead / Client", "Total (USD)", "Status"];
+      rows = list.map(item => [
+        item.number || "N/A",
+        item.date || "N/A",
+        item.clientName || item.client || "N/A",
+        `$${(Number(item.total) || 0).toLocaleString()}`,
+        (item.status || "Pending").toUpperCase()
+      ]);
+    } else if (label.includes("Liquid") || label.includes("Receivable") || label.includes("Revenue")) {
+      headers = ["Reference", "Date", "Enterprise Client", "Total (USD)", "Status"];
+      rows = list.map(item => [
+        item.number || "N/A",
+        item.date || "N/A",
+        item.clientName || item.client || "N/A",
+        `$${(Number(item.total) || 0).toLocaleString()}`,
+        (item.status || "Paid").toUpperCase()
+      ]);
+    } else if (label.includes("Customer") || label.includes("Directory")) {
+      headers = ["Corporate Identity", "Primary Contact Email", "Direct Line Phone"];
+      rows = list.map(item => [
+        item.name || "N/A",
+        item.email || "N/A",
+        item.phone || "N/A"
+      ]);
+    } else if (label.includes("Stock") || label.includes("Inventory")) {
+      headers = ["Product SKU / Code", "Description Label", "Classification", "Stock Level", "Price (USD)"];
+      rows = list.map(item => [
+        item.sku || "N/A",
+        item.name || "N/A",
+        item.category || "N/A",
+        `${item.stock || 0} Units`,
+        `$${(Number(item.price) || 0).toLocaleString()}`
+      ]);
+    } else {
+      headers = ["Action Sequence", "Sequence Details", "Classification Node", "Timestamp"];
+      rows = list.map(item => [
+        item.action || "Activity",
+        item.details || "Details",
+        (item.department || departmentType).toUpperCase(),
+        new Date(item.timestamp).toLocaleString()
+      ]);
+    }
+
+    // Render Table manually with pure jsPDF vector functions for total reliability and style!
+    // Header Row background
+    doc.setFillColor(241, 245, 249); // slate-100
+    doc.rect(marginX, currentY, 180, 8, "F");
+    
+    doc.setTextColor(51, 65, 85); // slate-700
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+
+    const colWidths = headers.length === 3 
+      ? [60, 60, 60] 
+      : headers.length === 5 
+        ? [35, 30, 60, 30, 25] 
+        : headers.length === 4 
+          ? [45, 65, 35, 35] 
+          : [60, 60, 60];
+
+    // Print headers
+    let cellX = marginX;
+    headers.forEach((h, colIdx) => {
+      doc.text(h.toUpperCase(), cellX + 3, currentY + 5.5);
+      cellX += colWidths[colIdx];
+    });
+
+    currentY += 8;
+
+    // Print rows
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(71, 85, 105); // slate-600
+
+    if (rows.length === 0) {
+      doc.text("NO SECURED DATABASE RECORDS IN THIS LEDGER RANGE.", marginX + 3, currentY + 6);
+      currentY += 10;
+    } else {
+      rows.forEach((row, rowIdx) => {
+        // Handle page overflow gracefully
+        if (currentY > 270) {
+          doc.addPage();
+          currentY = 20;
+          // Print headers again
+          doc.setFillColor(241, 245, 249);
+          doc.rect(marginX, currentY, 180, 8, "F");
+          doc.setTextColor(51, 65, 85);
+          doc.setFont("helvetica", "bold");
+          let hX = marginX;
+          headers.forEach((h, colIdx) => {
+            doc.text(h.toUpperCase(), hX + 3, currentY + 5.5);
+            hX += colWidths[colIdx];
+          });
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(71, 85, 105);
+          currentY += 8;
+        }
+
+        // Zebra striping
+        if (rowIdx % 2 === 1) {
+          doc.setFillColor(248, 250, 252); // slate-50
+          doc.rect(marginX, currentY, 180, 7, "F");
+        }
+
+        let rowX = marginX;
+        row.forEach((cellText, colIdx) => {
+          // Truncate text if it overflows cell width
+          let text = String(cellText);
+          const maxChar = Math.floor(colWidths[colIdx] * 0.45);
+          if (text.length > maxChar) {
+            text = text.substring(0, maxChar - 3) + "...";
+          }
+          doc.text(text, rowX + 3, currentY + 4.5);
+          rowX += colWidths[colIdx];
+        });
+
+        currentY += 7;
+      });
+    }
+
+    // Footer signature block
+    if (currentY > 250) {
+      doc.addPage();
+      currentY = 20;
+    }
+    currentY += 15;
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.line(marginX, currentY, 210 - marginX, currentY);
+    
+    currentY += 8;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(148, 163, 184); // slate-400
+    doc.text("MIRATECH SYSTEMS INTEGRITY LEDGER - END OF REGISTERED NODES", marginX, currentY);
+
+    doc.save(`KPI_Report_${kpi.label.replace(/\s+/g, "_")}.pdf`);
+  };
   
   // Tab State: "overview" | "quotations" | "invoices" | "receipts" | "crm" | "ledger" | "audit_center" | "payroll" | "inventory" | "reports" | "audit"
   const [activeSubTab, setActiveSubTab] = useState<string>("overview");
