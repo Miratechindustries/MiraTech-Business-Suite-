@@ -41,6 +41,10 @@ interface Quotation {
   total: number;
   status: "pending" | "accepted" | "declined";
   driveFileId?: string;
+  department?: string;
+  approvalStatus?: 'draft' | 'pending_admin' | 'pending_hr' | 'pending_final' | 'approved' | 'rejected' | 'cancelled';
+  approvalHistory?: any[];
+  approvalComments?: string;
 }
 
 interface CompanyDetails {
@@ -64,7 +68,7 @@ interface Customer {
   status: "Active" | "Inactive";
 }
 
-export default function Quotations() {
+export default function Quotations({ departmentId }: { departmentId?: string }) {
   const { currentUser } = useUserStore();
   const addToast = useToastStore((state) => state.addToast);
 
@@ -91,6 +95,101 @@ export default function Quotations() {
   const [clients, setClients] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
 
+  // Workflow states
+  const [workflowComments, setWorkflowComments] = useState("");
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopyText = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(label);
+    addToast(`${label} copied to clipboard!`, "success");
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handleWorkflowTransition = async (
+    nextStatus: "pending_admin" | "pending_hr" | "pending_final" | "approved" | "rejected" | "cancelled",
+    actionName: string,
+    override = false
+  ) => {
+    if (!previewQuotation || !previewQuotation.id) return;
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const newEvent = {
+      type: override ? "manager_override" : actionName.toLowerCase().replace(/ /g, "_"),
+      user: currentUser?.email || "System User",
+      userId: currentUser?.uid || user.uid,
+      role: currentUser?.role || "STAFF",
+      date: new Date().toISOString().split("T")[0],
+      time: new Date().toLocaleTimeString(),
+      comments: workflowComments || `${actionName} performed by ${currentUser?.email || "User"}.`
+    };
+
+    const updatedHistory = [...(previewQuotation.approvalHistory || []), newEvent];
+
+    try {
+      setSubmitting(true);
+      await updateDoc(doc(db, "companies", user.uid, "quotations", previewQuotation.id), {
+        approvalStatus: nextStatus,
+        approvalHistory: updatedHistory,
+        approvalComments: workflowComments || ""
+      });
+
+      // Send appropriate Notification
+      let notificationTitle = "Quotation Workflow Updated";
+      let notificationMsg = `Quotation #${previewQuotation.number} status changed to ${nextStatus}.`;
+      let notificationType: "info" | "success" | "warning" = "info";
+
+      if (nextStatus === "pending_hr") {
+        notificationTitle = "Quotation Pending HR Approval";
+        notificationMsg = `Quotation #${previewQuotation.number} was reviewed by Admin and is pending HR review.`;
+      } else if (nextStatus === "pending_final") {
+        notificationTitle = "HR Approved Quotation";
+        notificationMsg = `Quotation #${previewQuotation.number} has been approved by HR (${currentUser?.email}) and is waiting for final business approval.`;
+        notificationType = "success";
+      } else if (nextStatus === "approved") {
+        notificationTitle = "Quotation Fully Approved";
+        notificationMsg = `Quotation #${previewQuotation.number} is now official and approved.`;
+        notificationType = "success";
+      } else if (nextStatus === "rejected") {
+        notificationTitle = "Quotation Action: Changes Requested";
+        notificationMsg = `Quotation #${previewQuotation.number} was returned/rejected by ${currentUser?.email} with comments.`;
+        notificationType = "warning";
+      }
+
+      await addDoc(collection(db, "companies", user.uid, "notifications"), {
+        businessId: user.uid,
+        title: notificationTitle,
+        message: notificationMsg,
+        read: false,
+        createdAt: new Date().toISOString(),
+        type: notificationType
+      });
+
+      // Log database audit trail
+      await logAction(
+        `Quotation Workflow: ${actionName}`,
+        `Quotation #${previewQuotation.number} transitioned to '${nextStatus}'. Comments: ${workflowComments || "None"}`,
+        user.uid
+      );
+
+      addToast(`Quotation #${previewQuotation.number} updated: ${actionName}`, "success");
+      setWorkflowComments("");
+      setPreviewQuotation({
+        ...previewQuotation,
+        approvalStatus: nextStatus,
+        approvalHistory: updatedHistory,
+        approvalComments: workflowComments
+      });
+      fetchQuotationsAndCompany();
+    } catch (err) {
+      console.error(err);
+      addToast("Failed to transition document workflow state", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Form Fields
   const [isOpen, setIsOpen] = useState(false);
   const [number, setNumber] = useState("");
@@ -106,10 +205,10 @@ export default function Quotations() {
   const [endDate, setEndDate] = useState("");
 
   const generateNextQuotationNumber = () => {
-    let nextNum = "QT-1001";
+    let nextNum = departmentId ? `QT-${departmentId.toUpperCase()}-1001` : "QT-1001";
     if (quotations && quotations.length > 0) {
       let maxNum = 0;
-      let prefix = "QT-";
+      let prefix = departmentId ? `QT-${departmentId.toUpperCase()}-` : "QT-";
       let padLength = 0;
       
       for (const q of quotations) {
@@ -184,7 +283,8 @@ export default function Quotations() {
       querySnap.forEach((docSnap) => {
         itemsList.push({ id: docSnap.id, ...docSnap.data() } as Quotation);
       });
-      setQuotations(itemsList);
+      const finalQuots = departmentId ? itemsList.filter(q => q.department === departmentId) : itemsList;
+      setQuotations(finalQuots);
       localStorage.setItem(`miratech_offline_quotations_${businessId}`, JSON.stringify(itemsList));
       
       // Load clients from Firestore collection 'customers' filtered by businessId
@@ -227,7 +327,8 @@ export default function Quotations() {
         if (cachedCompany) setCompany(JSON.parse(cachedCompany));
         const cachedQuots = localStorage.getItem(`miratech_offline_quotations_${user.uid}`);
         if (cachedQuots) {
-          setQuotations(JSON.parse(cachedQuots));
+          const rawList = JSON.parse(cachedQuots) as Quotation[];
+          setQuotations(departmentId ? rawList.filter(q => q.department === departmentId) : rawList);
         } else {
           setQuotations([]);
         }
@@ -301,8 +402,8 @@ export default function Quotations() {
     return items.reduce((acc, current) => acc + current.quantity * current.price, 0);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent, isDraft = false) => {
+    if (e) e.preventDefault();
     const user = auth.currentUser;
     if (!user) return;
 
@@ -320,6 +421,19 @@ export default function Quotations() {
       items,
       total,
       status: "pending",
+      approvalStatus: isDraft ? "draft" : "pending_admin",
+      approvalHistory: [
+        {
+          type: isDraft ? "draft_saved" : "submitted",
+          user: currentUser?.email || "Unknown Staff",
+          userId: currentUser?.uid || "unknown",
+          role: currentUser?.role || "STAFF",
+          date: new Date().toISOString().split("T")[0],
+          time: new Date().toLocaleTimeString(),
+          comments: isDraft ? "Draft quotation saved." : "Quotation submitted for administrative review."
+        }
+      ],
+      ...(departmentId ? { department: departmentId } : {}),
     };
 
     const quotsPath = `companies/${user.uid}/quotations`;
@@ -333,10 +447,22 @@ export default function Quotations() {
         // Log database audit trail
         await logAction(
           "Quotation Drafted",
-          `Drafted quotation #${payload.number} for client '${payload.clientName}'. Total value: E${payload.total}`,
+          `Drafted quotation #${payload.number} for client '${payload.clientName}'. Total value: E${payload.total} (${isDraft ? 'Draft' : 'Submitted'})`,
           user.uid,
           payload.total
         );
+
+        // Submit notification if not draft
+        if (!isDraft) {
+          await addDoc(collection(db, "companies", user.uid, "notifications"), {
+            businessId: user.uid,
+            title: "New Quotation Submitted",
+            message: `Quotation #${payload.number} was submitted by Staff (${currentUser?.email}) and requires review.`,
+            read: false,
+            createdAt: new Date().toISOString(),
+            type: "info"
+          });
+        }
       } catch (err) {
         if (!isOfflineError(err)) throw err;
         console.warn("[Quotations Offline Submit] Saving quotation locally to local storage.");
@@ -357,7 +483,7 @@ export default function Quotations() {
       setDate("");
       setValidUntil("");
       setItems([{ description: "", quantity: 1, price: 0 }]);
-      addToast(`Quotation #${payload.number} Saved successfully`, "success");
+      addToast(isDraft ? `Draft Quotation #${payload.number} saved successfully` : `Quotation #${payload.number} submitted for approval`, "success");
       fetchQuotationsAndCompany();
     } catch (err) {
       addToast(`System Error: Failed to draft quotation #${payload.number}. Reason: ${err instanceof Error ? err.message : String(err)}`, "error");
@@ -726,6 +852,7 @@ export default function Quotations() {
                 <th>Validity Date</th>
                 <th>Total Value</th>
                 <th>Status</th>
+                <th>Approval Stage</th>
                 <th className="text-right">Actions</th>
               </tr>
             </thead>
@@ -752,8 +879,23 @@ export default function Quotations() {
                       {q.status}
                     </span>
                   </td>
+                  <td className="py-3.5 px-4">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                        (q.approvalStatus || 'approved') === "approved"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : (q.approvalStatus || 'approved') === "draft"
+                          ? "bg-slate-50 text-slate-600 border-slate-300"
+                          : (q.approvalStatus || 'approved') === "rejected"
+                          ? "bg-rose-50 text-rose-700 border-rose-200"
+                          : "bg-indigo-50 text-indigo-700 border-indigo-200 animate-pulse"
+                      }`}
+                    >
+                      {(q.approvalStatus || 'approved').replace('_', ' ')}
+                    </span>
+                  </td>
                   <td className="py-3.5 px-4 text-right space-x-1">
-                    {q.status === "pending" && (
+                    {q.status === "pending" && (q.approvalStatus || 'approved') === "approved" && (
                       <>
                         <button
                           onClick={() => handleUpdateStatus(q.id!, "accepted")}
@@ -771,7 +913,7 @@ export default function Quotations() {
                         </button>
                       </>
                     )}
-                    {q.status === "accepted" && (
+                    {q.status === "accepted" && (q.approvalStatus || 'approved') === "approved" && (
                       <button
                         onClick={() => handleConvertToInvoice(q)}
                         disabled={convertingId !== null}
@@ -792,13 +934,16 @@ export default function Quotations() {
                     >
                       <Eye className="h-3.5 w-3.5" />
                     </button>
-                    <button
-                      onClick={() => handleDelete(q.id!)}
-                      title="Remove"
-                      className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md cursor-pointer inline-flex"
-                    >
-                      <Trash className="h-3.5 w-3.5" />
-                    </button>
+                    {/* Guard Delete button: Staff can only delete drafts or rejected quotations */}
+                    {!(currentUser?.role === 'STAFF' && q.approvalStatus && q.approvalStatus !== 'draft' && q.approvalStatus !== 'rejected') && (
+                      <button
+                        onClick={() => handleDelete(q.id!)}
+                        title="Remove"
+                        className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md cursor-pointer inline-flex"
+                      >
+                        <Trash className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -1043,16 +1188,25 @@ export default function Quotations() {
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="button"
                   disabled={submitting}
-                  className="px-4 py-1.5 bg-slate-800 text-white font-medium rounded-lg text-xs hover:bg-slate-900 shadow-xs cursor-pointer flex items-center gap-1.5"
+                  onClick={(e) => handleSubmit(e, true)}
+                  className="px-4 py-1.5 border border-slate-300 text-slate-700 bg-slate-50 font-medium rounded-lg text-xs hover:bg-slate-100 shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  Save as Draft
+                </button>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={(e) => handleSubmit(e, false)}
+                  className="px-4 py-1.5 bg-blue-600 text-white font-medium rounded-lg text-xs hover:bg-blue-700 shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   {submitting ? (
                     <>
-                      <Loader2 className="h-3 w-3 animate-spin" /> Saving...
+                      <Loader2 className="h-3 w-3 animate-spin" /> Submitting...
                     </>
                   ) : (
-                    "Save & Issue Quote"
+                    "Submit for Approval"
                   )}
                 </button>
               </div>
@@ -1064,9 +1218,12 @@ export default function Quotations() {
       {/* PDF Generation Offscreen and Detailed View Modal */}
       {previewQuotation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-lg border border-slate-200 max-w-4xl w-full">
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200 max-w-6xl w-full overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <span className="text-sm font-semibold text-slate-800">Review Quotation: {previewQuotation.number}</span>
+              <span className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                <span>Review Quotation:</span>
+                <span className="font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-bold">{previewQuotation.number}</span>
+              </span>
               <div className="flex gap-2">
                 <button
                   onClick={handleExportPDF}
@@ -1078,141 +1235,393 @@ export default function Quotations() {
                   onClick={() => setPreviewQuotation(null)}
                   className="p-1 px-2 border border-slate-200 hover:bg-slate-50 rounded-lg text-xs font-medium cursor-pointer"
                 >
-                  Close
+                  Close Workspace
                 </button>
               </div>
             </div>
 
-            {/* A4 Printable Paper Template */}
-            <div className="p-6 bg-slate-100 overflow-x-auto max-h-[70vh]">
-              <div
-                ref={pdfAreaRef}
-                style={{ width: "210mm", minHeight: "297mm" }}
-                className="mx-auto bg-white p-[20mm] border border-slate-200 shadow-sm relative text-slate-800 font-sans"
-              >
-                {/* Letterhead Logo & Company Header */}
-                {company?.useCompanyLetterhead && company?.letterheadLogo ? (
-                  <div className="-mx-[20mm] -mt-[20mm] mb-6 relative">
-                    <img
-                      src={company.letterheadLogo}
-                      alt="Corporate Banner Letterhead"
-                      className={`w-full ${company.letterheadWidthFit ? 'h-[48mm] object-cover' : 'h-auto max-h-[48mm] object-contain'} block border-b border-slate-200`}
-                    />
-                    <div className="px-[20mm] pt-4 flex justify-between items-end border-b-2 border-slate-900 pb-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
+              {/* Left Panel: A4 Printable Template */}
+              <div className="lg:col-span-8 p-6 bg-slate-100 overflow-auto border-r border-slate-200 max-h-[75vh]">
+                <div
+                  ref={pdfAreaRef}
+                  style={{ width: "210mm", minHeight: "297mm" }}
+                  className="mx-auto bg-white p-[20mm] border border-slate-200 shadow-sm relative text-slate-800 font-sans"
+                >
+                  {/* Letterhead Logo & Company Header */}
+                  {company?.useCompanyLetterhead && company?.letterheadLogo ? (
+                    <div className="-mx-[20mm] -mt-[20mm] mb-6 relative">
+                      <img
+                        src={company.letterheadLogo}
+                        alt="Corporate Banner Letterhead"
+                        className={`w-full ${company.letterheadWidthFit ? 'h-[48mm] object-cover' : 'h-auto max-h-[48mm] object-contain'} block border-b border-slate-200`}
+                      />
+                      <div className="px-[20mm] pt-4 flex justify-between items-end border-b-2 border-slate-900 pb-4">
+                        <div>
+                          <h1 className="text-2xl font-black text-slate-900 tracking-wider">OFFICIAL QUOTATION</h1>
+                        </div>
+                        <div className="text-right text-[10px] text-slate-500 space-y-0.5 leading-normal">
+                          <p className="font-bold text-slate-800">{company?.name}</p>
+                          <p>{company?.email} | {company?.phone}</p>
+                          <p className="max-w-[400px] truncate">{company?.address}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-6">
                       <div>
+                        {company?.letterheadLogo ? (
+                          <img
+                            src={company.letterheadLogo}
+                            alt="Corporate Symbol"
+                            className="max-h-20 object-contain mb-2"
+                          />
+                        ) : (
+                          <span className="text-lg font-extrabold text-slate-900 tracking-tight uppercase">
+                            {company?.name || "Corporate Ledger"}
+                          </span>
+                        )}
                         <h1 className="text-2xl font-black text-slate-900 tracking-wider">OFFICIAL QUOTATION</h1>
                       </div>
-                      <div className="text-right text-[10px] text-slate-500 space-y-0.5 leading-normal">
+
+                      <div className="text-right text-[11px] text-slate-500 space-y-0.5">
                         <p className="font-bold text-slate-800">{company?.name}</p>
-                        <p>{company?.email} | {company?.phone}</p>
-                        <p className="max-w-[400px] truncate">{company?.address}</p>
+                        <p>{company?.email}</p>
+                        <p>{company?.phone}</p>
+                        <p className="whitespace-pre-line max-w-[200px]">{company?.address}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Metadata details */}
+                  <div className="grid grid-cols-2 gap-4 mb-6 text-xs">
+                    <div>
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Quote Prepared For:
+                      </span>
+                      <p className="font-bold text-slate-900">{previewQuotation.clientName}</p>
+                      <p className="text-slate-500">{previewQuotation.clientEmail}</p>
+                      <p className="text-slate-500 whitespace-pre-line max-w-[250px]">{previewQuotation.clientAddress}</p>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Document Details:
+                      </span>
+                      <p>
+                        <strong className="text-slate-900">Quote Number:</strong> {previewQuotation.number}
+                      </p>
+                      <p>
+                        <strong className="text-slate-900">Issue Date:</strong> {previewQuotation.date}
+                      </p>
+                      <p>
+                        <strong className="text-slate-900">Valid Until:</strong> {previewQuotation.validUntil}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Ledger Items Table */}
+                  <table className="w-full text-left border-collapse border border-slate-200 mb-6 text-xs">
+                    <thead>
+                      <tr className="bg-slate-900 text-white font-semibold uppercase text-[9px] tracking-wider">
+                        <th className="py-2.5 px-3 border border-slate-900">Deliverables Description</th>
+                        <th className="py-2.5 px-3 border border-slate-900 text-center w-20">Quantity</th>
+                        <th className="py-2.5 px-3 border border-slate-900 text-right w-28">Unit Price</th>
+                        <th className="py-2.5 px-3 border border-slate-900 text-right w-28">Line total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {previewQuotation.items.map((it, i) => (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="py-3 px-3 border border-slate-200 font-medium">{it.description}</td>
+                          <td className="py-3 px-3 border border-slate-200 text-center font-mono">{it.quantity}</td>
+                          <td className="py-3 px-3 border border-slate-200 text-right font-mono">
+                            E{it.price.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 border border-slate-200 text-right font-bold text-slate-900 font-mono">
+                            E{(it.quantity * it.price).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* Summaries */}
+                  <div className="flex justify-between items-start text-xs">
+                    <div className="max-w-[320px] text-slate-500 text-[10px] space-y-1 mt-2">
+                      <p className="font-bold text-slate-800">Terms and Conditions:</p>
+                      <p>1. Payments are subject to agreements listed upon active billing invoice.</p>
+                      <p>2. Acceptance can be recorded via the central executive database portal.</p>
+                    </div>
+
+                    <div className="text-right w-64 space-y-1.5">
+                      <div className="flex justify-between text-slate-600">
+                        <span>Subtotal:</span>
+                        <span className="font-mono">E{previewQuotation.total.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between border-t-2 border-slate-900 pt-1.5 font-bold text-slate-900 text-sm">
+                        <span>Total Value:</span>
+                        <span className="font-bold font-mono">E{previewQuotation.total.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-6">
-                    <div>
-                      {company?.letterheadLogo ? (
-                        <img
-                          src={company.letterheadLogo}
-                          alt="Corporate Symbol"
-                          className="max-h-20 object-contain mb-2"
-                        />
-                      ) : (
-                        <span className="text-lg font-extrabold text-slate-900 tracking-tight uppercase">
-                          {company?.name || "Corporate Ledger"}
-                        </span>
-                      )}
-                      <h1 className="text-2xl font-black text-slate-900 tracking-wider">OFFICIAL QUOTATION</h1>
-                    </div>
 
-                    <div className="text-right text-[11px] text-slate-500 space-y-0.5">
-                      <p className="font-bold text-slate-800">{company?.name}</p>
-                      <p>{company?.email}</p>
-                      <p>{company?.phone}</p>
-                      <p className="whitespace-pre-line max-w-[200px]">{company?.address}</p>
-                    </div>
+                  {/* Footer sign */}
+                  <div className="mt-16 text-center border-t border-slate-100 pt-5 text-[10px] text-slate-400">
+                    Thank you for choosing {company?.name || "us"}! This document is generated securely by the Corporate Report & Ledger suite.
                   </div>
-                )}
-
-                {/* Metadata details */}
-                <div className="grid grid-cols-2 gap-4 mb-6 text-xs">
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      Quote Prepared For:
-                    </span>
-                    <p className="font-bold text-slate-900">{previewQuotation.clientName}</p>
-                    <p className="text-slate-500">{previewQuotation.clientEmail}</p>
-                    <p className="text-slate-500 whitespace-pre-line max-w-[250px]">{previewQuotation.clientAddress}</p>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      Document Details:
-                    </span>
-                    <p>
-                      <strong className="text-slate-900">Quote Number:</strong> {previewQuotation.number}
-                    </p>
-                    <p>
-                      <strong className="text-slate-900">Issue Date:</strong> {previewQuotation.date}
-                    </p>
-                    <p>
-                      <strong className="text-slate-900">Valid Until:</strong> {previewQuotation.validUntil}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Ledger Items Table */}
-                <table className="w-full text-left border-collapse border border-slate-200 mb-6 text-xs">
-                  <thead>
-                    <tr className="bg-slate-900 text-white font-semibold uppercase text-[9px] tracking-wider">
-                      <th className="py-2.5 px-3 border border-slate-900">Deliverables Description</th>
-                      <th className="py-2.5 px-3 border border-slate-900 text-center w-20">Quantity</th>
-                      <th className="py-2.5 px-3 border border-slate-900 text-right w-28">Unit Price</th>
-                      <th className="py-2.5 px-3 border border-slate-900 text-right w-28">Line total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {previewQuotation.items.map((it, i) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="py-3 px-3 border border-slate-200 font-medium">{it.description}</td>
-                        <td className="py-3 px-3 border border-slate-200 text-center font-mono">{it.quantity}</td>
-                        <td className="py-3 px-3 border border-slate-200 text-right font-mono">
-                          E{it.price.toLocaleString()}
-                        </td>
-                        <td className="py-3 px-3 border border-slate-200 text-right font-bold text-slate-900 font-mono">
-                          E{(it.quantity * it.price).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                {/* Summaries */}
-                <div className="flex justify-between items-start text-xs">
-                  <div className="max-w-[320px] text-slate-500 text-[10px] space-y-1 mt-2">
-                    <p className="font-bold text-slate-800">Terms and Conditions:</p>
-                    <p>1. Payments are subject to agreements listed upon active billing invoice.</p>
-                    <p>2. Acceptance can be recorded via the central executive database portal.</p>
-                  </div>
-
-                  <div className="text-right w-64 space-y-1.5">
-                    <div className="flex justify-between text-slate-600">
-                      <span>Subtotal:</span>
-                      <span className="font-mono">E{previewQuotation.total.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between border-t-2 border-slate-900 pt-1.5 font-bold text-slate-900 text-sm">
-                      <span>Total Value:</span>
-                      <span className="font-bold font-mono">E{previewQuotation.total.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer sign */}
-                <div className="mt-16 text-center border-t border-slate-100 pt-5 text-[10px] text-slate-400">
-                  Thank you for choosing {company?.name || "us"}! This document is generated securely by the Corporate Report & Ledger suite.
                 </div>
               </div>
+
+              {/* Right Panel: Workflow Operations & Fast Copies */}
+              {(() => {
+                const isBusinessAdmin = currentUser?.role === 'BUSINESS_ADMIN' || currentUser?.role === 'MASTER_ADMIN' || currentUser?.role === 'GENERAL_MANAGER' || currentUser?.role === 'COMPANY_OWNER';
+                const canApproveQuot = isBusinessAdmin || currentUser?.canApproveQuotations || currentUser?.canApproveInvoices || currentUser?.approvalRights;
+                const canFinalize = isBusinessAdmin || currentUser?.canFinalizeDocuments || currentUser?.approvalRights;
+                const canReject = isBusinessAdmin || currentUser?.canRejectDocuments || currentUser?.approvalRights;
+                const canViewHistory = isBusinessAdmin || currentUser?.canViewApprovalHistory || currentUser?.role !== 'STAFF';
+                const hasOverrideRights = isBusinessAdmin || currentUser?.approvalRights;
+
+                const shareLink = typeof window !== "undefined" ? `${window.location.origin}/share/quotation/${previewQuotation.id || 'new'}` : "";
+                const currentApprovalStatus = previewQuotation.approvalStatus || 'approved';
+
+                return (
+                  <div className="lg:col-span-4 p-5 bg-white overflow-y-auto space-y-5 max-h-[75vh] flex flex-col justify-between border-t lg:border-t-0">
+                    <div className="space-y-5">
+                      {/* Status Badge */}
+                      <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+                        <div>
+                          <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Approval Stage</span>
+                          <span className="text-xs font-extrabold text-slate-800 uppercase">
+                            {currentApprovalStatus.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${
+                          currentApprovalStatus === 'approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          currentApprovalStatus === 'draft' ? 'bg-slate-100 text-slate-600 border-slate-300' :
+                          currentApprovalStatus === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                          'bg-indigo-50 text-indigo-700 border-indigo-200 animate-pulse'
+                        }`}>
+                          {currentApprovalStatus === 'approved' ? 'Active Official' : 'Pending Action'}
+                        </span>
+                      </div>
+
+                      {/* Copy to Clipboard Controls */}
+                      <div className="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                        <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Copy to Clipboard</span>
+
+                        {/* Doc No */}
+                        <div className="flex items-center justify-between gap-2 bg-white p-2 rounded-md border border-slate-150">
+                          <div className="truncate">
+                            <span className="block text-[8px] font-bold text-slate-400 uppercase">Doc Number</span>
+                            <span className="text-[10px] font-bold font-mono text-slate-800">{previewQuotation.number}</span>
+                          </div>
+                          <button
+                            onClick={() => handleCopyText(previewQuotation.number, "Document Number")}
+                            className="px-2 py-1 text-[10px] font-bold text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedField === "Document Number" ? (
+                              <>
+                                <Check className="h-3 w-3 text-emerald-600" />
+                                <span className="text-emerald-600">Copied</span>
+                              </>
+                            ) : (
+                              "Copy"
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Transaction ID */}
+                        <div className="flex items-center justify-between gap-2 bg-white p-2 rounded-md border border-slate-150">
+                          <div className="truncate">
+                            <span className="block text-[8px] font-bold text-slate-400 uppercase">Transaction ID</span>
+                            <span className="text-[10px] font-bold font-mono text-slate-600 truncate block max-w-[150px]">{previewQuotation.id || "N/A"}</span>
+                          </div>
+                          <button
+                            onClick={() => handleCopyText(previewQuotation.id || "", "Transaction ID")}
+                            className="px-2 py-1 text-[10px] font-bold text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedField === "Transaction ID" ? (
+                              <>
+                                <Check className="h-3 w-3 text-emerald-600" />
+                                <span className="text-emerald-600">Copied</span>
+                              </>
+                            ) : (
+                              "Copy"
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Share Link */}
+                        <div className="flex items-center justify-between gap-2 bg-white p-2 rounded-md border border-slate-150">
+                          <div className="truncate">
+                            <span className="block text-[8px] font-bold text-slate-400 uppercase">Public Share Link</span>
+                            <span className="text-[10px] font-bold font-mono text-slate-600 truncate block max-w-[150px]">{shareLink}</span>
+                          </div>
+                          <button
+                            onClick={() => handleCopyText(shareLink, "Public Share Link")}
+                            className="px-2 py-1 text-[10px] font-bold text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedField === "Public Share Link" ? (
+                              <>
+                                <Check className="h-3 w-3 text-emerald-600" />
+                                <span className="text-emerald-600">Copied</span>
+                              </>
+                            ) : (
+                              "Copy"
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Workflow Transitions */}
+                      {currentApprovalStatus !== 'approved' && (
+                        <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                          <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Workflow Operations</span>
+
+                          <div className="space-y-1.5">
+                            <label className="block text-[9px] font-bold text-slate-500 uppercase">Decision Comments</label>
+                            <textarea
+                              rows={2}
+                              value={workflowComments}
+                              onChange={(e) => setWorkflowComments(e.target.value)}
+                              placeholder="Provide reasons, annotations, or change directives..."
+                              className="w-full text-[11px] p-2 border border-slate-200 rounded-md focus:outline-hidden focus:border-slate-400 bg-white"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            {/* Staff Submit */}
+                            {(currentApprovalStatus === 'draft' || currentApprovalStatus === 'rejected') && (
+                              <button
+                                onClick={() => handleWorkflowTransition('pending_admin', 'Submit')}
+                                disabled={submitting}
+                                className="col-span-2 w-full p-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded transition shadow-xs text-center uppercase cursor-pointer"
+                              >
+                                Submit For Approval
+                              </button>
+                            )}
+
+                            {/* Admin Decision */}
+                            {currentApprovalStatus === 'pending_admin' && canApproveQuot && (
+                              <>
+                                <button
+                                  onClick={() => handleWorkflowTransition('pending_hr', 'Forward to HR')}
+                                  disabled={submitting}
+                                  className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded transition shadow-xs uppercase cursor-pointer"
+                                >
+                                  Forward to HR
+                                </button>
+                                <button
+                                  onClick={() => handleWorkflowTransition('rejected', 'Return to Clerk')}
+                                  disabled={submitting}
+                                  className="p-2 bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-[10px] border border-rose-200 rounded transition uppercase cursor-pointer"
+                                >
+                                  Return to Clerk
+                                </button>
+                                <button
+                                  onClick={() => handleWorkflowTransition('cancelled', 'Cancel Request')}
+                                  disabled={submitting}
+                                  className="col-span-2 p-1.5 bg-slate-200 text-slate-700 hover:bg-slate-300 font-bold text-[9px] rounded transition uppercase cursor-pointer"
+                                >
+                                  Cancel Request
+                                </button>
+                              </>
+                            )}
+
+                            {/* HR Decision */}
+                            {currentApprovalStatus === 'pending_hr' && (currentUser?.role === 'HR' || isBusinessAdmin) && (
+                              <>
+                                <button
+                                  onClick={() => handleWorkflowTransition('pending_final', 'HR Approve')}
+                                  disabled={submitting}
+                                  className="p-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] rounded transition shadow-xs uppercase cursor-pointer"
+                                >
+                                  HR Approve
+                                </button>
+                                <button
+                                  onClick={() => handleWorkflowTransition('rejected', 'HR Reject')}
+                                  disabled={submitting}
+                                  className="p-2 bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-[10px] border border-rose-200 rounded transition uppercase cursor-pointer"
+                                >
+                                  HR Reject
+                                </button>
+                              </>
+                            )}
+
+                            {/* Final Decision */}
+                            {currentApprovalStatus === 'pending_final' && canFinalize && (
+                              <>
+                                <button
+                                  onClick={() => handleWorkflowTransition('approved', 'Final Approval')}
+                                  disabled={submitting}
+                                  className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded transition shadow-xs uppercase cursor-pointer"
+                                >
+                                  Final Approve
+                                </button>
+                                <button
+                                  onClick={() => handleWorkflowTransition('rejected', 'Return for Edit')}
+                                  disabled={submitting}
+                                  className="p-2 bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-[10px] border border-rose-200 rounded transition uppercase cursor-pointer"
+                                >
+                                  Reject & Return
+                                </button>
+                              </>
+                            )}
+
+                            {/* Override direct approval button */}
+                            {hasOverrideRights && currentApprovalStatus !== 'approved' && (
+                              <button
+                                onClick={() => handleWorkflowTransition('approved', 'Manager Override', true)}
+                                disabled={submitting}
+                                className="col-span-2 w-full p-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-[10px] rounded transition shadow-xs text-center uppercase border border-amber-400 mt-1 cursor-pointer"
+                              >
+                                ⭐ Manager Override: Direct Approve
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Audit Timeline History */}
+                      {canViewHistory && (
+                        <div className="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                          <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Document Audit Timeline</span>
+
+                          <div className="space-y-3 max-h-[160px] overflow-y-auto pr-1">
+                            {previewQuotation.approvalHistory && previewQuotation.approvalHistory.length > 0 ? (
+                              previewQuotation.approvalHistory.map((evt: any, eIdx: number) => (
+                                <div key={eIdx} className="relative pl-3 border-l border-slate-300 space-y-0.5">
+                                  <span className="absolute -left-1 top-1 w-2 h-2 rounded-full bg-slate-400 border border-white" />
+                                  <div className="flex justify-between text-[8px] font-bold text-slate-400 uppercase leading-none">
+                                    <span>{evt.date} {evt.time}</span>
+                                    <span className="text-blue-600 font-mono">{evt.role}</span>
+                                  </div>
+                                  <p className="text-[10px] font-bold text-slate-800 leading-none">
+                                    {evt.type.replace(/_/g, ' ').toUpperCase()} by {evt.user}
+                                  </p>
+                                  {evt.comments && (
+                                    <p className="text-[9px] text-slate-500 italic bg-white p-1 rounded border border-slate-100 mt-0.5 leading-normal">
+                                      &ldquo;{evt.comments}&rdquo;
+                                    </p>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-[10px] text-slate-400 italic">No historical timeline exists for this document.</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-3 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                      <span>MiraTech Secure Ledger</span>
+                      <span>v1.2</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

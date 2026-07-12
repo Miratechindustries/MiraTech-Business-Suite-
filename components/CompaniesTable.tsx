@@ -373,10 +373,10 @@ export default function CompaniesTable() {
       {/* Edit Company Modal Dialog */}
       {editingCompany && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-3xs">
-          <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+          <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[92vh] sm:max-h-[85vh]">
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between flex-shrink-0">
               <div>
-                <h3 className="font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                <h3 className="font-bold text-slate-800 tracking-tight flex items-center gap-2 text-sm sm:text-base">
                   <Building2 className="h-4 w-4 text-slate-650" />
                   Edit Enterprise Workspace
                 </h3>
@@ -390,324 +390,326 @@ export default function CompaniesTable() {
               </button>
             </div>
 
-            <form onSubmit={handleUpdateCompany} className="p-6 space-y-4">
-              {successMsg && (
-                <div className="flex items-center gap-2 p-3 text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg">
-                  <CheckCircle2 className="h-4 w-4" />
-                  {successMsg}
-                </div>
-              )}
+            <form onSubmit={handleUpdateCompany} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto flex-1">
+                {successMsg && (
+                  <div className="flex items-center gap-2 p-3 text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg animate-fade-in">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {successMsg}
+                  </div>
+                )}
 
-              <div className="space-y-3.5 text-xs">
-                <div>
-                  <label className="block font-bold text-slate-600 mb-1">Company Legal Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50/20 focus:outline-hidden focus:border-slate-405"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-3.5 text-xs">
                   <div>
-                    <label className="block font-bold text-slate-600 mb-1">Email Address</label>
+                    <label className="block font-bold text-slate-600 mb-1">Company Legal Name</label>
                     <input
-                      type="email"
+                      type="text"
                       required
-                      value={editEmail}
-                      onChange={(e) => setEditEmail(e.target.value)}
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50/20 focus:outline-hidden focus:border-slate-405"
                     />
                   </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Email Address</label>
+                      <input
+                        type="email"
+                        required
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50/20 focus:outline-hidden focus:border-slate-405"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Contact Phone</label>
+                      <input
+                        type="tel"
+                        required
+                        value={editPhone}
+                        onChange={(e) => setEditPhone(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50/20 focus:outline-hidden focus:border-slate-405"
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block font-bold text-slate-600 mb-1">Contact Phone</label>
-                    <input
-                      type="tel"
+                    <label className="block font-bold text-slate-600 mb-1">Corporate Headquarters Address</label>
+                    <textarea
                       required
-                      value={editPhone}
-                      onChange={(e) => setEditPhone(e.target.value)}
+                      rows={2}
+                      value={editAddress}
+                      onChange={(e) => setEditAddress(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50/20 focus:outline-hidden focus:border-slate-405"
                     />
                   </div>
-                </div>
 
-                <div>
-                  <label className="block font-bold text-slate-600 mb-1">Corporate Headquarters Address</label>
-                  <textarea
-                    required
-                    rows={2}
-                    value={editAddress}
-                    onChange={(e) => setEditAddress(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50/20 focus:outline-hidden focus:border-slate-405"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <label className="block font-bold text-slate-600 mb-1">Primary Brand Color</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        value={editPrimaryColor}
-                        onChange={(e) => setEditPrimaryColor(e.target.value)}
-                        className="h-8 w-10 border border-slate-200 rounded-md cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        value={editPrimaryColor}
-                        onChange={(e) => setEditPrimaryColor(e.target.value)}
-                        className="flex-1 px-2.5 py-1 border border-slate-200 rounded-md font-mono text-[11px] uppercase"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-600 mb-1">Secondary Brand Color</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        value={editSecondaryColor}
-                        onChange={(e) => setEditSecondaryColor(e.target.value)}
-                        className="h-8 w-10 border border-slate-200 rounded-md cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        value={editSecondaryColor}
-                        onChange={(e) => setEditSecondaryColor(e.target.value)}
-                        className="flex-1 px-2.5 py-1 border border-slate-200 rounded-md font-mono text-[11px] uppercase"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-3">
-                  <span className="block font-bold text-slate-700 text-[11px] uppercase tracking-wider">
-                    🖼️ Brand Image Assets
-                  </span>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {/* Logo Upload */}
-                    <div className="space-y-1.5">
-                      <label className="block font-bold text-slate-655 text-[10px] uppercase">
-                        Company Logo
-                      </label>
-                      <div className="h-16 w-full bg-white border border-slate-200 rounded-lg flex items-center justify-center p-1 overflow-hidden relative group">
-                        {editLogo ? (
-                          <img
-                            src={editLogo}
-                            alt="Logo"
-                            className="max-h-full max-w-full object-contain"
-                          />
-                        ) : (
-                          <span className="text-[9px] text-slate-400 font-bold uppercase">No Logo</span>
-                        )}
-                      </div>
-                      <label className="block cursor-pointer text-center px-1.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-[10px] text-slate-700 font-bold rounded-md shadow-3xs transition">
-                        Upload Logo
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Primary Brand Color</label>
+                      <div className="flex gap-2">
                         <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              if (file.size > 3145728) {
-                                alert("Image must be smaller than 3MB.");
-                                return;
-                              }
-                              const reader = new FileReader();
-                              reader.onloadend = () => setEditLogo(reader.result as string);
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                          className="hidden"
+                          type="color"
+                          value={editPrimaryColor}
+                          onChange={(e) => setEditPrimaryColor(e.target.value)}
+                          className="h-8 w-10 border border-slate-200 rounded-md cursor-pointer"
                         />
-                      </label>
-                    </div>
-
-                    {/* Letterhead Upload */}
-                    <div className="space-y-1.5">
-                      <label className="block font-bold text-slate-655 text-[10px] uppercase">
-                        Letterhead Logo
-                      </label>
-                      <div className="h-16 w-full bg-white border border-slate-200 rounded-lg flex items-center justify-center p-1 overflow-hidden relative group">
-                        {editLetterheadLogo ? (
-                          <img
-                            src={editLetterheadLogo}
-                            alt="Letterhead"
-                            className="max-h-full max-w-full object-contain"
-                          />
-                        ) : (
-                          <span className="text-[9px] text-slate-400 font-bold uppercase">No Letterhead</span>
-                        )}
-                      </div>
-                      <label className="block cursor-pointer text-center px-1.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-[10px] text-slate-700 font-bold rounded-md shadow-3xs transition">
-                        Upload Logo
                         <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              if (file.size > 3145728) {
-                                alert("Image must be smaller than 3MB.");
-                                return;
-                              }
-                              const reader = new FileReader();
-                              reader.onloadend = () => setEditLetterheadLogo(reader.result as string);
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                          className="hidden"
+                          type="text"
+                          value={editPrimaryColor}
+                          onChange={(e) => setEditPrimaryColor(e.target.value)}
+                          className="flex-1 px-2.5 py-1 border border-slate-200 rounded-md font-mono text-[11px] uppercase"
                         />
-                      </label>
-                    </div>
-
-                    {/* Favicon/Icon Upload */}
-                    <div className="space-y-1.5">
-                      <label className="block font-bold text-slate-655 text-[10px] uppercase">
-                        Favicon (Icon)
-                      </label>
-                      <div className="h-16 w-full bg-white border border-slate-200 rounded-lg flex items-center justify-center p-1 overflow-hidden relative group">
-                        {editFavicon ? (
-                          <img
-                            src={editFavicon}
-                            alt="Favicon"
-                            className="max-h-full max-w-full object-contain"
-                          />
-                        ) : (
-                          <span className="text-[9px] text-slate-400 font-bold uppercase">No Icon</span>
-                        )}
                       </div>
-                      <label className="block cursor-pointer text-center px-1.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-[10px] text-slate-700 font-bold rounded-md shadow-3xs transition">
-                        Upload Icon
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Secondary Brand Color</label>
+                      <div className="flex gap-2">
                         <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              if (file.size > 3145728) {
-                                alert("Image must be smaller than 3MB.");
-                                return;
-                              }
-                              const reader = new FileReader();
-                              reader.onloadend = () => setEditFavicon(reader.result as string);
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                          className="hidden"
+                          type="color"
+                          value={editSecondaryColor}
+                          onChange={(e) => setEditSecondaryColor(e.target.value)}
+                          className="h-8 w-10 border border-slate-200 rounded-md cursor-pointer"
                         />
-                      </label>
+                        <input
+                          type="text"
+                          value={editSecondaryColor}
+                          onChange={(e) => setEditSecondaryColor(e.target.value)}
+                          className="flex-1 px-2.5 py-1 border border-slate-200 rounded-md font-mono text-[11px] uppercase"
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-200/60 space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={editUseCompanyLetterhead}
-                        onChange={(e) => setEditUseCompanyLetterhead(e.target.checked)}
-                        className="rounded text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="font-bold text-[10px] text-slate-700">Extend Letterhead as Full-Width Top Banner</span>
-                    </label>
+                  <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-3">
+                    <span className="block font-bold text-slate-700 text-[11px] uppercase tracking-wider">
+                      🖼️ Brand Image Assets
+                    </span>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Logo Upload */}
+                      <div className="space-y-1.5">
+                        <label className="block font-bold text-slate-655 text-[10px] uppercase">
+                          Company Logo
+                        </label>
+                        <div className="h-16 w-full bg-white border border-slate-200 rounded-lg flex items-center justify-center p-1 overflow-hidden relative group">
+                          {editLogo ? (
+                            <img
+                              src={editLogo}
+                              alt="Logo"
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : (
+                            <span className="text-[9px] text-slate-400 font-bold uppercase">No Logo</span>
+                          )}
+                        </div>
+                        <label className="block cursor-pointer text-center px-1.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-[10px] text-slate-700 font-bold rounded-md shadow-3xs transition">
+                          Upload Logo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (file.size > 3145728) {
+                                  alert("Image must be smaller than 3MB.");
+                                  return;
+                               }
+                                const reader = new FileReader();
+                                reader.onloadend = () => setEditLogo(reader.result as string);
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
 
-                    {editUseCompanyLetterhead && (
-                      <label className="flex items-center gap-2 cursor-pointer select-none pl-5 animate-fade-in">
+                      {/* Letterhead Upload */}
+                      <div className="space-y-1.5">
+                        <label className="block font-bold text-slate-655 text-[10px] uppercase">
+                          Letterhead Logo
+                        </label>
+                        <div className="h-16 w-full bg-white border border-slate-200 rounded-lg flex items-center justify-center p-1 overflow-hidden relative group">
+                          {editLetterheadLogo ? (
+                            <img
+                              src={editLetterheadLogo}
+                              alt="Letterhead"
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : (
+                            <span className="text-[9px] text-slate-400 font-bold uppercase">No Letterhead</span>
+                          )}
+                        </div>
+                        <label className="block cursor-pointer text-center px-1.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-[10px] text-slate-700 font-bold rounded-md shadow-3xs transition">
+                          Upload Logo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (file.size > 3145728) {
+                                  alert("Image must be smaller than 3MB.");
+                                  return;
+                                }
+                                const reader = new FileReader();
+                                reader.onloadend = () => setEditLetterheadLogo(reader.result as string);
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      {/* Favicon/Icon Upload */}
+                      <div className="space-y-1.5">
+                        <label className="block font-bold text-slate-655 text-[10px] uppercase">
+                          Favicon (Icon)
+                        </label>
+                        <div className="h-16 w-full bg-white border border-slate-200 rounded-lg flex items-center justify-center p-1 overflow-hidden relative group">
+                          {editFavicon ? (
+                            <img
+                              src={editFavicon}
+                              alt="Favicon"
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : (
+                            <span className="text-[9px] text-slate-400 font-bold uppercase">No Icon</span>
+                          )}
+                        </div>
+                        <label className="block cursor-pointer text-center px-1.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-[10px] text-slate-700 font-bold rounded-md shadow-3xs transition">
+                          Upload Icon
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (file.size > 3145728) {
+                                  alert("Image must be smaller than 3MB.");
+                                  return;
+                                }
+                                const reader = new FileReader();
+                                reader.onloadend = () => setEditFavicon(reader.result as string);
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200/60 space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input
                           type="checkbox"
-                          checked={editLetterheadWidthFit}
-                          onChange={(e) => setEditLetterheadWidthFit(e.target.checked)}
+                          checked={editUseCompanyLetterhead}
+                          onChange={(e) => setEditUseCompanyLetterhead(e.target.checked)}
                           className="rounded text-indigo-600 focus:ring-indigo-500"
                         />
-                        <span className="font-bold text-[10px] text-slate-700">Stretched Width Fit (Full Width & Cover)</span>
+                        <span className="font-bold text-[10px] text-slate-700">Extend Letterhead as Full-Width Top Banner</span>
                       </label>
-                    )}
-                  </div>
-                </div>
 
-                <div className="pt-3 border-t border-slate-105">
-                  <span className="block font-bold text-slate-800 text-xs mb-1 bg-blue-50/50 p-2.5 rounded-lg border border-blue-105 flex items-center justify-between">
-                    <span>💳 Corporate Subscription Setup</span>
-                  </span>
-                  <div className="grid grid-cols-2 gap-3 mt-2 text-xs">
-                    <div>
-                      <label className="block font-bold text-slate-605 mb-1">Assigned Plan Option</label>
-                      <select
-                        value={editSubscriptionPlanId}
-                        onChange={(e) => setEditSubscriptionPlanId(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-205 rounded-lg bg-slate-50/30 font-bold"
-                      >
-                        {SUBSCRIPTION_PLANS.map(p => (
-                          <option key={p.id} value={p.id}>{p.name} - E{p.price}/mo</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block font-bold text-slate-605 mb-1">Billing Status</label>
-                      <select
-                        value={editSubscriptionStatus}
-                        onChange={(e) => setEditSubscriptionStatus(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-205 rounded-lg bg-slate-50/30 font-bold"
-                      >
-                        <option value="trialing">14-Day Free Trial</option>
-                        <option value="active">Active Subscription</option>
-                        <option value="cancelled">Cancelled Plan</option>
-                        <option value="unpaid">Unpaid / Suspended</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-slate-100">
-                  <span className="block font-bold text-slate-700 text-xs mb-1">
-                    🔐 Access Governance & Locked Features (Aligned automatically with plan)
-                  </span>
-                  <p className="text-[10px] text-slate-400 mb-3">
-                    The following features are automatically configured, allowed, or restricted based on the corporate subscription plan selected above.
-                  </p>
-
-                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
-                    {[
-                      { id: "dashboard", label: "Dashboard" },
-                      { id: "inventory", label: "Inventory" },
-                      { id: "clients", label: "Clients/Customers" },
-                      { id: "quotations", label: "Quotations" },
-                      { id: "invoices", label: "Invoices & Ledger" },
-                      { id: "receipts", label: "Receipts" },
-                      { id: "transactions", label: "Transactions" },
-                      { id: "reports", label: "Reports & Analytics" },
-                      { id: "audit_center", label: "Audit Center" },
-                      { id: "audit", label: "Audit Logs" },
-                      { id: "settings", label: "Settings" },
-                      { id: "subscriptions", label: "Subscriptions Panel" },
-                    ].map((feat) => {
-                      const isLocked = getLockedFeaturesForPlan(editSubscriptionPlanId).includes(feat.id);
-                      return (
-                        <div
-                          key={feat.id}
-                          className={`flex items-center gap-2 p-2 rounded-lg border transition ${
-                            isLocked
-                              ? "bg-red-50/60 border-red-150 text-red-650 opacity-60"
-                              : "bg-emerald-50/40 border-emerald-150 text-emerald-800"
-                          }`}
-                        >
+                      {editUseCompanyLetterhead && (
+                        <label className="flex items-center gap-2 cursor-pointer select-none pl-5 animate-fade-in">
                           <input
                             type="checkbox"
-                            checked={!isLocked}
-                            readOnly
-                            className="rounded text-indigo-600 focus:ring-0 cursor-not-allowed pointer-events-none"
+                            checked={editLetterheadWidthFit}
+                            onChange={(e) => setEditLetterheadWidthFit(e.target.checked)}
+                            className="rounded text-indigo-600 focus:ring-indigo-500"
                           />
-                          <span className="font-semibold text-[10px]">{feat.label} {isLocked ? '(Locked)' : '(Allowed)'}</span>
-                        </div>
-                      );
-                    })}
+                          <span className="font-bold text-[10px] text-slate-700">Stretched Width Fit (Full Width & Cover)</span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-105">
+                    <span className="block font-bold text-slate-800 text-xs mb-1 bg-blue-50/50 p-2.5 rounded-lg border border-blue-105 flex items-center justify-between">
+                      <span>💳 Corporate Subscription Setup</span>
+                    </span>
+                    <div className="grid grid-cols-2 gap-3 mt-2 text-xs">
+                      <div>
+                        <label className="block font-bold text-slate-605 mb-1">Assigned Plan Option</label>
+                        <select
+                          value={editSubscriptionPlanId}
+                          onChange={(e) => setEditSubscriptionPlanId(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-205 rounded-lg bg-slate-50/30 font-bold"
+                        >
+                          {SUBSCRIPTION_PLANS.map(p => (
+                            <option key={p.id} value={p.id}>{p.name} - E{p.price}/mo</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-605 mb-1">Billing Status</label>
+                        <select
+                          value={editSubscriptionStatus}
+                          onChange={(e) => setEditSubscriptionStatus(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-205 rounded-lg bg-slate-50/30 font-bold"
+                        >
+                          <option value="trialing">14-Day Free Trial</option>
+                          <option value="active">Active Subscription</option>
+                          <option value="cancelled">Cancelled Plan</option>
+                          <option value="unpaid">Unpaid / Suspended</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100">
+                    <span className="block font-bold text-slate-700 text-xs mb-1">
+                      🔐 Access Governance & Locked Features (Aligned automatically with plan)
+                    </span>
+                    <p className="text-[10px] text-slate-400 mb-3">
+                      The following features are automatically configured, allowed, or restricted based on the corporate subscription plan selected above.
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                      {[
+                        { id: "dashboard", label: "Dashboard" },
+                        { id: "inventory", label: "Inventory" },
+                        { id: "clients", label: "Clients/Customers" },
+                        { id: "quotations", label: "Quotations" },
+                        { id: "invoices", label: "Invoices & Ledger" },
+                        { id: "receipts", label: "Receipts" },
+                        { id: "transactions", label: "Transactions" },
+                        { id: "reports", label: "Reports & Analytics" },
+                        { id: "audit_center", label: "Audit Center" },
+                        { id: "audit", label: "Audit Logs" },
+                        { id: "settings", label: "Settings" },
+                        { id: "subscriptions", label: "Subscriptions Panel" },
+                      ].map((feat) => {
+                        const isLocked = getLockedFeaturesForPlan(editSubscriptionPlanId).includes(feat.id);
+                        return (
+                          <div
+                            key={feat.id}
+                            className={`flex items-center gap-2 p-2 rounded-lg border transition ${
+                              isLocked
+                                ? "bg-red-50/60 border-red-150 text-red-650 opacity-60"
+                                : "bg-emerald-50/40 border-emerald-150 text-emerald-800"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!isLocked}
+                              readOnly
+                              className="rounded text-indigo-600 focus:ring-0 cursor-not-allowed pointer-events-none"
+                            />
+                            <span className="font-semibold text-[10px]">{feat.label} {isLocked ? '(Locked)' : '(Allowed)'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2 text-xs">
+              <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2 text-xs flex-shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingCompany(null)}
@@ -732,18 +734,18 @@ export default function CompaniesTable() {
       {/* Delete Confirmation Dialog */}
       {deleteConfirmCompany && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-3xs">
-          <div className="relative w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b border-slate-100 bg-red-50 flex items-center gap-3">
+          <div className="relative w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[92vh] sm:max-h-[85vh]">
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-red-50 flex items-center gap-3 flex-shrink-0">
               <div className="p-2 bg-red-100 text-red-650 rounded-lg">
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="font-bold text-red-900 tracking-tight">Extinguish Workspace</h3>
+                <h3 className="font-bold text-red-900 tracking-tight text-sm sm:text-base">Extinguish Workspace</h3>
                 <p className="text-[10px] text-red-600 mt-0.5">This action is permanent and irreversible.</p>
               </div>
             </div>
 
-            <div className="p-6 space-y-4 text-xs">
+            <div className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="p-3.5 bg-slate-50 border border-slate-150 rounded-lg space-y-1 text-slate-650">
                 <p>This teardown sequence will permanently extinguish:</p>
                 <ul className="list-disc pl-5 font-bold space-y-0.5 mt-1 text-slate-800">

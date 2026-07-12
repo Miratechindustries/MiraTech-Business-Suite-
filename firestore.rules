@@ -56,6 +56,103 @@ service cloud.firestore {
       );
     }
 
+    function isMemberOfCompany(companyId) {
+      return isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == companyId ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          getUserData().businessId == companyId ||
+          getUserData().companyId == companyId
+        ))
+      );
+    }
+
+    function getUserRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) ? getUserData().role : 'STAFF';
+    }
+
+    // =========================================================================
+    // STATE MACHINE TRANSITION ENGINE (Invoices & Quotations Approval Engine)
+    // Ensures that state changes follow strict, role-based transition parameters.
+    // =========================================================================
+    function isValidStateTransition(existingStatus, incomingStatus) {
+      return (
+        // No status change is always allowed
+        existingStatus == incomingStatus ||
+        
+        // Draft/Rejected -> Pending Admin (Submit)
+        ((existingStatus == 'draft' || existingStatus == 'rejected') && incomingStatus == 'pending_admin') ||
+        
+        // Pending Admin -> Pending HR (Forward to HR)
+        (existingStatus == 'pending_admin' && incomingStatus == 'pending_hr' && (
+          isMasterAdmin() || getUserRole() in ['DEPARTMENT_ADMIN', 'HR', 'BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'COMPANY_OWNER'] ||
+          getUserData().approvalRights == true || getUserData().canApproveInvoices == true || getUserData().canApproveQuotations == true
+        )) ||
+        
+        // Pending Admin -> Rejected (Return to Employee)
+        (existingStatus == 'pending_admin' && incomingStatus == 'rejected' && (
+          isMasterAdmin() || getUserRole() in ['DEPARTMENT_ADMIN', 'HR', 'BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'COMPANY_OWNER'] ||
+          getUserData().approvalRights == true || getUserData().canApproveInvoices == true || getUserData().canApproveQuotations == true
+        )) ||
+        
+        // Pending Admin -> Cancelled (Cancel Request)
+        (existingStatus == 'pending_admin' && incomingStatus == 'cancelled' && (
+          isMasterAdmin() || getUserRole() in ['DEPARTMENT_ADMIN', 'HR', 'BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'COMPANY_OWNER'] ||
+          getUserData().approvalRights == true || getUserData().canApproveInvoices == true || getUserData().canApproveQuotations == true
+        )) ||
+
+        // Pending HR -> Pending Final (HR Approve)
+        (existingStatus == 'pending_hr' && incomingStatus == 'pending_final' && (
+          isMasterAdmin() || getUserRole() in ['HR', 'BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'COMPANY_OWNER'] ||
+          getUserData().canOverrideHR == true || getUserData().approvalRights == true
+        )) ||
+        
+        // Pending HR -> Rejected (HR Reject)
+        (existingStatus == 'pending_hr' && incomingStatus == 'rejected' && (
+          isMasterAdmin() || getUserRole() in ['HR', 'BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'COMPANY_OWNER'] ||
+          getUserData().canOverrideHR == true || getUserData().approvalRights == true
+        )) ||
+
+        // Pending Final -> Approved (Final Approve)
+        (existingStatus == 'pending_final' && incomingStatus == 'approved' && (
+          isMasterAdmin() || getUserRole() in ['BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'FINANCE_MANAGER', 'OPERATIONS_MANAGER', 'MANAGING_DIRECTOR', 'COMPANY_OWNER'] ||
+          getUserData().canFinalizeDocuments == true || getUserData().approvalRights == true
+        )) ||
+        
+        // Pending Final -> Rejected (Reject & Return)
+        (existingStatus == 'pending_final' && incomingStatus == 'rejected' && (
+          isMasterAdmin() || getUserRole() in ['BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'FINANCE_MANAGER', 'OPERATIONS_MANAGER', 'MANAGING_DIRECTOR', 'COMPANY_OWNER'] ||
+          getUserData().canFinalizeDocuments == true || getUserData().approvalRights == true
+        )) ||
+        
+        // Manager Override: Direct Approve
+        (existingStatus != 'approved' && incomingStatus == 'approved' && (
+          isMasterAdmin() || getUserRole() in ['BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'COMPANY_OWNER'] ||
+          getUserData().approvalRights == true
+        ))
+      );
+    }
+
+    function canUpdateDocument(companyId, existingData, incomingData) {
+      return isMemberOfCompany(companyId) && (
+        isMasterAdmin() || getUserRole() in ['BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'COMPANY_OWNER'] || getUserData().approvalRights == true || (
+          // Staff cannot edit unless document is in draft or rejected status
+          (getUserRole() != 'STAFF' || existingData.get('approvalStatus', 'approved') == 'draft' || existingData.get('approvalStatus', 'approved') == 'rejected') &&
+          // Validate state transitions are authentic
+          isValidStateTransition(existingData.get('approvalStatus', 'approved'), incomingData.get('approvalStatus', 'approved'))
+        )
+      );
+    }
+
+    function canDeleteDocument(companyId, existingData) {
+      return isMemberOfCompany(companyId) && (
+        isMasterAdmin() || getUserRole() in ['BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'COMPANY_OWNER'] || getUserData().approvalRights == true || (
+          // Staff/Clerks can only delete drafts or rejected files
+          (existingData.get('approvalStatus', 'approved') == 'draft' || existingData.get('approvalStatus', 'approved') == 'rejected')
+        )
+      );
+    }
+
     // =========================================================================
     // PATH SEGMENTATION: Companies & Nested Subcollections
     // =========================================================================
@@ -73,24 +170,44 @@ service cloud.firestore {
       
       allow write: if isAuthorizedAdminForCompany(companyId);
       
-      match /{allSubcollections=**} {
-        allow read: if isSignedIn() && (
-          isMasterAdmin() ||
-          request.auth.uid == companyId ||
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-            getUserData().businessId == companyId ||
-            getUserData().companyId == companyId
-          ))
+      // Nested Approval-Driven Collections:
+      match /quotations/{quotationId} {
+        allow read: if isMemberOfCompany(companyId);
+        allow create: if isMemberOfCompany(companyId) && (
+          isMasterAdmin() || getUserRole() in ['BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'COMPANY_OWNER'] || getUserData().approvalRights == true || (
+            request.resource.data.get('approvalStatus', 'draft') in ['draft', 'pending_admin']
+          )
         );
-        
-        allow write: if isSignedIn() && (
-          isMasterAdmin() ||
-          request.auth.uid == companyId ||
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-            getUserData().businessId == companyId ||
-            getUserData().companyId == companyId
-          ))
+        allow update: if canUpdateDocument(companyId, resource.data, request.resource.data);
+        allow delete: if canDeleteDocument(companyId, resource.data);
+      }
+
+      match /invoices/{invoiceId} {
+        allow read: if isMemberOfCompany(companyId);
+        allow create: if isMemberOfCompany(companyId) && (
+          isMasterAdmin() || getUserRole() in ['BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'COMPANY_OWNER'] || getUserData().approvalRights == true || (
+            request.resource.data.get('approvalStatus', 'draft') in ['draft', 'pending_admin']
+          )
         );
+        allow update: if canUpdateDocument(companyId, resource.data, request.resource.data);
+        allow delete: if canDeleteDocument(companyId, resource.data);
+      }
+
+      // Other child directories under /companies/
+      match /receipts/{receiptId} {
+        allow read, write: if isMemberOfCompany(companyId);
+      }
+
+      match /transactions/{transactionId} {
+        allow read, write: if isMemberOfCompany(companyId);
+      }
+
+      match /department_activity_logs/{logId} {
+        allow read, write: if isMemberOfCompany(companyId);
+      }
+
+      match /analytics/{analyticsId} {
+        allow read, write: if isMemberOfCompany(companyId);
       }
     }
 

@@ -1,4 +1,18 @@
-export type Role = 'MASTER_ADMIN' | 'BUSINESS_ADMIN' | 'STAFF';
+export type Role = 
+  | 'MASTER_ADMIN' 
+  | 'BUSINESS_ADMIN' 
+  | 'STAFF'
+  | 'COMPANY_OWNER'
+  | 'COMPANY_ADMIN'
+  | 'DEPARTMENT_MANAGER'
+  | 'DEPARTMENT_STAFF'
+  | 'EMPLOYEE'
+  | 'READ_ONLY'
+  | 'HR'
+  | 'GENERAL_MANAGER'
+  | 'OPERATIONS_MANAGER'
+  | 'FINANCE_MANAGER'
+  | 'MANAGING_DIRECTOR';
 
 export interface User {
   id: string;

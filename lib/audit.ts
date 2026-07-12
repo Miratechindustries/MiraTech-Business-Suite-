@@ -88,6 +88,8 @@ export async function logAction(action: string, detail: string, businessId: stri
 
     await addDoc(collection(db, "notifications"), {
       businessId,
+      userId: user?.uid || "SYSTEM",
+      userEmail: user?.email || "SYSTEM",
       title: action,
       message: detail,
       read: false,

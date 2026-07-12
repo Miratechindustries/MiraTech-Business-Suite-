@@ -15,7 +15,12 @@
         "favicon": { "type": "string", "description": "Base64 or URL data of the favicon / icon." },
         "primaryColor": { "type": "string", "description": "Primary color code (HEX)." },
         "secondaryColor": { "type": "string", "description": "Secondary color code (HEX)." },
-        "useCompanyLetterhead": { "type": "boolean", "description": "Whether to use company letterhead spanning the full top of invoice or quotation." }
+        "useCompanyLetterhead": { "type": "boolean", "description": "Whether to use company letterhead spanning the full top of invoice or quotation." },
+        "themePreset": { "type": "string", "description": "Preset theme key (e.g. default, emerald, violet, crimson, etc.)." },
+        "themeMode": { "type": "string", "description": "Theme canvas mode: light, warm, dim, dark." },
+        "fontFamily": { "type": "string", "description": "Selected Google font family pairing." },
+        "cardRadius": { "type": "string", "description": "Theme card border radius: none, md, lg, xl, full." },
+        "sidebarStyle": { "type": "string", "description": "Navigation bar visual theme: flat, colored, gradient, bordered." }
       },
       "required": ["ownerId", "name"]
     },

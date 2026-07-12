@@ -37,7 +37,13 @@ import {
   CheckCircle2,
   Info,
   Coins,
-  CreditCard
+  CreditCard,
+  TrendingUp,
+  HeartHandshake,
+  ShoppingCart,
+  FolderKanban,
+  Layers,
+  ArrowLeft
 } from "lucide-react";
 
 // Subcomponents
@@ -57,6 +63,50 @@ import MasterAdminDashboard from "./MasterAdminDashboard";
 import MasterAdminLayout from "./MasterAdminLayout";
 import PayrollAndHR from "./PayrollAndHR";
 import SubscriptionsView from "./SubscriptionsView";
+import DepartmentDashboard from "./DepartmentDashboard";
+import { withDepartmentAccess } from "./withDepartmentAccess";
+import DepartmentsHub from "./DepartmentsHub";
+
+// Wrapped dynamic department dashboards
+const ProtectedSales = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="sales" onBack={onBack} />, "sales");
+const ProtectedFinance = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="finance" onBack={onBack} />, "finance");
+const ProtectedHR = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="hr" onBack={onBack} />, "hr");
+const ProtectedInventoryDept = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="inventory" onBack={onBack} />, "inventory");
+const ProtectedProjects = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="projects" onBack={onBack} />, "projects");
+const ProtectedReports = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="reports" onBack={onBack} />, "reports");
+const ProtectedSupport = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="support" onBack={onBack} />, "support");
+const ProtectedProcurement = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="procurement" onBack={onBack} />, "procurement");
+const ProtectedMarketing = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="marketing" onBack={onBack} />, "marketing");
+const ProtectedAudit = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="audit" onBack={onBack} />, "audit");
+const ProtectedExecutive = withDepartmentAccess(({ onBack }: { onBack: () => void }) => (
+  <div className="space-y-4">
+    <button
+      onClick={onBack}
+      className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition cursor-pointer mb-2 self-start uppercase tracking-wider font-sans shadow-4xs"
+    >
+      <ArrowLeft className="h-3 w-3" /> Back to Departments Hub
+    </button>
+    <Dashboard />
+  </div>
+), "executive");
+
+const tabModules: Record<string, string> = {
+  inventory: "inventory",
+  clients: "sales",
+  payroll: "hr",
+  quotations: "sales",
+  invoices: "sales",
+  receipts: "finance",
+  transactions: "finance",
+  reports: "reports",
+  audit_center: "finance",
+  audit: "audit",
+  marketing: "marketing",
+  support: "support",
+  procurement: "procurement",
+  projects: "projects",
+  executive: "executive",
+};
 
 interface CompanyData {
   ownerId: string;
@@ -67,6 +117,13 @@ interface CompanyData {
   letterheadLogo: string;
   inactivityTimeout?: number;
   lockedFeatures?: string[];
+  themePreset?: string;
+  themeMode?: "light" | "warm" | "dim" | "dark";
+  fontFamily?: "inter" | "space_grotesk" | "playfair" | "jetbrains_mono" | "outfit";
+  cardRadius?: "none" | "md" | "lg" | "xl" | "full";
+  sidebarStyle?: "flat" | "colored" | "gradient" | "bordered";
+  primaryColor?: string;
+  secondaryColor?: string;
 }
 
 interface DashboardLayoutProps {
@@ -94,6 +151,45 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
   const { setCurrentUser, currentUser } = useUserStore();
 
+  const isMasterAdmin = currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' || user?.email?.toLowerCase() === 'miratechindustries@gmail.com';
+
+  const getEnabledTabs = () => {
+    const baseTabs = [
+      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { id: "inventory", label: "Inventory", icon: Box },
+      { id: "clients", label: "Clients", icon: Users },
+      { id: "payroll", label: "HR and Payroll", icon: Coins },
+      { id: "quotations", label: "Quotations", icon: FileText },
+      { id: "invoices", label: "Invoices", icon: Receipt },
+      { id: "receipts", label: "Receipts", icon: CheckSquare },
+      { id: "transactions", label: "Transactions", icon: Landmark },
+      { id: "reports", label: "Reports & Analytics", icon: BarChart3 },
+      { id: "audit_center", label: "Audit Center", icon: ShieldCheck },
+      { id: "audit", label: "Audit Logs", icon: ShieldAlert },
+      { id: "marketing", label: "Marketing Hub", icon: TrendingUp },
+      { id: "support", label: "Customer Support", icon: HeartHandshake },
+      { id: "procurement", label: "Procurement", icon: ShoppingCart },
+      { id: "projects", label: "Projects & Tasks", icon: FolderKanban },
+      { id: "executive", label: "Executive Lounge", icon: Layers },
+      ...(currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
+      { id: "settings", label: "Settings", icon: Settings },
+      { id: "subscriptions", label: "Subscriptions", icon: CreditCard },
+    ];
+
+    return baseTabs.filter((tab) => {
+      const associatedModule = tabModules[tab.id];
+      if (!associatedModule) return true; // always show core tabs
+      
+      // Master admin always sees everything
+      if (currentUser?.role === "MASTER_ADMIN") return true;
+
+      const activeModules = (company as any)?.enabledModules || (company as any)?.modules;
+      if (!activeModules) return true; // default all enabled if no fields yet
+
+      return activeModules.includes(associatedModule);
+    });
+  };
+
   // Notifications states
   const [notifications, setNotifications] = useState<any[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -120,7 +216,13 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list: any[] = [];
       snapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() });
+        const data = docSnap.data();
+        // Standard users only see notifications associated with their own activities.
+        // Master Admin can see everything.
+        if (!isMasterAdmin && data.userId && data.userId !== user.uid) {
+          return;
+        }
+        list.push({ id: docSnap.id, ...data });
       });
       setNotifications(list);
     }, (err) => {
@@ -128,7 +230,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     });
 
     return () => unsubscribe();
-  }, [user, currentUser]);
+  }, [user, currentUser, isMasterAdmin]);
 
   // Click outside detector
   useEffect(() => {
@@ -502,7 +604,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
       events.forEach((ev) => window.removeEventListener(ev, handleUserActivity));
       clearInterval(checkInterval);
     };
-  }, [user]);
+  }, [user, company]);
 
   const keepSessionAlive = () => {
     lastActivityRef.current = Date.now();
@@ -653,163 +755,247 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     );
   }
 
-  const isMasterAdmin = currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' || user?.email?.toLowerCase() === 'miratechindustries@gmail.com';
+  const generateThemeStyles = () => {
+    if (!company) return "";
+
+    const primary = company.primaryColor || "#0F172A";
+    const secondary = company.secondaryColor || "#3B82F6";
+    
+    // Theme Mode Backgrounds and text colors
+    let bgMain = "#F8FAFC"; // light
+    let bgCard = "#FFFFFF";
+    let textMain = "#1E293B";
+    let textMuted = "#64748B";
+    let borderColor = "#E2E8F0";
+    let headerBg = "#FFFFFF";
+    let sidebarBg = "#FFFFFF";
+
+    if (company.themeMode === "warm") {
+      bgMain = "#FAF7F2";
+      bgCard = "#FCFAF7";
+      textMain = "#2D2924";
+      textMuted = "#7F7569";
+      borderColor = "#E8E2D9";
+      headerBg = "#FCFAF7";
+      sidebarBg = "#FCFAF7";
+    } else if (company.themeMode === "dim") {
+      bgMain = "#1E202B";
+      bgCard = "#252836";
+      textMain = "#F1F5F9";
+      textMuted = "#94A3B8";
+      borderColor = "#374151";
+      headerBg = "#252836";
+      sidebarBg = "#1F222F";
+    } else if (company.themeMode === "dark") {
+      bgMain = "#0F172A";
+      bgCard = "#1E293B";
+      textMain = "#F8FAFC";
+      textMuted = "#94A3B8";
+      borderColor = "#334155";
+      headerBg = "#1E293B";
+      sidebarBg = "#0F172A";
+    }
+
+    // Font Family selection
+    let fontStack = "Inter, sans-serif";
+    if (company.fontFamily === "space_grotesk") {
+      fontStack = "'Space Grotesk', sans-serif";
+    } else if (company.fontFamily === "playfair") {
+      fontStack = "'Playfair Display', serif";
+    } else if (company.fontFamily === "jetbrains_mono") {
+      fontStack = "'JetBrains Mono', monospace";
+    } else if (company.fontFamily === "outfit") {
+      fontStack = "'Outfit', sans-serif";
+    }
+
+    // Border radius
+    let radius = "0.375rem"; // default md
+    if (company.cardRadius === "none") radius = "0px";
+    else if (company.cardRadius === "lg") radius = "0.5rem";
+    else if (company.cardRadius === "xl") radius = "1rem";
+    else if (company.cardRadius === "full") radius = "1.5rem";
+
+    return `
+      @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+      :root {
+        --theme-primary: ${primary};
+        --theme-secondary: ${secondary};
+        --theme-bg-main: ${bgMain};
+        --theme-bg-card: ${bgCard};
+        --theme-text-main: ${textMain};
+        --theme-text-muted: ${textMuted};
+        --theme-border: ${borderColor};
+        --theme-header-bg: ${headerBg};
+        --theme-sidebar-bg: ${sidebarBg};
+        --theme-font-family: ${fontStack};
+        --theme-radius: ${radius};
+      }
+
+      /* Dynamic structural theme overrides */
+      .custom-themed-app,
+      .custom-themed-app select,
+      .custom-themed-app input,
+      .custom-themed-app textarea,
+      .custom-themed-app button {
+        font-family: var(--theme-font-family) !important;
+      }
+
+      .custom-themed-app {
+        background-color: var(--theme-bg-main) !important;
+        color: var(--theme-text-main) !important;
+      }
+
+      /* Core elements background overrides */
+      .custom-themed-app .bg-white {
+        background-color: var(--theme-bg-card) !important;
+      }
+
+      .custom-themed-app .bg-[#F8FAFC],
+      .custom-themed-app .bg-slate-50,
+      .custom-themed-app .bg-slate-50\\/45,
+      .custom-themed-app .bg-slate-100 {
+        background-color: var(--theme-bg-main) !important;
+      }
+
+      /* Borders coloring */
+      .custom-themed-app .border-slate-200,
+      .custom-themed-app .border-slate-100,
+      .custom-themed-app .border-slate-250,
+      .custom-themed-app hr {
+        border-color: var(--theme-border) !important;
+      }
+
+      /* Text coloring overrides */
+      .custom-themed-app .text-slate-850,
+      .custom-themed-app .text-slate-800,
+      .custom-themed-app .text-slate-900,
+      .custom-themed-app h1,
+      .custom-themed-app h2,
+      .custom-themed-app h3,
+      .custom-themed-app h4 {
+        color: var(--theme-text-main) !important;
+      }
+
+      .custom-themed-app .text-slate-500,
+      .custom-themed-app .text-slate-400 {
+        color: var(--theme-text-muted) !important;
+      }
+
+      /* Border radius rules */
+      .custom-themed-app .rounded-md,
+      .custom-themed-app .rounded-lg,
+      .custom-themed-app .rounded-xl,
+      .custom-themed-app .rounded-2xl {
+        border-radius: var(--theme-radius) !important;
+      }
+
+      /* Form control inputs background matches active theme card background */
+      .custom-themed-app input[type="text"],
+      .custom-themed-app input[type="email"],
+      .custom-themed-app input[type="number"],
+      .custom-themed-app input[type="date"],
+      .custom-themed-app select,
+      .custom-themed-app textarea {
+        background-color: var(--theme-bg-card) !important;
+        color: var(--theme-text-main) !important;
+        border-color: var(--theme-border) !important;
+      }
+
+      /* Navigation active styles */
+      .custom-themed-app aside nav button.bg-slate-100 {
+        background-color: rgba(0, 0, 0, 0.05) !important;
+      }
+    `;
+  };
 
   console.log("DEBUG: Rendering Business Dashboard, currentUser:", currentUser);
   return (
     <>
+      {company && (
+        <style dangerouslySetInnerHTML={{ __html: generateThemeStyles() }} />
+      )}
       {isMasterAdmin ? (
         <MasterAdminLayout />
       ) : (
-        <div className="flex min-h-screen bg-[#F8FAFC] text-slate-800">
-      {/* Sidebar Navigation */}
-      <aside className="w-60 bg-white border-r border-slate-200 hidden md:flex flex-col flex-shrink-0 z-10">
-        <div className="p-4 border-b border-slate-200 bg-white flex items-center justify-between max-w-full overflow-hidden">
-          <div className="flex items-center gap-2 min-w-0 font-sans">
-            <span className="text-xs font-extrabold text-slate-900 tracking-wider uppercase truncate" style={{ color: company?.primaryColor || '#0F172A' }}>
-              {company?.name || "Mira Suite"}
-            </span>
-          </div>
-          <button className="p-1 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-md transition cursor-pointer">
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-        </div>
-
-        <nav className="p-2.5 space-y-0.5 flex-1 overflow-y-auto">
-          {[
-            { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-            { id: "inventory", label: "Inventory", icon: Box },
-            { id: "clients", label: "Clients", icon: Users },
-            { id: "payroll", label: "HR and Payroll", icon: Coins },
-            { id: "quotations", label: "Quotations", icon: FileText },
-            { id: "invoices", label: "Invoices", icon: Receipt },
-            { id: "receipts", label: "Receipts", icon: CheckSquare },
-            { id: "transactions", label: "Transactions", icon: Landmark },
-            { id: "reports", label: "Reports & Analytics", icon: BarChart3 },
-            { id: "audit_center", label: "Audit Center", icon: ShieldCheck },
-            { id: "audit", label: "Audit Logs", icon: ShieldAlert },
-            ...(currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
-            { id: "settings", label: "Settings", icon: Settings },
-            { id: "subscriptions", label: "Subscriptions", icon: CreditCard },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-bold tracking-wide transition capitalize cursor-pointer ${
-                  isActive
-                    ? "bg-slate-100"
-                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/70"
-                }`}
-                style={isActive ? { 
-                  borderLeft: `2.5px solid ${company?.primaryColor || '#2563EB'}`, 
-                  color: company?.primaryColor || '#0F172A' 
-                } : {}}
-              >
-                <Icon className="h-4 w-4" style={{ color: isActive ? (company?.primaryColor || '#2563EB') : '#94A3B8' }} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* User Identity Footer block */}
-        <div className="p-3 border-t border-slate-200 bg-slate-50/45 space-y-2">
-          <div className="flex items-center gap-2 overflow-hidden">
-            {user.photoURL ? (
-              <Image src={user.photoURL} alt="User profile symbol" width={28} height={28} className="h-7 w-7 rounded-full border border-slate-200" referrerPolicy="no-referrer" />
-            ) : (
-              <div className="h-7 w-7 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center border border-blue-200/50">
-                {(user.displayName || "M").charAt(0).toUpperCase()}
+        <div className="flex flex-col min-h-screen bg-[#F8FAFC] text-slate-800 custom-themed-app">
+          {/* Desktop Header bar (no sidebar, centered breadcrumbs layout) */}
+          <header className="bg-white border-b border-slate-200 h-14 px-5 hidden md:flex items-center justify-between flex-shrink-0 z-10">
+            {/* Clickable Logo Breadcrumb to return to Divisions Hub */}
+            <div onClick={() => setActiveTab("dashboard")} className="flex items-center gap-2.5 cursor-pointer group">
+              <div className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg group-hover:bg-slate-100 transition">
+                <Landmark className="h-4.5 w-4.5" style={{ color: company?.primaryColor || '#2563EB' }} />
               </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-[11px] font-extrabold text-slate-800 truncate leading-none mb-0.5">{user.displayName || "Manager"}</p>
-              <p className="text-[9px] text-slate-400 truncate leading-none">{user.email}</p>
-            </div>
-          </div>
-
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-1 py-1.5 border border-red-100 text-red-500 hover:text-red-650 hover:bg-red-50 text-[10px] font-bold rounded-md cursor-pointer transition"
-          >
-            <LogOut className="h-3 w-3" /> Sign Out from Gateway
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Pane */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Desktop Header bar matches screenshot */}
-        <header className="bg-white border-b border-slate-200 h-14 px-5 hidden md:flex items-center justify-between flex-shrink-0">
-          {/* Quick Search Bar */}
-          <div className="relative w-80">
-            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Quick search..."
-              className="w-full pl-8.5 pr-3 py-1.5 text-xs bg-slate-50/40 border border-slate-200 rounded-lg focus:bg-white focus:outline-hidden transition"
-            />
-          </div>
-
-          {/* Right identity layout */}
-          <div className="flex items-center gap-3">
-            <div className="text-right flex flex-col justify-center items-end max-w-[150px] overflow-hidden">
-              <span className="text-xs font-extrabold text-slate-800 tracking-wide font-sans leading-tight uppercase truncate w-full" style={{ color: company?.primaryColor || '#1E293B' }}>
-                {company?.name || "MIRA SUITE"}
-              </span>
-              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">STAFF ACCESS</span>
+              <div className="flex flex-col font-sans">
+                <span className="text-xs font-black text-slate-800 uppercase tracking-tight group-hover:opacity-85 transition leading-none mb-0.5" style={{ color: company?.primaryColor || '#0F172A' }}>
+                  {company?.name || "Mira Suite"}
+                </span>
+                <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-widest leading-none">
+                  Divisions Hub
+                </span>
+              </div>
             </div>
 
-            {/* Notification Icon */}
-            <div className="relative" ref={desktopBellRef}>
-              <button 
-                type="button"
-                onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="relative p-1.5 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition cursor-pointer"
-                title="Notifications"
+            {/* Right identity layout */}
+            <div className="flex items-center gap-3">
+              <div className="text-right flex flex-col justify-center items-end max-w-[150px] overflow-hidden">
+                <span className="text-xs font-extrabold text-slate-800 tracking-wide font-sans leading-tight uppercase truncate w-full" style={{ color: company?.primaryColor || '#1E293B' }}>
+                  {company?.name || "MIRA SUITE"}
+                </span>
+                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">STAFF ACCESS</span>
+              </div>
+
+              {/* Notification Icon */}
+              <div className="relative" ref={desktopBellRef}>
+                <button 
+                  type="button"
+                  onClick={() => setNotificationsOpen(!notificationsOpen)}
+                  className="relative p-1.5 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition cursor-pointer"
+                  title="Notifications"
+                >
+                  <Bell className="h-4 w-4 animate-none" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 h-3.5 min-w-3.5 px-0.5 rounded-full text-[8px] font-extrabold text-white flex items-center justify-center border border-white animate-pulse" style={{ backgroundColor: '#EF4444' }}>
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+                {notificationsOpen && renderNotificationsDropdown(false)}
+              </div>
+
+              {/* User Profile circle */}
+              <div 
+                onClick={() => setActiveTab("settings")}
+                className="h-8 w-8 rounded-full text-white font-extrabold text-xs flex items-center justify-center cursor-pointer shadow-3xs transition hover:opacity-90"
+                style={{ backgroundColor: company?.primaryColor || '#0066FF' }}
+                title={user.displayName || "Manager"}
               >
-                <Bell className="h-4 w-4 animate-none" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 h-3.5 min-w-3.5 px-0.5 rounded-full text-[8px] font-extrabold text-white flex items-center justify-center border border-white animate-pulse" style={{ backgroundColor: '#EF4444' }}>
-                    {unreadCount}
-                  </span>
-                )}
+                {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
+              </div>
+
+              {/* Sign Out Link */}
+              <button
+                onClick={handleLogout}
+                className="ml-2 flex items-center justify-center gap-1 py-1 px-2.5 border border-red-100 text-red-500 hover:text-red-600 hover:bg-red-50 text-[10px] font-bold rounded-lg cursor-pointer transition"
+              >
+                <LogOut className="h-3 w-3" /> Sign Out
               </button>
-              {notificationsOpen && renderNotificationsDropdown(false)}
             </div>
+          </header>
 
-            {/* User Profile circle */}
-            <div 
-              onClick={() => setActiveTab("settings")}
-              className="h-8 w-8 rounded-full text-white font-extrabold text-xs flex items-center justify-center cursor-pointer shadow-3xs transition hover:opacity-90"
-              style={{ backgroundColor: company?.primaryColor || '#0066FF' }}
-              title={user.displayName || "Manager"}
-            >
-              {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
+          {/* Mobile Header navigation bar with back anchor */}
+          <header className="bg-white border-b border-slate-200 py-3 px-4 flex items-center justify-between md:hidden flex-shrink-0 z-10">
+            <div onClick={() => setActiveTab("dashboard")} className="flex items-center gap-2 min-w-0 cursor-pointer">
+              <div className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                <Landmark className="h-4 w-4" style={{ color: company?.primaryColor || '#2563EB' }} />
+              </div>
+              <div className="flex flex-col min-w-0 leading-tight">
+                <span className="text-[11px] font-black text-[#0B1329] uppercase tracking-wide truncate" style={{ color: company?.primaryColor || '#0B1329' }}>
+                  {company?.name || "MIRA SUITE"}
+                </span>
+                <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">DIVISIONS HUB</span>
+              </div>
             </div>
-          </div>
-        </header>
-
-        {/* Mobile Header navigation bar with Hamburger */}
-        <header className="bg-white border-b border-slate-200 py-3 px-4 flex items-center justify-between md:hidden flex-shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="p-1 px-2 border border-slate-200 text-slate-605 rounded-md hover:bg-slate-50 transition cursor-pointer flex-shrink-0"
-              aria-label="Toggle Navigation drawer"
-            >
-              <Menu className="h-4 w-4" />
-            </button>
-            <div className="flex items-center gap-1.5 ml-1 min-w-0">
-              <Landmark className="h-4 w-4 flex-shrink-0" style={{ color: company?.primaryColor || '#2563EB' }} />
-              <span className="text-xs font-extrabold text-[#0B1329] uppercase tracking-wider truncate" style={{ color: company?.primaryColor || '#0B1329' }}>
-                {company?.name || "MIRA SUITE"}
-              </span>
-            </div>
-          </div>
 
           <div className="flex items-center gap-2.5">
             {/* Mobile Notification Bell */}
@@ -838,104 +1024,19 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             >
               {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
             </div>
+
+            {/* Mobile Sign Out Button */}
+            <button
+              onClick={handleLogout}
+              className="p-1.5 border border-red-100 text-red-500 hover:text-red-650 hover:bg-red-50 rounded-lg cursor-pointer transition"
+              title="Sign Out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </header>
 
-        {/* Mobile Drawer Slideout Menu */}
-        {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 md:hidden flex">
-            {/* Backdrop */}
-            <div 
-              className="fixed inset-0 bg-slate-900/40 backdrop-blur-3xs transition-opacity duration-300"
-              onClick={() => setMobileMenuOpen(false)}
-            />
-
-            {/* Slideout Content */}
-            <div className="relative flex flex-col w-60 max-w-sm bg-white h-full shadow-2xl transition-transform duration-300 ease-in-out border-r border-slate-200">
-              {/* Header inside drawer */}
-              <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Landmark className="h-4.5 w-4.5 text-blue-600" />
-                  <span className="text-xs font-extrabold text-slate-900 tracking-wider uppercase font-sans">Mira Suite</span>
-                </div>
-                <button 
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="p-1 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-md transition cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Navigation Items */}
-              <nav className="p-2.5 space-y-0.5 flex-1 overflow-y-auto">
-                {[
-                  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-                  { id: "inventory", label: "Inventory", icon: Box },
-                  { id: "clients", label: "Clients", icon: Users },
-                  { id: "payroll", label: "HR and Payroll", icon: Coins },
-                  { id: "quotations", label: "Quotations", icon: FileText },
-                  { id: "invoices", label: "Invoices", icon: Receipt },
-                  { id: "receipts", label: "Receipts", icon: CheckSquare },
-                  { id: "transactions", label: "Transactions", icon: Landmark },
-                  { id: "reports", label: "Reports & Analytics", icon: BarChart3 },
-                  { id: "audit_center", label: "Audit Center", icon: ShieldCheck },
-                  { id: "audit", label: "Audit Logs", icon: ShieldAlert },
-                  ...(currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
-                  { id: "settings", label: "Settings", icon: Settings },
-                  { id: "subscriptions", label: "Subscriptions", icon: CreditCard },
-                ].map((tab) => {
-                  const Icon = tab.icon;
-                  const isActive = activeTab === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => {
-                        setActiveTab(tab.id);
-                        setMobileMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-bold tracking-wide transition capitalize cursor-pointer ${
-                        isActive
-                          ? "bg-slate-100"
-                          : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/70"
-                      }`}
-                      style={isActive ? { 
-                        borderLeft: `2.5px solid ${company?.primaryColor || '#2563EB'}`, 
-                        color: company?.primaryColor || '#0F172A' 
-                      } : {}}
-                    >
-                      <Icon className="h-4 w-4" style={{ color: isActive ? (company?.primaryColor || '#2563EB') : '#94A3B8' }} />
-                      {tab.label}
-                    </button>
-                  );
-                })}
-              </nav>
-
-              {/* User Identity Footer */}
-              <div className="p-3 border-t border-slate-200 bg-slate-50/45 space-y-2">
-                <div className="flex items-center gap-2 overflow-hidden">
-                  {user.photoURL ? (
-                    <Image src={user.photoURL} alt="User profile" width={28} height={28} className="h-7 w-7 rounded-full border border-slate-200" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="h-7 w-7 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center border border-blue-200/50">
-                      {(user.displayName || "M").charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="min-w-0 font-sans">
-                    <p className="text-[11px] font-extrabold text-slate-800 truncate leading-none mb-0.5">{user.displayName || "Manager"}</p>
-                    <p className="text-[9px] text-slate-400 truncate leading-none">{user.email}</p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center justify-center gap-1 py-1.5 border border-red-100 text-red-500 hover:text-red-650 hover:bg-red-50 text-[10px] font-bold rounded-md cursor-pointer transition"
-                >
-                  <LogOut className="h-3 w-3" /> Sign Out from Gateway
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Mobile Drawer Slideout Menu removed */}
 
         {/* Workspace Body pane */}
         <main className="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto space-y-4 overflow-y-auto">
@@ -981,31 +1082,25 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
               <div className={company?.lockedFeatures?.includes(activeTab) && !isMasterAdmin ? "blur-md pointer-events-none select-none transition-all duration-300" : ""}>
                 {/* Render Active View Tab */}
                 {activeTab === "dashboard" && (
-                  <Dashboard
-                    googleToken={googleToken}
-                    onGoogleSignInNeeded={handleGoogleLogin}
+                  <DepartmentsHub
+                    company={company}
+                    onSelectTab={(tabId) => setActiveTab(tabId)}
                   />
                 )}
 
-                {activeTab === "inventory" && <Inventory />}
+                {/* Unified Department Workspaces */}
+                {activeTab === "sales" && <ProtectedSales onBack={() => setActiveTab("dashboard")} />}
+                {activeTab === "finance" && <ProtectedFinance onBack={() => setActiveTab("dashboard")} />}
+                {activeTab === "hr" && <ProtectedHR onBack={() => setActiveTab("dashboard")} />}
+                {activeTab === "inventory" && <ProtectedInventoryDept onBack={() => setActiveTab("dashboard")} />}
+                {activeTab === "projects" && <ProtectedProjects onBack={() => setActiveTab("dashboard")} />}
+                {activeTab === "reports" && <ProtectedReports onBack={() => setActiveTab("dashboard")} />}
+                {activeTab === "support" && <ProtectedSupport onBack={() => setActiveTab("dashboard")} />}
+                {activeTab === "procurement" && <ProtectedProcurement onBack={() => setActiveTab("dashboard")} />}
+                {activeTab === "marketing" && <ProtectedMarketing onBack={() => setActiveTab("dashboard")} />}
+                {activeTab === "audit" && <ProtectedAudit onBack={() => setActiveTab("dashboard")} />}
+                {activeTab === "executive" && <ProtectedExecutive onBack={() => setActiveTab("dashboard")} />}
 
-                {activeTab === "clients" && <Customers />}
-
-                {activeTab === "payroll" && <PayrollAndHR />}
-
-                {activeTab === "quotations" && <Quotations />}
-
-                {activeTab === "invoices" && <Invoices />}
-
-                {activeTab === "receipts" && <Receipts />}
-
-                {activeTab === "transactions" && <Transactions />}
-
-                {activeTab === "reports" && <ReportsAnalytics />}
-
-                {activeTab === "audit_center" && <AuditCenter />}
-
-                {activeTab === "audit" && <AuditLogs />}
                 {activeTab === "admin" && <MasterAdminDashboard />}
 
                 {activeTab === "settings" && (
@@ -1018,7 +1113,6 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
           )}
          </main>
        </div>
-     </div>
       )}
 
       {/* Dynamic Security Inactivity Warning Overlay */}

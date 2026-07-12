@@ -20,7 +20,8 @@ import {
   ShieldAlert, 
   UserPlus2, 
   Key, 
-  UserCheck2 
+  UserCheck2,
+  X
 } from 'lucide-react';
 
 export default function UserManagement() {
@@ -37,6 +38,46 @@ export default function UserManagement() {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<Role>('STAFF');
   const [editCompanyId, setEditCompanyId] = useState('');
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+  const [editDepartments, setEditDepartments] = useState<string[]>([]);
+
+  // Approval Permissions creation states
+  const [canApproveQuotations, setCanApproveQuotations] = useState(false);
+  const [canApproveInvoices, setCanApproveInvoices] = useState(false);
+  const [canOverrideHR, setCanOverrideHR] = useState(false);
+  const [canFinalizeDocuments, setCanFinalizeDocuments] = useState(false);
+  const [canRejectDocuments, setCanRejectDocuments] = useState(false);
+  const [canReturnForEditing, setCanReturnForEditing] = useState(false);
+  const [canViewApprovalHistory, setCanViewApprovalHistory] = useState(false);
+  const [canApproveAcrossAllDepartments, setCanApproveAcrossAllDepartments] = useState(false);
+  const [canReceiveApprovalNotifications, setCanReceiveApprovalNotifications] = useState(false);
+  const [approvalRights, setApprovalRights] = useState(false);
+
+  // Approval Permissions editing states
+  const [editCanApproveQuotations, setEditCanApproveQuotations] = useState(false);
+  const [editCanApproveInvoices, setEditCanApproveInvoices] = useState(false);
+  const [editCanOverrideHR, setEditCanOverrideHR] = useState(false);
+  const [editCanFinalizeDocuments, setEditCanFinalizeDocuments] = useState(false);
+  const [editCanRejectDocuments, setEditCanRejectDocuments] = useState(false);
+  const [editCanReturnForEditing, setEditCanReturnForEditing] = useState(false);
+  const [editCanViewApprovalHistory, setEditCanViewApprovalHistory] = useState(false);
+  const [editCanApproveAcrossAllDepartments, setEditCanApproveAcrossAllDepartments] = useState(false);
+  const [editCanReceiveApprovalNotifications, setEditCanReceiveApprovalNotifications] = useState(false);
+  const [editApprovalRights, setEditApprovalRights] = useState(false);
+
+  const AVAILABLE_DEPARTMENTS = [
+    { id: "sales", name: "Sales & CRM" },
+    { id: "finance", name: "Finance & Accounting" },
+    { id: "hr", name: "HR & Payroll" },
+    { id: "inventory", name: "Inventory Stock" },
+    { id: "projects", name: "Projects & Tasks" },
+    { id: "reports", name: "Reports & Analytics" },
+    { id: "support", name: "Customer Support" },
+    { id: "procurement", name: "Procurement" },
+    { id: "marketing", name: "Marketing Hub" },
+    { id: "audit", name: "Security Audit Logs" },
+    { id: "executive", name: "Executive Lounge" }
+  ];
 
   const fetchData = async () => {
     try {
@@ -66,6 +107,17 @@ export default function UserManagement() {
     setEditingUserId(user.id);
     setEditRole(user.role || 'STAFF');
     setEditCompanyId(user.companyId || '');
+    setEditDepartments(user.departments || []);
+    setEditCanApproveQuotations(user.canApproveQuotations || false);
+    setEditCanApproveInvoices(user.canApproveInvoices || false);
+    setEditCanOverrideHR(user.canOverrideHR || false);
+    setEditCanFinalizeDocuments(user.canFinalizeDocuments || false);
+    setEditCanRejectDocuments(user.canRejectDocuments || false);
+    setEditCanReturnForEditing(user.canReturnForEditing || false);
+    setEditCanViewApprovalHistory(user.canViewApprovalHistory || false);
+    setEditCanApproveAcrossAllDepartments(user.canApproveAcrossAllDepartments || false);
+    setEditCanReceiveApprovalNotifications(user.canReceiveApprovalNotifications || false);
+    setEditApprovalRights(user.approvalRights || false);
   };
 
   const saveEdit = async (userId: string) => {
@@ -74,6 +126,17 @@ export default function UserManagement() {
         role: editRole,
         companyId: editCompanyId,
         businessId: editCompanyId, // Supporting legacy
+        departments: editRole === 'STAFF' ? editDepartments : [],
+        canApproveQuotations: editCanApproveQuotations,
+        canApproveInvoices: editCanApproveInvoices,
+        canOverrideHR: editCanOverrideHR,
+        canFinalizeDocuments: editCanFinalizeDocuments,
+        canRejectDocuments: editCanRejectDocuments,
+        canReturnForEditing: editCanReturnForEditing,
+        canViewApprovalHistory: editCanViewApprovalHistory,
+        canApproveAcrossAllDepartments: editCanApproveAcrossAllDepartments,
+        canReceiveApprovalNotifications: editCanReceiveApprovalNotifications,
+        approvalRights: editApprovalRights
       });
       fetchData();
       setEditingUserId(null);
@@ -160,7 +223,18 @@ export default function UserManagement() {
         businessId: selectedCompanyId,
         status: 'ACTIVE',
         createdAt: new Date().toISOString(),
-        rawPassword: password // Plain password credentials auditable by Master Admin
+        rawPassword: password, // Plain password credentials auditable by Master Admin
+        departments: role === 'STAFF' ? selectedDepartments : [],
+        canApproveQuotations,
+        canApproveInvoices,
+        canOverrideHR,
+        canFinalizeDocuments,
+        canRejectDocuments,
+        canReturnForEditing,
+        canViewApprovalHistory,
+        canApproveAcrossAllDepartments,
+        canReceiveApprovalNotifications,
+        approvalRights
       };
 
       await setDoc(doc(db, 'users', userUid), userPayload);
@@ -175,6 +249,17 @@ export default function UserManagement() {
       setSuccess(`Account ${email} created & provisioned successfully with UID: ${userUid}`);
       setEmail('');
       setPassword('');
+      setSelectedDepartments([]);
+      setCanApproveQuotations(false);
+      setCanApproveInvoices(false);
+      setCanOverrideHR(false);
+      setCanFinalizeDocuments(false);
+      setCanRejectDocuments(false);
+      setCanReturnForEditing(false);
+      setCanViewApprovalHistory(false);
+      setCanApproveAcrossAllDepartments(false);
+      setCanReceiveApprovalNotifications(false);
+      setApprovalRights(false);
       fetchData();
     } catch (err: any) {
       console.error(err);
@@ -315,6 +400,12 @@ export default function UserManagement() {
                 <option value="STAFF">Staff (Standard Ledger Clerk)</option>
                 <option value="BUSINESS_ADMIN">Business Admin (Workspace Owner)</option>
                 <option value="MASTER_ADMIN">Master Admin (System Supervisor)</option>
+                <option value="HR">HR Manager</option>
+                <option value="GENERAL_MANAGER">General Manager</option>
+                <option value="OPERATIONS_MANAGER">Operations Manager</option>
+                <option value="FINANCE_MANAGER">Finance Manager</option>
+                <option value="MANAGING_DIRECTOR">Managing Director</option>
+                <option value="COMPANY_OWNER">Company Owner</option>
               </select>
             </div>
 
@@ -329,6 +420,136 @@ export default function UserManagement() {
                 <option value="">Select Company</option>
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+            </div>
+
+            {role === 'STAFF' && (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Assigned Departments
+                </label>
+                <div className="grid grid-cols-2 gap-1.5 max-h-[160px] overflow-y-auto">
+                  {AVAILABLE_DEPARTMENTS.map((dept) => {
+                    const isChecked = selectedDepartments.includes(dept.id);
+                    return (
+                      <label key={dept.id} className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setSelectedDepartments(selectedDepartments.filter(id => id !== dept.id));
+                            } else {
+                              setSelectedDepartments([...selectedDepartments, dept.id]);
+                            }
+                          }}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                        />
+                        <span>{dept.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-3">
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                Approval Permissions & Override
+              </label>
+              <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canApproveQuotations}
+                    onChange={(e) => setCanApproveQuotations(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Approve Quotations</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canApproveInvoices}
+                    onChange={(e) => setCanApproveInvoices(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Approve Invoices</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canOverrideHR}
+                    onChange={(e) => setCanOverrideHR(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Override HR Approval</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canFinalizeDocuments}
+                    onChange={(e) => setCanFinalizeDocuments(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Finalize Documents</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canRejectDocuments}
+                    onChange={(e) => setCanRejectDocuments(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Reject Documents</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canReturnForEditing}
+                    onChange={(e) => setCanReturnForEditing(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Return for Editing</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canViewApprovalHistory}
+                    onChange={(e) => setCanViewApprovalHistory(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>View Approval History</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canApproveAcrossAllDepartments}
+                    onChange={(e) => setCanApproveAcrossAllDepartments(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Approve Across All Depts</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canReceiveApprovalNotifications}
+                    onChange={(e) => setCanReceiveApprovalNotifications(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Receive Approval Notifications</span>
+                </label>
+                <div className="border-t border-slate-200 my-1 pt-1">
+                  <label className="flex items-center gap-1.5 text-[11px] font-extrabold text-blue-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={approvalRights}
+                      onChange={(e) => setApprovalRights(e.target.checked)}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                    />
+                    <span>Has Approval Override Rights</span>
+                  </label>
+                </div>
+              </div>
             </div>
 
             <button 
@@ -371,17 +592,7 @@ export default function UserManagement() {
                     <tr key={u.id} className="hover:bg-slate-50/45 transition">
                       <td className="p-3 font-semibold text-slate-800">{u.email}</td>
                       <td className="p-3 font-bold text-[10px]">
-                        {editingUserId === u.id ? (
-                          <select 
-                            value={editRole} 
-                            onChange={(e) => setEditRole(e.target.value as Role)}
-                            className="text-[10px] font-bold border border-slate-300 rounded p-1"
-                          >
-                            <option value="STAFF">STAFF</option>
-                            <option value="BUSINESS_ADMIN">BUSINESS_ADMIN</option>
-                            <option value="MASTER_ADMIN">MASTER_ADMIN</option>
-                          </select>
-                        ) : (
+                        <div className="space-y-1.5">
                           <span className={`px-2 py-0.5 rounded-full font-bold uppercase border tracking-wider ${
                             u.role === 'MASTER_ADMIN' 
                               ? 'bg-rose-50 text-rose-700 border-rose-100' 
@@ -391,21 +602,25 @@ export default function UserManagement() {
                           }`}>
                             {u.role || 'STAFF'}
                           </span>
-                        )}
+                          {u.role === 'STAFF' && (
+                            <div className="flex flex-wrap gap-1 max-w-[155px]">
+                              {(u.departments && u.departments.length > 0) ? (
+                                u.departments.map((d: string) => (
+                                  <span key={d} className="bg-slate-100 text-slate-600 text-[8px] font-bold px-1.5 py-0.5 rounded-md border border-slate-200 shrink-0">
+                                    {AVAILABLE_DEPARTMENTS.find(ad => ad.id === d)?.name || d}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[8px] font-bold text-red-500 bg-red-50 border border-red-150 px-1.5 rounded-md">
+                                  No access nodes
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="p-3 font-medium text-slate-600">
-                        {editingUserId === u.id ? (
-                          <select 
-                            value={editCompanyId} 
-                            onChange={(e) => setEditCompanyId(e.target.value)}
-                            className="text-[10px] font-bold border border-slate-300 rounded p-1 w-full"
-                          >
-                            <option value="">Direct / System Node</option>
-                            {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          </select>
-                        ) : (
-                          companies.find(c => c.id === u.companyId)?.name || 'Direct / System Node'
-                        )}
+                        {companies.find(c => c.id === u.companyId)?.name || 'Direct / System Node'}
                       </td>
                       <td className="p-3 font-mono text-xs">
                         {u.rawPassword ? (
@@ -429,41 +644,32 @@ export default function UserManagement() {
                         )}
                       </td>
                       <td className="p-3 text-right pr-6 space-x-2">
-                        {editingUserId === u.id ? (
-                          <>
-                            <button onClick={() => saveEdit(u.id)} className="text-[11px] font-extrabold text-blue-600 hover:text-blue-800">Save</button>
-                            <button onClick={() => setEditingUserId(null)} className="text-[11px] font-extrabold text-slate-500 hover:text-slate-700">Cancel</button>
-                          </>
-                        ) : (
-                          <>
-                            <button onClick={() => startEdit(u)} className="text-[11px] font-extrabold text-indigo-600 hover:text-indigo-800">Edit</button>
-                            {u.role !== 'MASTER_ADMIN' && u.email?.toLowerCase() !== 'miratechindustries@gmail.com' && (
-                                <>
-                                  {u.status === 'DEACTIVATED' ? (
-                                    <button 
-                                      onClick={() => handleActivate(u.id)} 
-                                      className="text-[11px] font-extrabold text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 px-2 py-1 rounded transition cursor-pointer"
-                                    >
-                                      Activate
-                                    </button>
-                                  ) : (
-                                    <button 
-                                      onClick={() => handleDeactivate(u.id)} 
-                                      className="text-[11px] font-extrabold text-slate-550 hover:text-slate-705 hover:bg-slate-100/70 px-2 py-1 rounded transition cursor-pointer"
-                                    >
-                                      Deactivate
-                                    </button>
-                                  )}
-                                  <button 
-                                    onClick={() => handleDeleteUser(u.id)} 
-                                    className="inline-flex items-center justify-center p-1.5 text-red-550 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                                    title="Permanently Delete User"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
-                            )}
-                          </>
+                        <button onClick={() => startEdit(u)} className="text-[11px] font-extrabold text-indigo-600 hover:text-indigo-800">Edit</button>
+                        {u.role !== 'MASTER_ADMIN' && u.email?.toLowerCase() !== 'miratechindustries@gmail.com' && (
+                            <>
+                              {u.status === 'DEACTIVATED' ? (
+                                <button 
+                                  onClick={() => handleActivate(u.id)} 
+                                  className="text-[11px] font-extrabold text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 px-2 py-1 rounded transition cursor-pointer"
+                                >
+                                  Activate
+                                </button>
+                              ) : (
+                                <button 
+                                  onClick={() => handleDeactivate(u.id)} 
+                                  className="text-[11px] font-extrabold text-slate-550 hover:text-slate-705 hover:bg-slate-100/70 px-2 py-1 rounded transition cursor-pointer"
+                                >
+                                  Deactivate
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => handleDeleteUser(u.id)} 
+                                className="inline-flex items-center justify-center p-1.5 text-red-550 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                                title="Permanently Delete User"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                         )}
                       </td>
                     </tr>
@@ -474,6 +680,140 @@ export default function UserManagement() {
           </div>
         </div>
       </div>
+
+      {/* Edit User Modal Dialog */}
+      {editingUserId && (() => {
+        const editingUser = users.find(u => u.id === editingUserId);
+        if (!editingUser) return null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-3xs">
+            <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[92vh] sm:max-h-[85vh]">
+              <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between flex-shrink-0">
+                <div>
+                  <h3 className="font-bold text-slate-800 tracking-tight flex items-center gap-2 text-sm sm:text-base">
+                    <Users className="h-4 w-4 text-blue-600" />
+                    Edit User Credentials & Access
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5 font-mono">User Email: {editingUser.email}</p>
+                </div>
+                <button 
+                  onClick={() => setEditingUserId(null)}
+                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <form onSubmit={(e) => { e.preventDefault(); saveEdit(editingUserId); }} className="flex flex-col flex-1 overflow-hidden">
+                <div className="p-4 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto flex-1 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-600 mb-1">User Role Status</label>
+                    <select 
+                      value={editRole} 
+                      onChange={(e) => setEditRole(e.target.value as Role)}
+                      className="text-xs font-bold border border-slate-250 rounded-lg p-2 w-full bg-slate-50/30"
+                    >
+                      <option value="STAFF">STAFF</option>
+                      <option value="BUSINESS_ADMIN">BUSINESS_ADMIN</option>
+                      <option value="MASTER_ADMIN">MASTER_ADMIN</option>
+                      <option value="HR">HR</option>
+                      <option value="GENERAL_MANAGER">GENERAL_MANAGER</option>
+                      <option value="OPERATIONS_MANAGER">OPERATIONS_MANAGER</option>
+                      <option value="FINANCE_MANAGER">FINANCE_MANAGER</option>
+                      <option value="MANAGING_DIRECTOR">MANAGING_DIRECTOR</option>
+                      <option value="COMPANY_OWNER">COMPANY_OWNER</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-600 mb-1">Assigned Corporate Workspace</label>
+                    <select 
+                      value={editCompanyId} 
+                      onChange={(e) => setEditCompanyId(e.target.value)}
+                      className="text-xs font-bold border border-slate-250 rounded-lg p-2 w-full bg-slate-50/30"
+                    >
+                      <option value="">Direct / System Node</option>
+                      {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+
+                  {editRole === 'STAFF' && (
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Assigned Department Access Node(s)</label>
+                      <div className="border border-slate-200 bg-slate-50/50 p-3 rounded-xl space-y-1.5 max-h-48 overflow-y-auto">
+                        {AVAILABLE_DEPARTMENTS.map((dept) => {
+                          const isChecked = editDepartments.includes(dept.id);
+                          return (
+                            <label key={dept.id} className="flex items-center gap-2 cursor-pointer py-1 hover:bg-slate-100/50 rounded px-1 transition select-none">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isChecked) {
+                                    setEditDepartments(editDepartments.filter(id => id !== dept.id));
+                                  } else {
+                                    setEditDepartments([...editDepartments, dept.id]);
+                                  }
+                                }}
+                                className="rounded text-blue-600 w-4 h-4"
+                              />
+                              <span className="font-medium text-slate-700">{dept.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block font-bold text-slate-600 mb-1">Approval Rights & Governance Permissions</label>
+                    <div className="border border-slate-200 bg-slate-50/50 p-3 rounded-xl space-y-1.5 max-h-48 overflow-y-auto">
+                      {[
+                        { checked: editCanApproveQuotations, setChecked: setEditCanApproveQuotations, label: "Approve Quotations" },
+                        { checked: editCanApproveInvoices, setChecked: setEditCanApproveInvoices, label: "Approve Invoices" },
+                        { checked: editCanOverrideHR, setChecked: setEditCanOverrideHR, label: "Override HR & Payroll" },
+                        { checked: editCanFinalizeDocuments, setChecked: setEditCanFinalizeDocuments, label: "Finalize PDF Documents" },
+                        { checked: editCanRejectDocuments, setChecked: setEditCanRejectDocuments, label: "Reject Documents" },
+                        { checked: editCanReturnForEditing, setChecked: setEditCanReturnForEditing, label: "Return for Editing" },
+                        { checked: editCanViewApprovalHistory, setChecked: setEditCanViewApprovalHistory, label: "View Approval History Logs" },
+                        { checked: editCanApproveAcrossAllDepartments, setChecked: setEditCanApproveAcrossAllDepartments, label: "Approve Across All Departments" },
+                        { checked: editCanReceiveApprovalNotifications, setChecked: setEditCanReceiveApprovalNotifications, label: "Receive Approval Notifications" },
+                        { checked: editApprovalRights, setChecked: setEditApprovalRights, label: "Enable Master Override Rights", highlight: true },
+                      ].map((item, index) => (
+                        <label key={index} className={`flex items-center gap-2 cursor-pointer py-1 hover:bg-slate-100/50 rounded px-1 transition select-none ${item.highlight ? 'text-blue-700 font-bold' : 'text-slate-700 font-medium'}`}>
+                          <input
+                            type="checkbox"
+                            checked={item.checked}
+                            onChange={(e) => item.setChecked(e.target.checked)}
+                            className="rounded text-blue-600 w-4 h-4"
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2 text-xs flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUserId(null)}
+                    className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-lg cursor-pointer transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-slate-900 text-white font-bold hover:bg-slate-800 rounded-lg cursor-pointer transition flex items-center gap-1.5"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

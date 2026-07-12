@@ -7,7 +7,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
 const app = initializeApp(firebaseConfig);
@@ -134,8 +134,10 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     return; // Do not throw or log as a blocking fatal Firestore Error Block
   }
 
+  const errorMsg = error instanceof Error ? error.message : String(error);
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMsg,
     authInfo: {
       userId: auth.currentUser?.uid || null,
       email: auth.currentUser?.email || null,
@@ -147,5 +149,38 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path,
   };
   console.error("Firestore Error Block:", JSON.stringify(errInfo));
+
+  // Asynchronously report error to Master Admin without risking infinite loops
+  try {
+    const userId = auth.currentUser?.uid || "SYSTEM";
+    const userEmail = auth.currentUser?.email || "SYSTEM";
+
+    // Write to global audit_logs (marks as error)
+    addDoc(collection(db, "audit_logs"), {
+      action: "System Error",
+      detail: `Operation '${operationType}' failed on path: ${path || 'unknown'}. Error: ${errorMsg}`,
+      businessId: userId,
+      timestamp: serverTimestamp(),
+      user: userEmail,
+      userId: userId,
+      ip: "127.0.0.1",
+      isError: true
+    }).catch(e => console.error("Silent handle error: failed to write system error to audit_logs:", e));
+
+    // Write to global notifications targeting Master Admin
+    addDoc(collection(db, "notifications"), {
+      businessId: "MASTER_ADMIN", // Master Admin target
+      userId: "MASTER_ADMIN",
+      userEmail: "miratechindustries@gmail.com",
+      title: "Critical System Error",
+      message: `User ${userEmail} experienced an error during '${operationType}' on path '${path || 'unknown'}': ${errorMsg}`,
+      read: false,
+      createdAt: new Date().toISOString(),
+      type: "error"
+    }).catch(e => console.error("Silent handle error: failed to send error notification to Master Admin:", e));
+  } catch (logErr) {
+    console.error("Silent handle error: failed during error reporting flow:", logErr);
+  }
+
   throw new Error(JSON.stringify(errInfo));
 }

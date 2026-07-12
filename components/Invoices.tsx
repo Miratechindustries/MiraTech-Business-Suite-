@@ -31,6 +31,10 @@ interface Invoice {
   total: number;
   status: "unpaid" | "paid" | "overdue";
   driveFileId?: string;
+  department?: string;
+  approvalStatus?: 'draft' | 'pending_admin' | 'pending_hr' | 'pending_final' | 'approved' | 'rejected' | 'cancelled';
+  approvalHistory?: any[];
+  approvalComments?: string;
 }
 
 interface CompanyDetails {
@@ -54,7 +58,7 @@ interface Customer {
   status: "Active" | "Inactive";
 }
 
-export default function Invoices() {
+export default function Invoices({ departmentId }: { departmentId?: string }) {
   const { currentUser } = useUserStore();
   const addToast = useToastStore((state) => state.addToast);
   
@@ -80,6 +84,101 @@ export default function Invoices() {
   const [company, setCompany] = useState<CompanyDetails | null>(null);
   const [clients, setClients] = useState<Customer[]>([]);
 
+  // Workflow states
+  const [workflowComments, setWorkflowComments] = useState("");
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopyText = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(label);
+    addToast(`${label} copied to clipboard!`, "success");
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handleWorkflowTransition = async (
+    nextStatus: "pending_admin" | "pending_hr" | "pending_final" | "approved" | "rejected" | "cancelled",
+    actionName: string,
+    override = false
+  ) => {
+    if (!previewInvoice || !previewInvoice.id) return;
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const newEvent = {
+      type: override ? "manager_override" : actionName.toLowerCase().replace(/ /g, "_"),
+      user: currentUser?.email || "System User",
+      userId: currentUser?.uid || user.uid,
+      role: currentUser?.role || "STAFF",
+      date: new Date().toISOString().split("T")[0],
+      time: new Date().toLocaleTimeString(),
+      comments: workflowComments || `${actionName} performed by ${currentUser?.email || "User"}.`
+    };
+
+    const updatedHistory = [...(previewInvoice.approvalHistory || []), newEvent];
+
+    try {
+      setSubmitting(true);
+      await updateDoc(doc(db, "companies", user.uid, "invoices", previewInvoice.id), {
+        approvalStatus: nextStatus,
+        approvalHistory: updatedHistory,
+        approvalComments: workflowComments || ""
+      });
+
+      // Send appropriate Notification
+      let notificationTitle = "Invoice Workflow Updated";
+      let notificationMsg = `Invoice #${previewInvoice.number} status changed to ${nextStatus}.`;
+      let notificationType: "info" | "success" | "warning" = "info";
+
+      if (nextStatus === "pending_hr") {
+        notificationTitle = "Invoice Pending HR Approval";
+        notificationMsg = `Invoice #${previewInvoice.number} was reviewed by Admin and is pending HR review.`;
+      } else if (nextStatus === "pending_final") {
+        notificationTitle = "HR Approved Invoice";
+        notificationMsg = `Invoice #${previewInvoice.number} has been approved by HR (${currentUser?.email}) and is waiting for final business approval.`;
+        notificationType = "success";
+      } else if (nextStatus === "approved") {
+        notificationTitle = "Invoice Fully Approved";
+        notificationMsg = `Invoice #${previewInvoice.number} is now official and approved.`;
+        notificationType = "success";
+      } else if (nextStatus === "rejected") {
+        notificationTitle = "Invoice Action: Changes Requested";
+        notificationMsg = `Invoice #${previewInvoice.number} was returned/rejected by ${currentUser?.email} with comments.`;
+        notificationType = "warning";
+      }
+
+      await addDoc(collection(db, "companies", user.uid, "notifications"), {
+        businessId: user.uid,
+        title: notificationTitle,
+        message: notificationMsg,
+        read: false,
+        createdAt: new Date().toISOString(),
+        type: notificationType
+      });
+
+      // Log database audit trail
+      await logAction(
+        `Invoice Workflow: ${actionName}`,
+        `Invoice #${previewInvoice.number} transitioned to '${nextStatus}'. Comments: ${workflowComments || "None"}`,
+        user.uid
+      );
+
+      addToast(`Invoice #${previewInvoice.number} updated: ${actionName}`, "success");
+      setWorkflowComments("");
+      setPreviewInvoice({
+        ...previewInvoice,
+        approvalStatus: nextStatus,
+        approvalHistory: updatedHistory,
+        approvalComments: workflowComments
+      });
+      fetchInvoicesAndCompany();
+    } catch (err) {
+      console.error(err);
+      addToast("Failed to transition document workflow state", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Form Fields
   const [isOpen, setIsOpen] = useState(false);
   const [number, setNumber] = useState("");
@@ -95,10 +194,10 @@ export default function Invoices() {
   const [endDate, setEndDate] = useState("");
 
   const generateNextInvoiceNumber = () => {
-    let nextNum = "INV-1001";
+    let nextNum = departmentId ? `INV-${departmentId.toUpperCase()}-1001` : "INV-1001";
     if (invoices && invoices.length > 0) {
       let maxNum = 0;
-      let prefix = "INV-";
+      let prefix = departmentId ? `INV-${departmentId.toUpperCase()}-` : "INV-";
       let padLength = 0;
       
       for (const inv of invoices) {
@@ -176,7 +275,8 @@ export default function Invoices() {
       querySnap.forEach((docSnap) => {
         itemsList.push({ id: docSnap.id, ...docSnap.data() } as Invoice);
       });
-      setInvoices(itemsList);
+      const finalItems = departmentId ? itemsList.filter(inv => inv.department === departmentId) : itemsList;
+      setInvoices(finalItems);
       localStorage.setItem(`miratech_offline_invoices_${businessId}`, JSON.stringify(itemsList));
       
       // Load clients from Firestore collection 'customers' filtered by businessId
@@ -202,7 +302,8 @@ export default function Invoices() {
         if (cachedCompany) setCompany(JSON.parse(cachedCompany));
         const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${user.uid}`);
         if (cachedInvs) {
-          setInvoices(JSON.parse(cachedInvs));
+          const rawList = JSON.parse(cachedInvs) as Invoice[];
+          setInvoices(departmentId ? rawList.filter(inv => inv.department === departmentId) : rawList);
         } else {
           setInvoices([]);
         }
@@ -258,8 +359,8 @@ export default function Invoices() {
     return items.reduce((acc, current) => acc + current.quantity * current.price, 0);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent, isDraft = false) => {
+    if (e) e.preventDefault();
     const user = auth.currentUser;
     if (!user) return;
 
@@ -277,6 +378,19 @@ export default function Invoices() {
       items,
       total,
       status: "unpaid",
+      approvalStatus: isDraft ? "draft" : "pending_admin",
+      approvalHistory: [
+        {
+          type: isDraft ? "draft_saved" : "submitted",
+          user: currentUser?.email || "Unknown Staff",
+          userId: currentUser?.uid || "unknown",
+          role: currentUser?.role || "STAFF",
+          date: new Date().toISOString().split("T")[0],
+          time: new Date().toLocaleTimeString(),
+          comments: isDraft ? "Draft document saved." : "Document submitted for administrative approval."
+        }
+      ],
+      ...(departmentId ? { department: departmentId } : {}),
     };
 
     const invoicesPath = `companies/${user.uid}/invoices`;
@@ -290,10 +404,22 @@ export default function Invoices() {
         // Log database audit trail
         await logAction(
           "Invoice Created",
-          `Billed invoice #${payload.number} to client '${payload.clientName}'. Total amount: E${payload.total}`,
+          `Billed invoice #${payload.number} to client '${payload.clientName}'. Total amount: E${payload.total} (${isDraft ? 'Draft' : 'Submitted'})`,
           user.uid,
           payload.total
         );
+
+        // Submit notification if not a draft
+        if (!isDraft) {
+          await addDoc(collection(db, "companies", user.uid, "notifications"), {
+            businessId: user.uid,
+            title: "New Invoice Submitted",
+            message: `Invoice #${payload.number} was submitted by Staff (${currentUser?.email}) and requires review.`,
+            read: false,
+            createdAt: new Date().toISOString(),
+            type: "info"
+          });
+        }
       } catch (err) {
         if (!isOfflineError(err)) throw err;
         console.warn("[Invoices Offline Submit] Saving invoice locally to local storage.");
@@ -314,7 +440,7 @@ export default function Invoices() {
       setDate("");
       setDueDate("");
       setItems([{ description: "", quantity: 1, price: 0 }]);
-      addToast(`Invoice #${payload.number} Saved successfully`, "success");
+      addToast(isDraft ? `Draft Invoice #${payload.number} saved successfully` : `Invoice #${payload.number} submitted for approval`, "success");
       fetchInvoicesAndCompany();
     } catch (err) {
       addToast(`System Error: Failed to save invoice. Reason: ${err instanceof Error ? err.message : String(err)}`, "error");
@@ -344,6 +470,7 @@ export default function Invoices() {
       date: new Date().toISOString().split("T")[0],
       amount: payingInvoice.total,
       status: "completed",
+      ...(payingInvoice.department ? { department: payingInvoice.department } : {}),
     };
 
     try {
@@ -623,6 +750,7 @@ export default function Invoices() {
                 <th>Due Date</th>
                 <th>Billable Total</th>
                 <th>Status</th>
+                <th>Approval Stage</th>
                 <th className="text-right">Actions</th>
               </tr>
             </thead>
@@ -649,8 +777,23 @@ export default function Invoices() {
                       {inv.status}
                     </span>
                   </td>
+                  <td className="py-3.5 px-4">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                        (inv.approvalStatus || 'approved') === "approved"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : (inv.approvalStatus || 'approved') === "draft"
+                          ? "bg-slate-50 text-slate-600 border-slate-300"
+                          : (inv.approvalStatus || 'approved') === "rejected"
+                          ? "bg-rose-50 text-rose-700 border-rose-200"
+                          : "bg-indigo-50 text-indigo-700 border-indigo-200 animate-pulse"
+                      }`}
+                    >
+                      {(inv.approvalStatus || 'approved').replace('_', ' ')}
+                    </span>
+                  </td>
                   <td className="py-3.5 px-4 text-right space-x-1">
-                    {inv.status === "unpaid" && (
+                    {inv.status === "unpaid" && (inv.approvalStatus || 'approved') === "approved" && (
                       <button
                         onClick={() => setPayingInvoice(inv)}
                         title="Record Payment & Issue Receipt"
@@ -666,13 +809,16 @@ export default function Invoices() {
                     >
                       <Eye className="h-3.5 w-3.5" />
                     </button>
-                    <button
-                      onClick={() => handleDelete(inv.id!)}
-                      title="Remove"
-                      className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md cursor-pointer inline-flex"
-                    >
-                      <Trash className="h-3.5 w-3.5" />
-                    </button>
+                    {/* Guard Delete button: Staff can only delete drafts or rejected invoices */}
+                    {!(currentUser?.role === 'STAFF' && inv.approvalStatus && inv.approvalStatus !== 'draft' && inv.approvalStatus !== 'rejected') && (
+                      <button
+                        onClick={() => handleDelete(inv.id!)}
+                        title="Remove"
+                        className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md cursor-pointer inline-flex"
+                      >
+                        <Trash className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -870,16 +1016,25 @@ export default function Invoices() {
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="button"
                   disabled={submitting}
-                  className="px-4 py-1.5 bg-slate-800 text-white font-medium rounded-lg text-xs hover:bg-slate-900 shadow-xs cursor-pointer flex items-center gap-1.5"
+                  onClick={(e) => handleSubmit(e, true)}
+                  className="px-4 py-1.5 border border-slate-300 text-slate-700 bg-slate-50 font-medium rounded-lg text-xs hover:bg-slate-100 shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  Save as Draft
+                </button>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={(e) => handleSubmit(e, false)}
+                  className="px-4 py-1.5 bg-blue-600 text-white font-medium rounded-lg text-xs hover:bg-blue-700 shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   {submitting ? (
                     <>
-                      <Loader2 className="h-3 w-3 animate-spin" /> Issuing...
+                      <Loader2 className="h-3 w-3 animate-spin" /> Submitting...
                     </>
                   ) : (
-                    "Save & Issue Invoice"
+                    "Submit for Approval"
                   )}
                 </button>
               </div>
@@ -941,7 +1096,7 @@ export default function Invoices() {
       {/* A4 Invoice Preview Sheet & A4 Print Container */}
       {previewInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-lg border border-slate-200 max-w-4xl w-full">
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200 max-w-7xl w-full">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <span className="text-sm font-semibold text-slate-800">Review Invoice: {previewInvoice.number}</span>
               <div className="flex gap-2">
@@ -960,140 +1115,395 @@ export default function Invoices() {
               </div>
             </div>
 
-            {/* A4 Printable Paper Template */}
-            <div className="p-6 bg-slate-100 overflow-x-auto max-h-[70vh]">
-              <div
-                ref={pdfAreaRef}
-                style={{ width: "210mm", minHeight: "297mm" }}
-                className="mx-auto bg-white p-[20mm] border border-slate-200 shadow-sm relative text-slate-800 font-sans"
-              >
-                {/* Letterhead Header */}
-                {company?.useCompanyLetterhead && company?.letterheadLogo ? (
-                  <div className="-mx-[20mm] -mt-[20mm] mb-6 relative">
-                    <img
-                      src={company.letterheadLogo}
-                      alt="Corporate Banner Letterhead"
-                      className={`w-full ${company.letterheadWidthFit ? 'h-[48mm] object-cover' : 'h-auto max-h-[48mm] object-contain'} block border-b border-slate-200`}
-                    />
-                    <div className="px-[20mm] pt-4 flex justify-between items-end border-b-2 border-slate-900 pb-4">
+            {/* A4 Printable Paper Template with Workflow Control Panel */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
+              {/* Left Panel: A4 Template */}
+              <div className="lg:col-span-8 p-6 bg-slate-100 overflow-auto border-r border-slate-200 max-h-[75vh]">
+                <div
+                  ref={pdfAreaRef}
+                  style={{ width: "210mm", minHeight: "297mm" }}
+                  className="mx-auto bg-white p-[20mm] border border-slate-200 shadow-sm relative text-slate-800 font-sans"
+                >
+                  {/* Letterhead Header */}
+                  {company?.useCompanyLetterhead && company?.letterheadLogo ? (
+                    <div className="-mx-[20mm] -mt-[20mm] mb-6 relative">
+                      <img
+                        src={company.letterheadLogo}
+                        alt="Corporate Banner Letterhead"
+                        className={`w-full ${company.letterheadWidthFit ? 'h-[48mm] object-cover' : 'h-auto max-h-[48mm] object-contain'} block border-b border-slate-200`}
+                      />
+                      <div className="px-[20mm] pt-4 flex justify-between items-end border-b-2 border-slate-900 pb-4">
+                        <div>
+                          <h1 className="text-2xl font-black text-slate-900 tracking-wider">SECURE INVOICE</h1>
+                        </div>
+                        <div className="text-right text-[10px] text-slate-500 space-y-0.5 leading-normal">
+                          <p className="font-bold text-slate-800">{company?.name}</p>
+                          <p>{company?.email} | {company?.phone}</p>
+                          <p className="max-w-[400px] truncate">{company?.address}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-6">
                       <div>
+                        {company?.letterheadLogo ? (
+                          <img
+                            src={company.letterheadLogo}
+                            alt="Corporate Symbol"
+                            className="max-h-20 object-contain mb-2"
+                          />
+                        ) : (
+                          <span className="text-lg font-extrabold text-slate-900 tracking-tight uppercase">
+                            {company?.name || "Corporate Ledger"}
+                          </span>
+                        )}
                         <h1 className="text-2xl font-black text-slate-900 tracking-wider">SECURE INVOICE</h1>
                       </div>
-                      <div className="text-right text-[10px] text-slate-500 space-y-0.5 leading-normal">
+
+                      <div className="text-right text-[11px] text-slate-500 space-y-0.5">
                         <p className="font-bold text-slate-800">{company?.name}</p>
-                        <p>{company?.email} | {company?.phone}</p>
-                        <p className="max-w-[400px] truncate">{company?.address}</p>
+                        <p>{company?.email}</p>
+                        <p>{company?.phone}</p>
+                        <p className="whitespace-pre-line max-w-[200px]">{company?.address}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Metadata details */}
+                  <div className="grid grid-cols-2 gap-4 mb-6 text-xs">
+                    <div>
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Billing Invoice To:
+                      </span>
+                      <p className="font-bold text-slate-900">{previewInvoice.clientName}</p>
+                      <p className="text-slate-500">{previewInvoice.clientEmail}</p>
+                      <p className="text-slate-500 whitespace-pre-line max-w-[250px]">{previewInvoice.clientAddress}</p>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Billing Parameters:
+                      </span>
+                      <p>
+                        <strong className="text-slate-900">Invoice Number:</strong> {previewInvoice.number}
+                      </p>
+                      <p>
+                        <strong className="text-slate-900">Issue Date:</strong> {previewInvoice.date}
+                      </p>
+                      <p>
+                        <strong className="text-slate-900">Due Date:</strong> {previewInvoice.dueDate}
+                      </p>
+                      <p className="mt-1">
+                        <strong className="text-slate-900">Status:</strong>{" "}
+                        <span className="font-semibold uppercase text-[10px] text-slate-700">{previewInvoice.status}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Ledger Items Table */}
+                  <table className="w-full text-left border-collapse border border-slate-200 mb-6 text-xs">
+                    <thead>
+                      <tr className="bg-slate-900 text-white font-semibold uppercase text-[9px] tracking-wider">
+                        <th className="py-2.5 px-3 border border-slate-900">Billable Deliverables</th>
+                        <th className="py-2.5 px-3 border border-slate-900 text-center w-20">Quantity</th>
+                        <th className="py-2.5 px-3 border border-slate-900 text-right w-28">Unit Price</th>
+                        <th className="py-2.5 px-3 border border-slate-900 text-right w-28">Line total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {previewInvoice.items.map((it, i) => (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="py-3 px-3 border border-slate-200 font-medium">{it.description}</td>
+                          <td className="py-3 px-3 border border-slate-200 text-center font-mono">{it.quantity}</td>
+                          <td className="py-3 px-3 border border-slate-200 text-right font-mono">
+                            E{it.price.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 border border-slate-200 text-right font-bold text-slate-900 font-mono">
+                            E{(it.quantity * it.price).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* Summaries */}
+                  <div className="flex justify-between items-start text-xs">
+                    <div className="max-w-[320px] text-slate-500 text-[10px] space-y-1 mt-2">
+                      <p className="font-bold text-slate-800">Financial Ledger Notice:</p>
+                      <p>1. Please settle within due parameters outlined on this file.</p>
+                      <p>2. Payment proofs trigger instant automatic receipt confirmations.</p>
+                    </div>
+
+                    <div className="text-right w-64 space-y-1.5">
+                      <div className="flex justify-between text-slate-600">
+                        <span>Subtotal:</span>
+                        <span className="font-mono">E{previewInvoice.total.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between border-t-2 border-slate-900 pt-1.5 font-bold text-slate-900 text-sm">
+                        <span>Total Invoice Amount:</span>
+                        <span className="font-bold font-mono">E{previewInvoice.total.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-6">
-                    <div>
-                      {company?.letterheadLogo ? (
-                        <img
-                          src={company.letterheadLogo}
-                          alt="Corporate Symbol"
-                          className="max-h-20 object-contain mb-2"
-                        />
-                      ) : (
-                        <span className="text-lg font-extrabold text-slate-900 tracking-tight uppercase">
-                          {company?.name || "Corporate Ledger"}
-                        </span>
-                      )}
-                      <h1 className="text-2xl font-black text-slate-900 tracking-wider">SECURE INVOICE</h1>
-                    </div>
 
-                    <div className="text-right text-[11px] text-slate-500 space-y-0.5">
-                      <p className="font-bold text-slate-800">{company?.name}</p>
-                      <p>{company?.email}</p>
-                      <p>{company?.phone}</p>
-                      <p className="whitespace-pre-line max-w-[200px]">{company?.address}</p>
-                    </div>
+                  {/* Footer sign */}
+                  <div className="mt-16 text-center border-t border-slate-100 pt-5 text-[10px] text-slate-400">
+                    Thank you for doing business with {company?.name || "us"}! This document is issued securely by corporate ledger.
                   </div>
-                )}
-
-                {/* Metadata details */}
-                <div className="grid grid-cols-2 gap-4 mb-6 text-xs">
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      Billing Invoice To:
-                    </span>
-                    <p className="font-bold text-slate-900">{previewInvoice.clientName}</p>
-                    <p className="text-slate-500">{previewInvoice.clientEmail}</p>
-                    <p className="text-slate-500 whitespace-pre-line max-w-[250px]">{previewInvoice.clientAddress}</p>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      Billing Parameters:
-                    </span>
-                    <p>
-                      <strong className="text-slate-900">Invoice Number:</strong> {previewInvoice.number}
-                    </p>
-                    <p>
-                      <strong className="text-slate-900">Issue Date:</strong> {previewInvoice.date}
-                    </p>
-                    <p>
-                      <strong className="text-slate-900">Due Date:</strong> {previewInvoice.dueDate}
-                    </p>
-                    <p className="mt-1">
-                      <strong className="text-slate-900">Status:</strong>{" "}
-                      <span className="font-semibold uppercase text-[10px] text-slate-700">{previewInvoice.status}</span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Ledger Items Table */}
-                <table className="w-full text-left border-collapse border border-slate-200 mb-6 text-xs">
-                  <thead>
-                    <tr className="bg-slate-900 text-white font-semibold uppercase text-[9px] tracking-wider">
-                      <th className="py-2.5 px-3 border border-slate-900">Billable Deliverables</th>
-                      <th className="py-2.5 px-3 border border-slate-900 text-center w-20">Quantity</th>
-                      <th className="py-2.5 px-3 border border-slate-900 text-right w-28">Unit Price</th>
-                      <th className="py-2.5 px-3 border border-slate-900 text-right w-28">Line total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {previewInvoice.items.map((it, i) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="py-3 px-3 border border-slate-200 font-medium">{it.description}</td>
-                        <td className="py-3 px-3 border border-slate-200 text-center font-mono">{it.quantity}</td>
-                        <td className="py-3 px-3 border border-slate-200 text-right font-mono">
-                          E{it.price.toLocaleString()}
-                        </td>
-                        <td className="py-3 px-3 border border-slate-200 text-right font-bold text-slate-900 font-mono">
-                          E{(it.quantity * it.price).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                {/* Summaries */}
-                <div className="flex justify-between items-start text-xs">
-                  <div className="max-w-[320px] text-slate-500 text-[10px] space-y-1 mt-2">
-                    <p className="font-bold text-slate-800">Financial Ledger Notice:</p>
-                    <p>1. Please settle within due parameters outlined on this file.</p>
-                    <p>2. Payment proofs trigger instant automatic receipt confirmations.</p>
-                  </div>
-
-                  <div className="text-right w-64 space-y-1.5">
-                    <div className="flex justify-between text-slate-600">
-                      <span>Subtotal:</span>
-                      <span className="font-mono">E{previewInvoice.total.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between border-t-2 border-slate-900 pt-1.5 font-bold text-slate-900 text-sm">
-                      <span>Total Invoice Amount:</span>
-                      <span className="font-bold font-mono">E{previewInvoice.total.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer sign */}
-                <div className="mt-16 text-center border-t border-slate-100 pt-5 text-[10px] text-slate-400">
-                  Thank you for doing business with {company?.name || "us"}! This document is issued securely by corporate ledger.
                 </div>
               </div>
+
+              {/* Right Panel: Workflow Operations & Fast Copies */}
+              {(() => {
+                const isBusinessAdmin = currentUser?.role === 'BUSINESS_ADMIN' || currentUser?.role === 'MASTER_ADMIN';
+                const canApproveInv = isBusinessAdmin || currentUser?.canApproveInvoices;
+                const canOverrideHRPerm = isBusinessAdmin || currentUser?.canOverrideHR || currentUser?.approvalRights;
+                const canFinalize = isBusinessAdmin || currentUser?.canFinalizeDocuments;
+                const canReject = isBusinessAdmin || currentUser?.canRejectDocuments;
+                const canReturnEdit = isBusinessAdmin || currentUser?.canReturnForEditing;
+                const canViewHistory = isBusinessAdmin || currentUser?.canViewApprovalHistory || currentUser?.role !== 'STAFF';
+                const hasOverrideRights = isBusinessAdmin || currentUser?.approvalRights;
+                
+                const shareLink = typeof window !== "undefined" ? `${window.location.origin}/share/invoice/${previewInvoice.id || 'new'}` : "";
+                const currentApprovalStatus = previewInvoice.approvalStatus || 'approved';
+
+                return (
+                  <div className="lg:col-span-4 p-5 bg-white overflow-y-auto space-y-5 max-h-[75vh] flex flex-col justify-between border-t lg:border-t-0">
+                    <div className="space-y-5">
+                      {/* Status Badge */}
+                      <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+                        <div>
+                          <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Approval Stage</span>
+                          <span className="text-xs font-extrabold text-slate-800 uppercase">
+                            {currentApprovalStatus.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${
+                          currentApprovalStatus === 'approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          currentApprovalStatus === 'draft' ? 'bg-slate-100 text-slate-600 border-slate-300' :
+                          currentApprovalStatus === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                          'bg-indigo-50 text-indigo-700 border-indigo-200 animate-pulse'
+                        }`}>
+                          {currentApprovalStatus === 'approved' ? 'Active Official' : 'Pending Action'}
+                        </span>
+                      </div>
+
+                      {/* Copy to Clipboard Controls */}
+                      <div className="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                        <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Copy to Clipboard</span>
+                        
+                        {/* Doc No */}
+                        <div className="flex items-center justify-between gap-2 bg-white p-2 rounded-md border border-slate-150">
+                          <div className="truncate">
+                            <span className="block text-[8px] font-bold text-slate-400 uppercase">Doc Number</span>
+                            <span className="text-[10px] font-bold font-mono text-slate-800">{previewInvoice.number}</span>
+                          </div>
+                          <button
+                            onClick={() => handleCopyText(previewInvoice.number, "Document Number")}
+                            className="px-2 py-1 text-[10px] font-bold text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedField === "Document Number" ? (
+                              <>
+                                <Check className="h-3 w-3 text-emerald-600" />
+                                <span className="text-emerald-600">Copied</span>
+                              </>
+                            ) : (
+                              "Copy"
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Transaction ID */}
+                        <div className="flex items-center justify-between gap-2 bg-white p-2 rounded-md border border-slate-150">
+                          <div className="truncate">
+                            <span className="block text-[8px] font-bold text-slate-400 uppercase">Transaction ID</span>
+                            <span className="text-[10px] font-bold font-mono text-slate-600 truncate block max-w-[150px]">{previewInvoice.id || "N/A"}</span>
+                          </div>
+                          <button
+                            onClick={() => handleCopyText(previewInvoice.id || "", "Transaction ID")}
+                            className="px-2 py-1 text-[10px] font-bold text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedField === "Transaction ID" ? (
+                              <>
+                                <Check className="h-3 w-3 text-emerald-600" />
+                                <span className="text-emerald-600">Copied</span>
+                              </>
+                            ) : (
+                              "Copy"
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Share Link */}
+                        <div className="flex items-center justify-between gap-2 bg-white p-2 rounded-md border border-slate-150">
+                          <div className="truncate">
+                            <span className="block text-[8px] font-bold text-slate-400 uppercase">Public Share Link</span>
+                            <span className="text-[10px] font-bold font-mono text-slate-600 truncate block max-w-[150px]">{shareLink}</span>
+                          </div>
+                          <button
+                            onClick={() => handleCopyText(shareLink, "Public Share Link")}
+                            className="px-2 py-1 text-[10px] font-bold text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedField === "Public Share Link" ? (
+                              <>
+                                <Check className="h-3 w-3 text-emerald-600" />
+                                <span className="text-emerald-600">Copied</span>
+                              </>
+                            ) : (
+                              "Copy"
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Workflow Transitions */}
+                      {currentApprovalStatus !== 'approved' && (
+                        <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                          <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Workflow Operations</span>
+                          
+                          <div className="space-y-1.5">
+                            <label className="block text-[9px] font-bold text-slate-500 uppercase">Decision Comments</label>
+                            <textarea
+                              rows={2}
+                              value={workflowComments}
+                              onChange={(e) => setWorkflowComments(e.target.value)}
+                              placeholder="Provide reasons, annotations, or change directives..."
+                              className="w-full text-[11px] p-2 border border-slate-200 rounded-md focus:outline-hidden focus:border-slate-400 bg-white"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            {/* Staff Submit */}
+                            {(currentApprovalStatus === 'draft' || currentApprovalStatus === 'rejected') && (
+                              <button
+                                onClick={() => handleWorkflowTransition('pending_admin', 'Submit')}
+                                disabled={submitting}
+                                className="col-span-2 w-full p-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded transition shadow-xs text-center uppercase cursor-pointer"
+                              >
+                                Submit For Approval
+                              </button>
+                            )}
+
+                            {/* Admin Decision */}
+                            {currentApprovalStatus === 'pending_admin' && canApproveInv && (
+                              <>
+                                <button
+                                  onClick={() => handleWorkflowTransition('pending_hr', 'Forward to HR')}
+                                  disabled={submitting}
+                                  className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded transition shadow-xs uppercase cursor-pointer"
+                                >
+                                  Forward to HR
+                                </button>
+                                <button
+                                  onClick={() => handleWorkflowTransition('rejected', 'Return to Employee')}
+                                  disabled={submitting}
+                                  className="p-2 bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-[10px] border border-rose-200 rounded transition uppercase cursor-pointer"
+                                >
+                                  Return to Clerk
+                                </button>
+                                <button
+                                  onClick={() => handleWorkflowTransition('cancelled', 'Cancel Request')}
+                                  disabled={submitting}
+                                  className="col-span-2 p-1.5 bg-slate-200 text-slate-700 hover:bg-slate-300 font-bold text-[9px] rounded transition uppercase cursor-pointer"
+                                >
+                                  Cancel Request
+                                </button>
+                              </>
+                            )}
+
+                            {/* HR Decision */}
+                            {currentApprovalStatus === 'pending_hr' && (currentUser?.role === 'HR' || isBusinessAdmin) && (
+                              <>
+                                <button
+                                  onClick={() => handleWorkflowTransition('pending_final', 'HR Approve')}
+                                  disabled={submitting}
+                                  className="p-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] rounded transition shadow-xs uppercase cursor-pointer"
+                                >
+                                  HR Approve
+                                </button>
+                                <button
+                                  onClick={() => handleWorkflowTransition('rejected', 'HR Reject')}
+                                  disabled={submitting}
+                                  className="p-2 bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-[10px] border border-rose-200 rounded transition uppercase cursor-pointer"
+                                >
+                                  HR Reject
+                                </button>
+                              </>
+                            )}
+
+                            {/* Final Decision */}
+                            {currentApprovalStatus === 'pending_final' && canFinalize && (
+                              <>
+                                <button
+                                  onClick={() => handleWorkflowTransition('approved', 'Final Approval')}
+                                  disabled={submitting}
+                                  className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded transition shadow-xs uppercase cursor-pointer"
+                                >
+                                  Final Approve
+                                </button>
+                                <button
+                                  onClick={() => handleWorkflowTransition('rejected', 'Return for Edit')}
+                                  disabled={submitting}
+                                  className="p-2 bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-[10px] border border-rose-200 rounded transition uppercase cursor-pointer"
+                                >
+                                  Reject & Return
+                                </button>
+                              </>
+                            )}
+
+                            {/* Override direct approval button */}
+                            {hasOverrideRights && currentApprovalStatus !== 'approved' && (
+                              <button
+                                onClick={() => handleWorkflowTransition('approved', 'Manager Override', true)}
+                                disabled={submitting}
+                                className="col-span-2 w-full p-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-[10px] rounded transition shadow-xs text-center uppercase border border-amber-400 mt-1 cursor-pointer"
+                              >
+                                ⭐ Manager Override: Direct Approve
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Audit Timeline History */}
+                      {canViewHistory && (
+                        <div className="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                          <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Document Audit Timeline</span>
+                          
+                          <div className="space-y-3 max-h-[160px] overflow-y-auto pr-1">
+                            {previewInvoice.approvalHistory && previewInvoice.approvalHistory.length > 0 ? (
+                              previewInvoice.approvalHistory.map((evt: any, eIdx: number) => (
+                                <div key={eIdx} className="relative pl-3 border-l border-slate-300 space-y-0.5">
+                                  <span className="absolute -left-1 top-1 w-2 h-2 rounded-full bg-slate-400 border border-white" />
+                                  <div className="flex justify-between text-[8px] font-bold text-slate-400 uppercase leading-none">
+                                    <span>{evt.date} {evt.time}</span>
+                                    <span className="text-blue-600 font-mono">{evt.role}</span>
+                                  </div>
+                                  <p className="text-[10px] font-bold text-slate-800 leading-none">
+                                    {evt.type.replace(/_/g, ' ').toUpperCase()} by {evt.user}
+                                  </p>
+                                  {evt.comments && (
+                                    <p className="text-[9px] text-slate-500 italic bg-white p-1 rounded border border-slate-100 mt-0.5 leading-normal">
+                                      &ldquo;{evt.comments}&rdquo;
+                                    </p>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-[10px] text-slate-400 italic">No historical timeline exists for this document.</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-3 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                      <span>MiraTech Secure Ledger</span>
+                      <span>v1.2</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

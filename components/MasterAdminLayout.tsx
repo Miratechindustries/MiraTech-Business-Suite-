@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useUserStore } from "../lib/store";
 import { logout } from "../lib/firebase";
-import { LayoutDashboard, Users, Building2, ShieldAlert, LogOut, FileText, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, Building2, ShieldAlert, LogOut, FileText, ShieldCheck, X } from "lucide-react";
 import LoadingSkeleton from "./LoadingSkeleton";
 
 const MasterAdminDashboard = dynamic(() => import("./MasterAdminDashboard"), { loading: () => <LoadingSkeleton /> });
@@ -112,7 +112,7 @@ export default function MasterAdminLayout() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile Header */}
         <header className="bg-white border-b border-slate-200 py-3 px-4 flex items-center justify-between md:hidden flex-shrink-0">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 animate-none">
             <button
               onClick={() => setMobileMenuOpen(true)}
               className="p-1 px-2 border border-slate-200 text-slate-600 rounded-md hover:bg-slate-50 transition cursor-pointer"
@@ -123,6 +123,14 @@ export default function MasterAdminLayout() {
             <span className="text-xs font-extrabold text-[#0B1329] uppercase tracking-wider">Mira Admin</span>
             <StatusIndicator />
           </div>
+          {/* Mobile Direct Sign Out Button */}
+          <button
+            onClick={handleLogout}
+            className="p-1.5 border border-red-100 text-red-500 hover:text-red-605 hover:bg-red-50 rounded-lg cursor-pointer transition"
+            title="Sign Out"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </header>
 
         {/* Mobile Sidebar Drawer */}
@@ -132,8 +140,8 @@ export default function MasterAdminLayout() {
             <div className="relative flex flex-col w-60 bg-white h-full shadow-2xl border-r border-slate-200">
               <div className="p-4 border-b border-slate-200 flex items-center justify-between">
                 <span className="text-xs font-extrabold text-slate-900 tracking-wider">Mira Admin</span>
-                <button onClick={() => setMobileMenuOpen(false)} className="p-1 hover:bg-slate-50 rounded-md">
-                   <LogOut className="h-4 w-4" />
+                <button onClick={() => setMobileMenuOpen(false)} className="p-1.5 hover:bg-slate-50 rounded-md transition text-slate-500">
+                   <X className="h-4 w-4" />
                 </button>
               </div>
               <nav className="p-2.5 space-y-0.5 flex-1 overflow-y-auto">
@@ -151,6 +159,20 @@ export default function MasterAdminLayout() {
                    );
                 })}
               </nav>
+
+              <div className="p-4 border-t border-slate-100 bg-slate-50/45 mt-auto">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Admin Account</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-slate-800 truncate">{currentUser?.email}</p>
+                  <button
+                    onClick={handleLogout}
+                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                    title="Sign Out"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

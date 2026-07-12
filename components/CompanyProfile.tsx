@@ -7,6 +7,7 @@ import { useUserStore } from "../lib/store";
 import { Building, Mail, Phone, MapPin, Image as ImageIcon, Loader2, CheckCircle, ShieldAlert } from "lucide-react";
 import Image from "next/image";
 import SystemPermissions from "./SystemPermissions";
+import DepartmentManager from "./DepartmentManager";
 
 interface CompanyData {
   ownerId: string;
@@ -22,6 +23,11 @@ interface CompanyData {
   useCompanyLetterhead?: boolean;
   letterheadWidthFit?: boolean;
   inactivityTimeout?: number;
+  themePreset?: string;
+  themeMode?: "light" | "warm" | "dim" | "dark";
+  fontFamily?: "inter" | "space_grotesk" | "playfair" | "jetbrains_mono" | "outfit";
+  cardRadius?: "none" | "md" | "lg" | "xl" | "full";
+  sidebarStyle?: "flat" | "colored" | "gradient" | "bordered";
 }
 
 interface CompanyProfileProps {
@@ -64,6 +70,57 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
   const [useCompanyLetterhead, setUseCompanyLetterhead] = useState(false);
   const [letterheadWidthFit, setLetterheadWidthFit] = useState(false);
   const [inactivityTimeout, setInactivityTimeout] = useState(900); // 15 mins default
+  const [themePreset, setThemePreset] = useState("default");
+  const [themeMode, setThemeMode] = useState<"light" | "warm" | "dim" | "dark">("light");
+  const [fontFamily, setFontFamily] = useState<"inter" | "space_grotesk" | "playfair" | "jetbrains_mono" | "outfit">("inter");
+  const [cardRadius, setCardRadius] = useState<"none" | "md" | "lg" | "xl" | "full">("md");
+  const [sidebarStyle, setSidebarStyle] = useState<"flat" | "colored" | "gradient" | "bordered">("flat");
+
+  const applyPresetColors = (preset: string) => {
+    setThemePreset(preset);
+    switch (preset) {
+      case "default":
+        setPrimaryColor("#0F172A");
+        setSecondaryColor("#3B82F6");
+        setFontFamily("inter");
+        break;
+      case "emerald":
+        setPrimaryColor("#064E3B");
+        setSecondaryColor("#10B981");
+        setFontFamily("outfit");
+        break;
+      case "violet":
+        setPrimaryColor("#4C1D95");
+        setSecondaryColor("#8B5CF6");
+        setFontFamily("outfit");
+        break;
+      case "crimson":
+        setPrimaryColor("#7F1D1D");
+        setSecondaryColor("#EF4444");
+        setFontFamily("space_grotesk");
+        break;
+      case "sunset":
+        setPrimaryColor("#7C2D12");
+        setSecondaryColor("#F97316");
+        setFontFamily("space_grotesk");
+        break;
+      case "nordic":
+        setPrimaryColor("#334155");
+        setSecondaryColor("#64748B");
+        setFontFamily("jetbrains_mono");
+        break;
+      case "cyberpunk":
+        setPrimaryColor("#030712");
+        setSecondaryColor("#10B981");
+        setFontFamily("jetbrains_mono");
+        break;
+      case "royal":
+        setPrimaryColor("#451A03");
+        setSecondaryColor("#D97706");
+        setFontFamily("playfair");
+        break;
+    }
+  };
 
   useEffect(() => {
     const cachedTimeout = localStorage.getItem("mira_inactivity_timeout");
@@ -100,6 +157,11 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
           setSecondaryColor(data.secondaryColor || "#3B82F6");
           setUseCompanyLetterhead(data.useCompanyLetterhead || false);
           setLetterheadWidthFit(data.letterheadWidthFit || false);
+          setThemePreset(data.themePreset || "default");
+          setThemeMode(data.themeMode || "light");
+          setFontFamily(data.fontFamily || "inter");
+          setCardRadius(data.cardRadius || "md");
+          setSidebarStyle(data.sidebarStyle || "flat");
           if (typeof data.inactivityTimeout === "number") {
             setInactivityTimeout(data.inactivityTimeout);
             localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
@@ -121,6 +183,11 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             setSecondaryColor(data.secondaryColor || "#3B82F6");
             setUseCompanyLetterhead(data.useCompanyLetterhead || false);
             setLetterheadWidthFit(data.letterheadWidthFit || false);
+            setThemePreset(data.themePreset || "default");
+            setThemeMode(data.themeMode || "light");
+            setFontFamily(data.fontFamily || "inter");
+            setCardRadius(data.cardRadius || "md");
+            setSidebarStyle(data.sidebarStyle || "flat");
             if (typeof data.inactivityTimeout === "number") {
               setInactivityTimeout(data.inactivityTimeout);
               localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
@@ -147,6 +214,11 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             setSecondaryColor(data.secondaryColor || "#3B82F6");
             setUseCompanyLetterhead(data.useCompanyLetterhead || false);
             setLetterheadWidthFit(data.letterheadWidthFit || false);
+            setThemePreset(data.themePreset || "default");
+            setThemeMode(data.themeMode || "light");
+            setFontFamily(data.fontFamily || "inter");
+            setCardRadius(data.cardRadius || "md");
+            setSidebarStyle(data.sidebarStyle || "flat");
             if (typeof data.inactivityTimeout === "number") {
               setInactivityTimeout(data.inactivityTimeout);
               localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
@@ -237,6 +309,11 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
       useCompanyLetterhead,
       letterheadWidthFit,
       inactivityTimeout,
+      themePreset,
+      themeMode,
+      fontFamily,
+      cardRadius,
+      sidebarStyle,
     };
 
     const companyDocPath = `companies/${user.uid}`;
@@ -599,30 +676,206 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Workspace Theme & Typography branding panel */}
+          <div className="p-4 border border-slate-200 rounded-xl bg-slate-50/50 space-y-4">
+            <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-3 bg-blue-600 rounded-full"></span>
+              Workspace Theme & Typography Branding
+            </h3>
+
+            {/* Presets Grid */}
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
-                Primary Color
+              <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
+                1. Select Preset Theme Palette
               </label>
-              <input
-                type="color"
-                disabled={!isAdminUser}
-                value={primaryColor}
-                onChange={(e) => setPrimaryColor(e.target.value)}
-                className="w-full h-10 border border-slate-200 rounded-lg cursor-pointer disabled:opacity-50"
-              />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { id: "default", name: "Corporate Navy", primary: "#0F172A", secondary: "#3B82F6" },
+                  { id: "emerald", name: "Emerald Trust", primary: "#064E3B", secondary: "#10B981" },
+                  { id: "violet", name: "Deep Amethyst", primary: "#4C1D95", secondary: "#8B5CF6" },
+                  { id: "crimson", name: "Crimson Bold", primary: "#7F1D1D", secondary: "#EF4444" },
+                  { id: "sunset", name: "Sunset Warmth", primary: "#7C2D12", secondary: "#F97316" },
+                  { id: "nordic", name: "Nordic Slate", primary: "#334155", secondary: "#64748B" },
+                  { id: "cyberpunk", name: "Cyberpunk Glow", primary: "#030712", secondary: "#10B981" },
+                  { id: "royal", name: "Royal Gold", primary: "#451A03", secondary: "#D97706" }
+                ].map((presetItem) => (
+                  <button
+                    key={presetItem.id}
+                    type="button"
+                    disabled={!isAdminUser}
+                    onClick={() => applyPresetColors(presetItem.id)}
+                    className={`p-2 rounded-lg border text-left flex flex-col justify-between h-16 transition cursor-pointer disabled:opacity-50 ${
+                      themePreset === presetItem.id
+                        ? "border-blue-500 bg-blue-50/20 ring-1 ring-blue-500/30"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold text-slate-700 truncate block">{presetItem.name}</span>
+                    <div className="flex gap-1.5 items-center mt-1">
+                      <span className="h-4.5 w-4.5 rounded-full border border-slate-200 shadow-3xs" style={{ backgroundColor: presetItem.primary }} />
+                      <span className="h-4.5 w-4.5 rounded-full border border-slate-200 shadow-3xs" style={{ backgroundColor: presetItem.secondary }} />
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Custom Color Pickers */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wide">
+                  Primary Color code
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    disabled={!isAdminUser}
+                    value={primaryColor}
+                    onChange={(e) => {
+                      setPrimaryColor(e.target.value);
+                      setThemePreset("custom");
+                    }}
+                    className="w-12 h-8 border border-slate-200 rounded-md cursor-pointer disabled:opacity-50 shrink-0"
+                  />
+                  <input
+                    type="text"
+                    disabled={!isAdminUser}
+                    value={primaryColor}
+                    onChange={(e) => {
+                      setPrimaryColor(e.target.value);
+                      setThemePreset("custom");
+                    }}
+                    placeholder="#0F172A"
+                    className="flex-1 px-2.5 py-1 text-xs uppercase"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wide">
+                  Secondary Color code
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    disabled={!isAdminUser}
+                    value={secondaryColor}
+                    onChange={(e) => {
+                      setSecondaryColor(e.target.value);
+                      setThemePreset("custom");
+                    }}
+                    className="w-12 h-8 border border-slate-200 rounded-md cursor-pointer disabled:opacity-50 shrink-0"
+                  />
+                  <input
+                    type="text"
+                    disabled={!isAdminUser}
+                    value={secondaryColor}
+                    onChange={(e) => {
+                      setSecondaryColor(e.target.value);
+                      setThemePreset("custom");
+                    }}
+                    placeholder="#3B82F6"
+                    className="flex-1 px-2.5 py-1 text-xs uppercase"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Canvas Mode Selection */}
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
-                Secondary Color
+              <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
+                2. Theme Canvas background Mode
               </label>
-              <input
-                type="color"
-                disabled={!isAdminUser}
-                value={secondaryColor}
-                onChange={(e) => setSecondaryColor(e.target.value)}
-                className="w-full h-10 border border-slate-200 rounded-lg cursor-pointer disabled:opacity-50"
-              />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { id: "light", name: "Standard Light", desc: "Crisp white tables", bg: "bg-white text-slate-800 border-slate-200" },
+                  { id: "warm", name: "Warm Sand", desc: "Eye-friendly sepia", bg: "bg-[#FAF7F2] text-[#2D2924] border-[#E8E2D9]" },
+                  { id: "dim", name: "Executive Dim", desc: "Low-light indigo", bg: "bg-[#252836] text-[#F1F5F9] border-[#374151]" },
+                  { id: "dark", name: "Deep Charcoal", desc: "True dark high-tech", bg: "bg-[#0F172A] text-[#F8FAFC] border-[#334155]" }
+                ].map((modeItem) => (
+                  <button
+                    key={modeItem.id}
+                    type="button"
+                    disabled={!isAdminUser}
+                    onClick={() => setThemeMode(modeItem.id as any)}
+                    className={`p-2.5 rounded-lg border text-left flex flex-col justify-between h-20 transition cursor-pointer disabled:opacity-50 ${modeItem.bg} ${
+                      themeMode === modeItem.id
+                        ? "ring-2 ring-blue-500"
+                        : "opacity-80 hover:opacity-100"
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold truncate block">{modeItem.name}</span>
+                    <span className="text-[9px] opacity-70 leading-normal block mt-1">{modeItem.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Typography Pairing */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wide">
+                  3. Corporate Typography Font
+                </label>
+                <select
+                  disabled={!isAdminUser}
+                  value={fontFamily}
+                  onChange={(e) => setFontFamily(e.target.value as any)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md"
+                >
+                  <option value="inter">Inter (Default - Versatile Sans)</option>
+                  <option value="space_grotesk">Space Grotesk (Tech & Geometrical)</option>
+                  <option value="playfair">Playfair Display (Premium Editorial Serif)</option>
+                  <option value="jetbrains_mono">JetBrains Mono (Technical / Brutalist)</option>
+                  <option value="outfit">Outfit (Sophisticated & Clean Sans)</option>
+                </select>
+              </div>
+
+              {/* Card Radius selector */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wide">
+                  4. Card Border Roundness (Radius)
+                </label>
+                <select
+                  disabled={!isAdminUser}
+                  value={cardRadius}
+                  onChange={(e) => setCardRadius(e.target.value as any)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md"
+                >
+                  <option value="none">Industrial Flat (Sharp Corners)</option>
+                  <option value="md">Classic Corporate (Standard 6px)</option>
+                  <option value="lg">Soft Rounded (Modern 8px)</option>
+                  <option value="xl">Creative Rounded (Curvy 16px)</option>
+                  <option value="full">Organic Capsule (Highly Round 24px)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Live Interactive Preview Card */}
+            <div className="border border-slate-200 rounded-lg p-3 bg-white space-y-2 mt-2">
+              <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block">Workspace Dynamic Visual Preview</span>
+              <div 
+                className="p-4 border rounded-xl shadow-3xs flex flex-col justify-between gap-4 transition duration-200"
+                style={{
+                  backgroundColor: themeMode === 'light' ? '#FFFFFF' : themeMode === 'warm' ? '#FCFAF7' : themeMode === 'dim' ? '#252836' : '#1E293B',
+                  borderColor: themeMode === 'light' ? '#E2E8F0' : themeMode === 'warm' ? '#E8E2D9' : themeMode === 'dim' ? '#374151' : '#334155',
+                  color: themeMode === 'light' ? '#1E293B' : themeMode === 'warm' ? '#2D2924' : themeMode === 'dim' ? '#F1F5F9' : '#F8FAFC',
+                  borderRadius: cardRadius === 'none' ? '0px' : cardRadius === 'md' ? '0.375rem' : cardRadius === 'lg' ? '0.5rem' : cardRadius === 'xl' ? '1rem' : '1.5rem',
+                  fontFamily: fontFamily === 'space_grotesk' ? "'Space Grotesk', sans-serif" : fontFamily === 'playfair' ? "'Playfair Display', serif" : fontFamily === 'jetbrains_mono' ? "'JetBrains Mono', monospace" : fontFamily === 'outfit' ? "'Outfit', sans-serif" : "Inter, sans-serif"
+                }}
+              >
+                <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: themeMode === 'light' ? '#F1F5F9' : themeMode === 'warm' ? '#FAF7F2' : themeMode === 'dim' ? '#323647' : '#2D3748' }}>
+                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: primaryColor }}>{name || "MIRA SYSTEMS LLC"}</span>
+                  <span className="text-[9px] px-2 py-0.5 rounded-full font-semibold" style={{ backgroundColor: secondaryColor, color: '#ffffff' }}>Active Theme</span>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold leading-normal">System Dashboard Overview</p>
+                  <p className="text-[10px] opacity-75 leading-relaxed">Dynamic typography pairing, borders, and dark backgrounds synchronized instantly for all tenant employees.</p>
+                </div>
+                <div className="flex gap-2 justify-end pt-1">
+                  <button type="button" className="px-3 py-1.5 text-[10px] font-bold text-white rounded-md cursor-default shrink-0" style={{ backgroundColor: primaryColor, borderRadius: cardRadius === 'none' ? '0px' : cardRadius === 'md' ? '0.375rem' : '0.5rem' }}>Primary Action</button>
+                  <button type="button" className="px-3 py-1.5 text-[10px] font-bold text-white rounded-md cursor-default shrink-0" style={{ backgroundColor: secondaryColor, borderRadius: cardRadius === 'none' ? '0px' : cardRadius === 'md' ? '0.375rem' : '0.5rem' }}>Accent Option</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -674,6 +927,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
         </button>
       </form>
     </div>
+    <DepartmentManager />
     <SystemPermissions />
     </>
   );

@@ -22,6 +22,7 @@ interface Receipt {
   amount: number;
   status: "completed" | "refunded";
   driveFileId?: string;
+  department?: string;
 }
 
 interface CompanyDetails {
@@ -32,7 +33,7 @@ interface CompanyDetails {
   letterheadLogo: string;
 }
 
-export default function Receipts() {
+export default function Receipts({ departmentId }: { departmentId?: string }) {
   const { currentUser } = useUserStore();
   const addToast = useToastStore((state) => state.addToast);
 
@@ -86,7 +87,8 @@ export default function Receipts() {
       querySnap.forEach((docSnap) => {
         itemsList.push({ id: docSnap.id, ...docSnap.data() } as Receipt);
       });
-      setReceipts(itemsList);
+      const finalRecs = departmentId ? itemsList.filter(rec => rec.department === departmentId) : itemsList;
+      setReceipts(finalRecs);
       localStorage.setItem(`miratech_offline_receipts_${user.uid}`, JSON.stringify(itemsList));
     } catch (err) {
       if (isOfflineError(err)) {
@@ -95,7 +97,8 @@ export default function Receipts() {
         if (cachedCompany) setCompany(JSON.parse(cachedCompany));
         const cachedRecs = localStorage.getItem(`miratech_offline_receipts_${user.uid}`);
         if (cachedRecs) {
-          setReceipts(JSON.parse(cachedRecs));
+          const rawList = JSON.parse(cachedRecs) as Receipt[];
+          setReceipts(departmentId ? rawList.filter(rec => rec.department === departmentId) : rawList);
         } else {
           setReceipts([]);
         }
@@ -193,6 +196,7 @@ export default function Receipts() {
   };
 
   const filteredReceipts = receipts.filter((rec) => {
+    if (departmentId && rec.department !== departmentId) return false;
     return (
       rec.clientName.toLowerCase().includes(search.toLowerCase()) ||
       rec.number.toLowerCase().includes(search.toLowerCase()) ||
