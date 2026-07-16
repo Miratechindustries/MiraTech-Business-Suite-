@@ -96,6 +96,7 @@ export default function SecurityOperations() {
     }
   ]);
 
+  // Admin gate restored.
   if (currentUser?.role?.toUpperCase() !== 'MASTER_ADMIN' && currentUser?.email?.toLowerCase() !== 'miratechindustries@gmail.com') {
     return <div className="p-10 text-center font-sans text-slate-500">Access Denied. Operational level clearances required.</div>;
   }

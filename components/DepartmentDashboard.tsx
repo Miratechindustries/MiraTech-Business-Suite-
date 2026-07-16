@@ -66,6 +66,8 @@ import PayrollAndHR from "./PayrollAndHR";
 import Inventory from "./Inventory";
 import ReportsAnalytics from "./ReportsAnalytics";
 import AuditLogs from "./AuditLogs";
+import ProjectTaskDashboard from "./ProjectTaskDashboard";
+import ProjectDashboard from "./ProjectDashboard";
 
 interface DepartmentDashboardProps {
   departmentType: string;
@@ -550,7 +552,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
       case "marketing":
         return {
           title: "Marketing & Strategy",
-          icon: TrendingUp,
+          icon: Activity,
           color: "text-violet-600 bg-violet-50 border-violet-100",
           actions: [
             { name: "Launch Campaign", details: "Dispatch promotional mail newsletter.", tag: "Campaigns" },
@@ -573,6 +575,20 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
           kpis: [
             { label: "Active Suppliers", value: "16 Partners", change: "All SLA compliant", isPositive: true },
             { label: "Pending POs", value: "$32,500", change: "2 awaiting review", isPositive: false }
+          ]
+        };
+      case "administration":
+        return {
+          title: "System Administration",
+          icon: Settings,
+          color: "text-teal-600 bg-teal-50 border-teal-100",
+          actions: [
+            { name: "System Configuration", details: "Manage global tenant settings.", tag: "Config" },
+            { name: "Security Audit", details: "Review tenant security parameters.", tag: "Security" }
+          ],
+          kpis: [
+            { label: "System Uptime", value: "99.99%", change: "Optimal", isPositive: true },
+            { label: "Active Nodes", value: "12", change: "All synced", isPositive: true }
           ]
         };
       case "projects":
@@ -770,8 +786,19 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
             <ShieldAlert className="w-3.5 h-3.5" /> SecOps Logs
           </button>
         );
-      default:
-        return null;
+      case "projects":
+        return (
+          <button
+            onClick={() => setActiveSubTab("tasks")}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
+              activeSubTab === "tasks"
+                ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <FolderKanban className="w-3.5 h-3.5" /> Project Tasks
+          </button>
+        );
     }
   };
 
@@ -858,6 +885,31 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
         >
           <CheckSquare className="w-3.5 h-3.5" /> Receipts
         </button>
+
+        {depLower === "projects" && (
+          <>
+            <button
+              onClick={() => setActiveSubTab("projects")}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
+                activeSubTab === "projects"
+                  ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <FolderKanban className="w-3.5 h-3.5" /> Projects
+            </button>
+            <button
+              onClick={() => setActiveSubTab("tasks")}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
+                activeSubTab === "tasks"
+                  ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <FolderKanban className="w-3.5 h-3.5" /> Project Tasks
+            </button>
+          </>
+        )}
 
         {/* Dynamic Native Tab Button based on Department type */}
         {renderNativeTabButton()}
@@ -1035,6 +1087,26 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
               </p>
             </div>
             <Receipts departmentId={depLower} />
+          </div>
+        )}
+
+        {activeSubTab === "projects" && depLower === "projects" && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs animate-fade-in">
+            <ProjectDashboard companyId={businessId!} />
+          </div>
+        )}
+
+        {activeSubTab === "tasks" && depLower === "projects" && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs animate-fade-in">
+            <div className="mb-4">
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                <FolderKanban className="w-4.5 h-4.5 text-cyan-600" /> Project Tasks
+              </h2>
+              <p className="text-[10px] text-slate-500 font-semibold">
+                Manage your project tasks and milestones.
+              </p>
+            </div>
+            <ProjectTaskDashboard departmentId={depLower} />
           </div>
         )}
 

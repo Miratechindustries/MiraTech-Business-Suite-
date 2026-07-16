@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Search, Loader2, Calendar, ShieldCheck, User, RefreshCw, Key, ShieldAlert, X, Copy, Check, Terminal, Cpu, Database, Network } from "lucide-react";
 import { auth, db, handleFirestoreError, OperationType } from "../lib/firebase";
 import { collection, query, where, getDocs, getDoc, doc } from "firebase/firestore";

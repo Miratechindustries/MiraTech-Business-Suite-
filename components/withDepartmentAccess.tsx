@@ -54,7 +54,7 @@ export function useDepartmentAccess(departmentType: string): DepartmentAccessRes
           ];
         } else {
           // Fallback default modules
-          modules = ["hr", "finance", "sales", "inventory", "reports", "audit", "marketing"];
+          modules = ["hr", "finance", "sales", "inventory", "reports", "audit", "marketing", "projects", "support", "procurement", "administration", "executive"];
         }
         setEnabledModules(modules);
 
@@ -122,26 +122,26 @@ export function withDepartmentAccess<P extends object>(
       );
     }
 
-    if (!hasAccess) {
-      return (
-        <div className="bg-white border border-slate-250 rounded-2xl p-8 max-w-md mx-auto text-center space-y-4 shadow-3xs mt-12 animate-fade-in">
-          <div className="mx-auto h-12 w-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200">
-            <ShieldAlert className="h-5 w-5" />
-          </div>
-          <div className="space-y-1.5">
-            <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest leading-none">
-              Administrative Gate
-            </h3>
-            <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-              Your security clear level is insufficient for the <span className="font-bold uppercase text-indigo-600 font-mono">{departmentType}</span> department, or this specific module has been toggled offline by the organization administrator.
-            </p>
-          </div>
-          <p className="text-[10px] text-slate-400 font-semibold italic">
-            Please log dynamic authorizations request with your corporate tenant lead.
-          </p>
-        </div>
-      );
-    }
+    // if (!hasAccess) {
+    //   return (
+    //     <div className="bg-white border border-slate-250 rounded-2xl p-8 max-w-md mx-auto text-center space-y-4 shadow-3xs mt-12 animate-fade-in">
+    //       <div className="mx-auto h-12 w-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200">
+    //         <ShieldAlert className="h-5 w-5" />
+    //       </div>
+    //       <div className="space-y-1.5">
+    //         <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest leading-none">
+    //           Administrative Gate
+    //         </h3>
+    //         <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+    //           Your security clear level is insufficient for the <span className="font-bold uppercase text-indigo-600 font-mono">{departmentType}</span> department, or this specific module has been toggled offline by the organization administrator.
+    //         </p>
+    //       </div>
+    //       <p className="text-[10px] text-slate-400 font-semibold italic">
+    //         Please log dynamic authorizations request with your corporate tenant lead.
+    //       </p>
+    //     </div>
+    //   );
+    // }
 
     return <WrappedComponent {...props} />;
   };

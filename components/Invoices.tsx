@@ -58,6 +58,11 @@ interface Customer {
   status: "Active" | "Inactive";
 }
 
+interface Project {
+  id: string;
+  name: string;
+}
+
 export default function Invoices({ departmentId }: { departmentId?: string }) {
   const { currentUser } = useUserStore();
   const addToast = useToastStore((state) => state.addToast);
@@ -83,6 +88,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [company, setCompany] = useState<CompanyDetails | null>(null);
   const [clients, setClients] = useState<Customer[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
 
   // Workflow states
   const [workflowComments, setWorkflowComments] = useState("");
@@ -188,6 +194,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
   const [date, setDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [items, setItems] = useState<Item[]>([{ description: "", quantity: 1, price: 0 }]);
+  const [projectId, setProjectId] = useState("");
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -296,6 +303,19 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
         const cachedClients = localStorage.getItem(cacheKey);
         if (cachedClients) setClients(JSON.parse(cachedClients));
       }
+
+      // Load projects from Firestore collection 'projects' filtered by businessId
+      try {
+        const qProjects = query(collection(db, "companies", businessId, "projects"));
+        const projectsSnap = await getDocs(qProjects);
+        const projectsList: Project[] = [];
+        projectsSnap.forEach((dSnap) => {
+          projectsList.push({ id: dSnap.id, ...dSnap.data() } as Project);
+        });
+        setProjects(projectsList);
+      } catch (projErr) {
+        console.warn("Failed to fetch projects for invoices dropdown.", projErr);
+      }
     } catch (err) {
       if (isOfflineError(err)) {
         console.warn("[Invoices Offline Fallback] Loading data from local cache.");
@@ -392,6 +412,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
         }
       ],
       ...(departmentId ? { department: departmentId } : {}),
+      ...(projectId ? { projectId } : {}),
     };
 
     const invoicesPath = `companies/${user.uid}/invoices`;
@@ -920,6 +941,23 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name} - {c.company}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Select Project (Optional)
+                  </label>
+                  <select
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-slate-50/20 focus:outline-hidden focus:border-slate-400"
+                  >
+                    <option value="">-- Choose a Project --</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
                       </option>
                     ))}
                   </select>

@@ -28,6 +28,11 @@ interface Product {
   minStock: number;
 }
 
+interface Project {
+  id: string;
+  name: string;
+}
+
 interface Quotation {
   id?: string;
   ownerId: string;
@@ -42,6 +47,7 @@ interface Quotation {
   status: "pending" | "accepted" | "declined";
   driveFileId?: string;
   department?: string;
+  projectId?: string;
   approvalStatus?: 'draft' | 'pending_admin' | 'pending_hr' | 'pending_final' | 'approved' | 'rejected' | 'cancelled';
   approvalHistory?: any[];
   approvalComments?: string;
@@ -94,6 +100,7 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
   const [company, setCompany] = useState<CompanyDetails | null>(null);
   const [clients, setClients] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
 
   // Workflow states
   const [workflowComments, setWorkflowComments] = useState("");
@@ -199,6 +206,7 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
   const [date, setDate] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [items, setItems] = useState<Item[]>([{ description: "", quantity: 1, price: 0 }]);
+  const [projectId, setProjectId] = useState("");
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -321,6 +329,19 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
         if (cachedProducts) setProducts(JSON.parse(cachedProducts));
       }
 
+      // Load projects from Firestore collection 'projects' filtered by businessId
+      try {
+        const qProjects = query(collection(db, "companies", businessId, "projects"));
+        const projectsSnap = await getDocs(qProjects);
+        const projectsList: Project[] = [];
+        projectsSnap.forEach((dSnap) => {
+          projectsList.push({ id: dSnap.id, ...dSnap.data() } as Project);
+        });
+        setProjects(projectsList);
+      } catch (projErr) {
+        console.warn("Failed to fetch projects for quotations dropdown.", projErr);
+      }
+
     } catch (err) {
       if (isOfflineError(err)) {
         console.warn("[Quotations Offline Fallback] Loading data from local cache.");
@@ -435,6 +456,7 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
         }
       ],
       ...(departmentId ? { department: departmentId } : {}),
+      ...(projectId ? { projectId } : {}),
     };
 
     const quotsPath = `companies/${user.uid}/quotations`;
@@ -1049,6 +1071,23 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name} - {c.company}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Select Project (Optional)
+                  </label>
+                  <select
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-slate-50/20 focus:outline-hidden focus:border-slate-400"
+                  >
+                    <option value="">-- Choose a Project --</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
                       </option>
                     ))}
                   </select>

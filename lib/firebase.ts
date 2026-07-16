@@ -78,10 +78,13 @@ export const emailSignIn = async (email: string, password: string) => {
   try {
     return await signInWithEmailAndPassword(auth, email, password);
   } catch (error: any) {
-    if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
-      throw new Error('Invalid email or password. Please check your credentials and try again.');
-    }
-    throw new Error('Failed to sign in. Please try again later.');
+    const customError = new Error(
+      error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found'
+        ? 'Invalid email or password. Please check your credentials and try again.'
+        : 'Failed to sign in. Please try again later.'
+    );
+    (customError as any).code = error.code;
+    throw customError;
   }
 };
 
@@ -98,6 +101,28 @@ export enum OperationType {
   LIST = "list",
   GET = "get",
   WRITE = "write",
+}
+
+export async function logError(error: Error, metadata: Record<string, any> = {}) {
+  try {
+    const userId = auth.currentUser?.uid || "SYSTEM";
+    const userEmail = auth.currentUser?.email || "SYSTEM";
+    
+    await addDoc(collection(db, "audit_logs"), {
+      action: "System Error",
+      detail: `Message: ${error.message}. Stack: ${error.stack}`,
+      businessId: userId,
+      timestamp: serverTimestamp(),
+      user: userEmail,
+      userId: userId,
+      ip: "client-side",
+      isError: true,
+      severity: metadata.severity || "Medium",
+      ...metadata
+    });
+  } catch (e) {
+    console.error("Failed to log error:", e);
+  }
 }
 
 export interface FirestoreErrorInfo {

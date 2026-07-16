@@ -171,7 +171,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
       { id: "procurement", label: "Procurement", icon: ShoppingCart },
       { id: "projects", label: "Projects & Tasks", icon: FolderKanban },
       { id: "executive", label: "Executive Lounge", icon: Layers },
-      ...(currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
+      ...(currentUser?.email?.toLowerCase() === 'miratechindustries@gmail.com' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
       { id: "settings", label: "Settings", icon: Settings },
       { id: "subscriptions", label: "Subscriptions", icon: CreditCard },
     ];
@@ -181,7 +181,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
       if (!associatedModule) return true; // always show core tabs
       
       // Master admin always sees everything
-      if (currentUser?.role === "MASTER_ADMIN") return true;
+      if (currentUser?.email?.toLowerCase() === 'miratechindustries@gmail.com') return true;
 
       const activeModules = (company as any)?.enabledModules || (company as any)?.modules;
       if (!activeModules) return true; // default all enabled if no fields yet

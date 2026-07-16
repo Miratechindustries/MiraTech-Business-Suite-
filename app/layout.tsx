@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import InstallClientWrapper from "../components/InstallClientWrapper";
 import LegalCompliance from "../components/LegalCompliance";
+import ErrorBoundary from "../components/ErrorBoundary";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -43,7 +44,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="antialiased bg-slate-50 text-slate-900 min-h-screen">
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
         <InstallClientWrapper />
         <LegalCompliance />
       </body>

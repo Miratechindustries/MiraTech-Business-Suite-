@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { db } from '../lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useUserStore } from '../lib/store';
@@ -83,7 +83,7 @@ export default function SubscriptionsView() {
   const [remitMtcn, setRemitMtcn] = useState('');
   const [popFileSimulated, setPopFileSimulated] = useState<string | null>(null);
 
-  const fetchCompanyDetails = async () => {
+  const fetchCompanyDetails = useCallback(async () => {
     if (!currentUser?.companyId) {
       setLoading(false);
       return;
@@ -104,11 +104,11 @@ export default function SubscriptionsView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser?.companyId]);
 
   useEffect(() => {
     fetchCompanyDetails();
-  }, [currentUser?.companyId]);
+  }, [fetchCompanyDetails, currentUser?.companyId]);
 
   const handleOpenCheckout = (plan: SubscriptionPlan) => {
     if (!currentUser?.companyId || !company) return;

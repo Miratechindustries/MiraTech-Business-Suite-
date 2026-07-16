@@ -37,6 +37,7 @@ const ALL_MODULES: ModuleConfig[] = [
   { id: "inventory", name: "Inventory Stock", description: "Review and organize physical corporate products, catalogs, and SKU reserves.", icon: Box, color: "#F59E0B" },
   { id: "reports", name: "Reports & Analytics", description: "Consolidated system performance, graphs, and performance sheets.", icon: BarChart3, color: "#8B5CF6" },
   { id: "audit", name: "Security Audit logs", description: "Log immutable ledger actions and compliance operations.", icon: ShieldCheck, color: "#64748B" },
+  { id: "marketing", name: "Marketing", description: "Manage marketing campaigns and analytics.", icon: Activity, color: "#EC4899" },
   { id: "projects", name: "Projects & Tasks", description: "Track active milestones, task distributions, and sprint roadmaps.", icon: FolderKanban, color: "#06B6D4" },
   { id: "support", name: "Customer Support", description: "Process customer ticketing queues and review user grades.", icon: HeartHandshake, color: "#EC4899" },
   { id: "procurement", name: "Procurement", description: "Control partner suppliers and manage bulk purchase orders.", icon: ShoppingCart, color: "#0EA5E9" },
