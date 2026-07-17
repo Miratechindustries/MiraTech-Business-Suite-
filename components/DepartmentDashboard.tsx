@@ -799,6 +799,19 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
             <FolderKanban className="w-3.5 h-3.5" /> Project Tasks
           </button>
         );
+      case "support":
+        return (
+          <button
+            onClick={() => setActiveSubTab("tickets")}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
+              activeSubTab === "tickets"
+                ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <HeartHandshake className="w-3.5 h-3.5" /> Support Queue
+          </button>
+        );
     }
   };
 
@@ -1107,6 +1120,14 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
               </p>
             </div>
             <ProjectTaskDashboard departmentId={depLower} />
+          </div>
+        )}
+
+        {activeSubTab === "tickets" && depLower === "support" && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs animate-fade-in">
+            <div className="p-4 text-center text-slate-500 text-xs">
+              Support Dashboard not available.
+            </div>
           </div>
         )}
 

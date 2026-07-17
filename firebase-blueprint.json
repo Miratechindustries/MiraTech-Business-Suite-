@@ -119,6 +119,22 @@
         "createdAt": { "type": "string" }
       },
       "required": ["ownerId", "name", "status", "startDate", "budget", "createdAt"]
+    },
+    "SupportTicket": {
+      "title": "Support Ticket",
+      "description": "A customer support ticket.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "in-progress", "resolved", "closed"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "createdAt": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerEmail": { "type": "string" }
+      },
+      "required": ["ownerId", "title", "status", "priority", "createdAt"]
     }
   },
   "firestore": {
@@ -149,6 +165,10 @@
     "/companies/{companyId}/projects/{projectId}": {
       "schema": "Project",
       "description": "Project management directory."
+    },
+    "/companies/{companyId}/support_tickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "Support tickets sub-directory."
     }
   }
 }

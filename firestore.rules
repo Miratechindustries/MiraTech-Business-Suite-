@@ -173,11 +173,7 @@ service cloud.firestore {
       // Nested Approval-Driven Collections:
       match /quotations/{quotationId} {
         allow read: if isMemberOfCompany(companyId);
-        allow create: if isMemberOfCompany(companyId) && (
-          isMasterAdmin() || getUserRole() in ['BUSINESS_ADMIN', 'MASTER_ADMIN', 'GENERAL_MANAGER', 'COMPANY_OWNER'] || getUserData().approvalRights == true || (
-            request.resource.data.get('approvalStatus', 'draft') in ['draft', 'pending_admin']
-          )
-        );
+        allow create: if isMemberOfCompany(companyId);
         allow update: if canUpdateDocument(companyId, resource.data, request.resource.data);
         allow delete: if canDeleteDocument(companyId, resource.data);
       }
@@ -191,6 +187,10 @@ service cloud.firestore {
         );
         allow update: if canUpdateDocument(companyId, resource.data, request.resource.data);
         allow delete: if canDeleteDocument(companyId, resource.data);
+      }
+
+      match /support_tickets/{ticketId} {
+        allow read, write: if isMemberOfCompany(companyId);
       }
 
       // Other child directories under /companies/
