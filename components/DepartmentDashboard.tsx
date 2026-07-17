@@ -35,7 +35,7 @@ import {
   Info,
   HeartHandshake
 } from "lucide-react";
-import { collection, query, where, orderBy, limit, getDocs } from "firebase/firestore";
+import { collection, query, where, orderBy, limit, getDocs, updateDoc, addDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { logDepartmentActivity } from "@/lib/department";
 import jsPDF from "jspdf";
@@ -494,12 +494,32 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
     setActionLoading(actionName);
     setSuccessMsg(null);
     try {
+      // Execute concrete action based on actionName
+      if (depLower === "finance" && actionName === "Reconcile Ledger") {
+         // Example: Mark all pending transactions as reconciled
+         const txsRef = collection(db, "companies", businessId, "transactions");
+         const q = query(txsRef, where("status", "==", "pending"));
+         const snap = await getDocs(q);
+         const updatePromises = snap.docs.map(d => updateDoc(d.ref, { status: "reconciled", reconciledAt: serverTimestamp() }));
+         await Promise.all(updatePromises);
+      } else if (depLower === "sales" && actionName === "Qualify New Lead") {
+         // Example: Add a dummy lead (for demo activation)
+         await addDoc(collection(db, "customers"), {
+             businessId,
+             name: "New Qualified Lead",
+             email: "lead@example.com",
+             status: "qualified",
+             createdAt: serverTimestamp()
+         });
+      }
+
       await logDepartmentActivity(depLower, actionName, actionDetails, businessId);
       setSuccessMsg(`Action "${actionName}" executed and logged globally!`);
       await loadLogs();
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err) {
       console.error(err);
+      setSuccessMsg(`Failed to execute "${actionName}".`);
     } finally {
       setActionLoading(null);
     }
