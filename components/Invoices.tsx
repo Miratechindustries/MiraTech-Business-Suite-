@@ -11,7 +11,6 @@ import jsPDF from "jspdf";
 import safeHtml2Canvas from "../lib/safeHtml2canvas";
 import * as XLSX from "xlsx";
 import LoadingSkeleton from "./LoadingSkeleton";
-import DateRangePicker from "./DateRangePicker";
 
 interface Item {
   description: string;
@@ -753,13 +752,21 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
           ))}
         </div>
         <div className="flex items-center gap-1.5 w-full md:w-auto self-start md:self-auto bg-slate-50/50 p-1 px-2 border border-slate-200 rounded-md">
-           <DateRangePicker
-              startDate={startDate}
-              endDate={endDate}
-              onStartDateChange={setStartDate}
-              onEndDateChange={setEndDate}
-           />
-           {(startDate || endDate) && (
+          <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider whitespace-nowrap">From:</span>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="px-1.5 py-0.5 border border-slate-200 rounded-md text-[10px] bg-white focus:outline-hidden font-medium"
+          />
+          <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider whitespace-nowrap">To:</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="px-1.5 py-0.5 border border-slate-200 rounded-md text-[10px] bg-white focus:outline-hidden font-medium"
+          />
+          {(startDate || endDate) && (
             <button
               type="button"
               onClick={() => {

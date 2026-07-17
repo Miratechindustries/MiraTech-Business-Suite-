@@ -6,7 +6,6 @@ import { auth, db, handleFirestoreError, OperationType, isOfflineError } from ".
 import { collection, doc, addDoc, getDocs, deleteDoc, getDoc, query, setDoc } from "firebase/firestore";
 import { useUserStore, useToastStore } from "../lib/store";
 import { logAction } from "../lib/audit";
-import DateRangePicker from "./DateRangePicker";
 
 interface Transaction {
   id: string;
@@ -25,8 +24,6 @@ export default function Transactions() {
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [businessId, setBusinessId] = useState<string | null>(null);
@@ -265,10 +262,7 @@ export default function Transactions() {
       t.reference.toLowerCase().includes(search.toLowerCase()) ||
       t.id.toLowerCase().includes(search.toLowerCase());
     const matchesType = typeFilter === "All" || t.type === typeFilter;
-    const matchesDate = 
-        (!startDate || t.date >= startDate) &&
-        (!endDate || t.date <= endDate);
-    return matchesSearch && matchesType && matchesDate;
+    return matchesSearch && matchesType;
   });
 
   // KPI Calculations
@@ -337,42 +331,34 @@ export default function Transactions() {
       </div>
 
       {/* Filter and Search */}
-      <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-        <DateRangePicker
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={setStartDate}
-            onEndDateChange={setEndDate}
-        />
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <div className="relative w-full sm:max-w-xs">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400">
-              <Search className="h-3.5 w-3.5" />
-            </span>
-            <input
-              type="text"
-              placeholder="Search details, description or reference ID..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-2.5 py-1 text-xs border border-slate-200 rounded-md bg-white focus:outline-hidden"
-            />
-          </div>
-          
-          <div className="flex gap-1 overflow-x-auto w-full sm:w-auto">
-            {["All", "Inflow", "Outflow"].map((type) => (
-              <button
-                key={type}
-                onClick={() => setTypeFilter(type)}
-                className={`px-3 py-1 border rounded-md text-[10px] sm:text-xs font-bold transition cursor-pointer ${
-                  typeFilter === type
-                    ? "bg-blue-50 border-blue-200 text-blue-700"
-                    : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-                }`}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
+      <div className="flex flex-col sm:flex-row gap-2 items-center justify-between">
+        <div className="relative w-full sm:max-w-xs">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400">
+            <Search className="h-3.5 w-3.5" />
+          </span>
+          <input
+            type="text"
+            placeholder="Search details, description or reference ID..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-8 pr-2.5 py-1 text-xs border border-slate-200 rounded-md bg-white focus:outline-hidden"
+          />
+        </div>
+        
+        <div className="flex gap-1 overflow-x-auto w-full sm:w-auto">
+          {["All", "Inflow", "Outflow"].map((type) => (
+            <button
+              key={type}
+              onClick={() => setTypeFilter(type)}
+              className={`px-3 py-1 border rounded-md text-[10px] sm:text-xs font-bold transition cursor-pointer ${
+                typeFilter === type
+                  ? "bg-blue-50 border-blue-200 text-blue-700"
+                  : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              {type}
+            </button>
+          ))}
         </div>
       </div>
 

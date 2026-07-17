@@ -511,6 +511,32 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
              status: "qualified",
              createdAt: serverTimestamp()
          });
+      } else if (depLower === "hr" && actionName === "Initiate Payroll Cycle") {
+         // 1. Fetch employees
+         const empsRef = collection(db, "employees");
+         const q = query(empsRef, where("businessId", "==", businessId));
+         const snap = await getDocs(q);
+         const emps = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+         
+         // 2. Create payslips
+         const payslipsRef = collection(db, "payslips");
+         const promises = emps.map(emp => {
+             const payslip = {
+                 businessId,
+                 employeeId: emp.id,
+                 employeeName: emp.name,
+                 employeeEmail: emp.email,
+                 employeeTitle: emp.title,
+                 employeeDepartment: emp.department,
+                 basicSalary: emp.basicSalary,
+                 taxPeriod: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+                 status: "Draft",
+                 createdAt: serverTimestamp()
+             };
+             return addDoc(payslipsRef, payslip);
+         });
+         await Promise.all(promises);
+         setSuccessMsg("Payroll cycle initiated: payslips created for all employees.");
       }
 
       await logDepartmentActivity(depLower, actionName, actionDetails, businessId);
