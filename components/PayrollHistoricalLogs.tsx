@@ -24,7 +24,6 @@ import {
   Building2,
   BookmarkCheck
 } from "lucide-react";
-import Image from "next/image";
 import jsPDF from "jspdf";
 import safeHtml2canvas from "../lib/safeHtml2canvas";
 
@@ -461,11 +460,10 @@ export default function PayrollHistoricalLogs() {
                 <div>
                   {companyDetails?.letterheadLogo || companyDetails?.logo ? (
                     <div className="relative w-40 h-16 mb-2">
-                      <Image 
+                      <img 
                         src={companyDetails?.letterheadLogo || companyDetails?.logo || ""} 
                         alt="Company Branding" 
-                        fill 
-                        className="object-contain object-left" 
+                        className="w-full h-full object-contain object-left" 
                         referrerPolicy="no-referrer"
                       />
                     </div>
@@ -632,11 +630,10 @@ export default function PayrollHistoricalLogs() {
                       <div>
                           {companyDetails?.logo ? (
                               <div className="relative w-32 h-12 mb-1">
-                                  <Image 
+                                  <img 
                                       src={companyDetails.logo} 
                                       alt="Company Logo" 
-                                      fill 
-                                      className="object-contain object-left" 
+                                      className="w-full h-full object-contain object-left" 
                                       referrerPolicy="no-referrer"
                                   />
                               </div>

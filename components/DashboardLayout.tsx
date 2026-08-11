@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { User } from "firebase/auth";
-import { googleSignIn, logout, auth, initAuth, emailSignIn, handleFirestoreError, OperationType } from "../lib/firebase";
+import { googleSignIn, logout, auth, initAuth, emailSignIn, emailSignUp, handleFirestoreError, OperationType } from "../lib/firebase";
 import { getDoc, doc, collection, query, where, orderBy, limit, onSnapshot, updateDoc, deleteDoc, addDoc, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
@@ -140,6 +140,8 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   const [emailValue, setEmailValue] = useState("");
   const [passwordValue, setPasswordValue] = useState("");
   const [authError, setAuthError] = useState("");
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [authSuccess, setAuthSuccess] = useState("");
 
   // Inactivity auto-logout states
   const [isWarningShown, setIsWarningShown] = useState(false);
@@ -650,6 +652,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
+    setAuthSuccess("");
     try {
       setAuthLoading(true);
       await emailSignIn(emailValue, passwordValue);
@@ -661,6 +664,26 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
         setAuthError("Invalid email or password. Please check your credentials and try again.");
       } else {
         setAuthError(err.message || "Failed to sign in. Please check your credentials.");
+      }
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleEmailSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setAuthSuccess("");
+    try {
+      setAuthLoading(true);
+      await emailSignUp(emailValue, passwordValue);
+      setAuthSuccess("Account successfully registered! You are now signed in.");
+    } catch (err: any) {
+      console.error("Email registration failed:", err);
+      if (err.code === 'auth/network-request-failed') {
+        setAuthError("Network error. Please ensure Email/Password authentication is enabled and the current domain is added to the 'Authorized domains' list in your Firebase Authentication settings.");
+      } else {
+        setAuthError(err.message || "Failed to register. Please try again.");
       }
     } finally {
       setAuthLoading(false);
@@ -703,11 +726,43 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             </p>
           </div>
 
-          <div className="p-3 bg-amber-50 rounded-lg text-left text-[11px] text-amber-700 leading-relaxed border border-amber-100/40">
-            <strong>Security Notice:</strong> Logging in establishes active OAuth requests for Google Sheets & Google Drive capabilities in this full-stack sandbox environment.
+          {/* Tab Selector */}
+          <div className="flex bg-slate-100 p-1 rounded-lg">
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegisterMode(false);
+                setAuthError("");
+                setAuthSuccess("");
+              }}
+              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition duration-150 ${!isRegisterMode ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'}`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegisterMode(true);
+                setAuthError("");
+                setAuthSuccess("");
+              }}
+              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition duration-150 ${isRegisterMode ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'}`}
+            >
+              Register
+            </button>
           </div>
 
-          <form onSubmit={handleEmailSignIn} className="space-y-3">
+          {isRegisterMode ? (
+            <div className="p-3 bg-blue-50 rounded-lg text-left text-[11px] text-blue-700 leading-relaxed border border-blue-100/40">
+              <strong>System Initialization:</strong> Creating an account registers you with Firebase Auth. If your email is <strong>miratechindustries@gmail.com</strong>, you will be initialized automatically as the Master Admin.
+            </div>
+          ) : (
+            <div className="p-3 bg-amber-50 rounded-lg text-left text-[11px] text-amber-700 leading-relaxed border border-amber-100/40">
+              <strong>Security Notice:</strong> Logging in establishes active OAuth requests for Google Sheets & Google Drive capabilities in this full-stack sandbox environment.
+            </div>
+          )}
+
+          <form onSubmit={isRegisterMode ? handleEmailSignUp : handleEmailSignIn} className="space-y-3">
             <div>
               <div className="relative">
                 <Mail className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
@@ -737,11 +792,14 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             {authError && (
               <p className="text-[10px] text-red-500 bg-red-50 p-2 rounded-md border border-red-100">{authError}</p>
             )}
+            {authSuccess && (
+              <p className="text-[10px] text-emerald-600 bg-emerald-50 p-2 rounded-md border border-emerald-100 font-medium">{authSuccess}</p>
+            )}
             <button
               type="submit"
               className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-[#0F172A] text-white hover:bg-slate-900 font-bold text-xs rounded-lg shadow-xs transition duration-200 cursor-pointer"
             >
-              Sign In with Email
+              {isRegisterMode ? "Register with Email" : "Sign In with Email"}
             </button>
           </form>
 

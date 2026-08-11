@@ -4,6 +4,7 @@ import {
   onAuthStateChanged, 
   User, 
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup
 } from "firebase/auth";
@@ -83,6 +84,24 @@ export const emailSignIn = async (email: string, password: string) => {
         ? 'Invalid email or password. Please check your credentials and try again.'
         : 'Failed to sign in. Please try again later.'
     );
+    (customError as any).code = error.code;
+    throw customError;
+  }
+};
+
+export const emailSignUp = async (email: string, password: string) => {
+  try {
+    return await createUserWithEmailAndPassword(auth, email, password);
+  } catch (error: any) {
+    let message = 'Failed to register account. Please try again later.';
+    if (error.code === 'auth/email-already-in-use') {
+      message = 'This email address is already in use by another account.';
+    } else if (error.code === 'auth/weak-password') {
+      message = 'The password is too weak. It must be at least 6 characters.';
+    } else if (error.code === 'auth/invalid-email') {
+      message = 'Please enter a valid email address.';
+    }
+    const customError = new Error(message);
     (customError as any).code = error.code;
     throw customError;
   }

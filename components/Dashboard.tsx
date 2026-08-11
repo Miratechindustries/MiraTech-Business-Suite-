@@ -5,7 +5,7 @@ import { collection, getDocs, query, orderBy, getDoc, doc } from "firebase/fires
 import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
 import { syncToGoogleSheets, uploadToGoogleDrive, LedgerMetric } from "../lib/googleApi";
-import { BarChart3, TrendingUp, DollarSign, Wallet2, FileSpreadsheet, Download, CloudLightning, Loader2, CheckSquare, ShieldCheck, AlertCircle, ArrowDownLeft, AlertTriangle } from "lucide-react";
+import { BarChart3, TrendingUp, DollarSign, Wallet2, FileSpreadsheet, Download, CloudLightning, Loader2, CheckSquare, ShieldCheck, AlertCircle, ArrowDownLeft, AlertTriangle, Sparkles, RefreshCw } from "lucide-react";
 import Image from "next/image";
 import jsPDF from "jspdf";
 import safeHtml2Canvas from "../lib/safeHtml2canvas";
@@ -76,6 +76,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
   const [sheetId, setSheetId] = useState<string | null>(null);
   const [driveFileId, setDriveFileId] = useState<string | null>(null);
   const [errorWord, setErrorWord] = useState<string | null>(null);
+
+  const [aiInsights, setAiInsights] = useState<string | null>(null);
+  const [loadingInsights, setLoadingInsights] = useState(false);
 
   const [company, setCompany] = useState<CompanyDetails | null>(null);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
@@ -324,6 +327,46 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
   const displayUnpaidAmount = invoices.length === 0 ? 25600 : unpaidInvoicesAmount;
   const displayOverdueCount = invoices.length === 0 ? 5 : overdueCount;
   const displayOverdueAmount = invoices.length === 0 ? 9600 : overdueAmount;
+
+  const generateAiInsights = async () => {
+    setLoadingInsights(true);
+    try {
+      const response = await fetch("/api/gemini/insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName: company?.name || "MiraTech Client",
+          totalQuotationsVal,
+          totalInvoicesVal,
+          collectedRevenue,
+          totalOutflowExpenses,
+          netProfit,
+          profitMargin,
+          unpaidCount: displayUnpaidCount,
+          unpaidAmount: displayUnpaidAmount,
+          overdueCount: displayOverdueCount,
+          overdueAmount: displayOverdueAmount
+        }),
+      });
+      const data = await response.json();
+      if (data.error) {
+        setAiInsights(`• **Error generating AI insights**: ${data.error}`);
+      } else {
+        setAiInsights(data.text);
+      }
+    } catch (err: any) {
+      console.error("AI Insights fetch failed:", err);
+      setAiInsights(`• **Error fetching insights**: ${err.message || "Unknown error"}`);
+    } finally {
+      setLoadingInsights(false);
+    }
+  };
+
+  useEffect(() => {
+    if (company && !aiInsights && !loadingInsights) {
+      generateAiInsights();
+    }
+  }, [company, invoices]);
 
   // Computed values for collections pie chart
   const isCollectionsEmpty = invoices.length === 0 || invoices.reduce((acc, i) => acc + (i.total || 0), 0) === 0;
@@ -597,6 +640,122 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           )}
         </div>
       )}
+
+      {/* Executive Command AI Advisor Card */}
+      <motion.div
+        initial={{ y: 15, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5, ease: "easeOut", delay: 0.02 }}
+        className="bg-white border border-indigo-100 p-5 rounded-lg shadow-3xs"
+        id="executive-command-ai-advisor-card"
+      >
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-md border border-indigo-100/40">
+              <Sparkles className="h-4 w-4 animate-pulse text-indigo-500" />
+            </span>
+            <div>
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Executive AI Intelligence Advisor
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Automated cash flow risk audits and C-suite strategic recommendations.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={generateAiInsights}
+            disabled={loadingInsights}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-100 rounded-md text-[11px] font-bold cursor-pointer shadow-3xs transition disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loadingInsights ? 'animate-spin' : ''}`} />
+            {loadingInsights ? 'Analyzing Ledger...' : 'Run Intelligence Audit'}
+          </button>
+        </div>
+
+        {loadingInsights ? (
+          <div className="py-4 px-2 space-y-2.5">
+            <div className="flex items-center gap-2 text-indigo-600 text-xs font-bold">
+              <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+              <span>C-Suite Intelligence Engine running diagnostics...</span>
+            </div>
+            <div className="space-y-1.5 pl-6">
+              <p className="text-[10px] text-slate-400 animate-pulse">✓ Parsing live general ledger receipts and invoicing pipelines</p>
+              <p className="text-[10px] text-slate-400 animate-pulse delay-75">✓ Auditing operational profit margins and expense ratios</p>
+              <p className="text-[10px] text-slate-400 animate-pulse delay-150">✓ Formulating tactical cash reserves recommendations</p>
+            </div>
+          </div>
+        ) : aiInsights ? (
+          <ul className="space-y-2 pl-1">
+            {aiInsights.split("\n").map((line, idx) => {
+              const trimmed = line.trim();
+              if (!trimmed) return null;
+              if (trimmed.startsWith("•") || trimmed.startsWith("*") || trimmed.startsWith("-")) {
+                // Remove bullet symbol
+                let content = trimmed;
+                if (trimmed.startsWith("•")) content = trimmed.substring(1).trim();
+                else if (trimmed.startsWith("*")) {
+                  if (trimmed.startsWith("**") && trimmed.slice(2).includes("**")) {
+                    content = trimmed;
+                  } else {
+                    content = trimmed.substring(1).trim();
+                  }
+                } else if (trimmed.startsWith("-")) content = trimmed.substring(1).trim();
+
+                // Format bold segments
+                const boldRegex = /\*\*(.*?)\*\*/g;
+                const parts = [];
+                let lastIndex = 0;
+                let match;
+                while ((match = boldRegex.exec(content)) !== null) {
+                  if (match.index > lastIndex) {
+                    parts.push(content.substring(lastIndex, match.index));
+                  }
+                  parts.push(<strong key={match.index} className="font-extrabold text-slate-900">{match[1]}</strong>);
+                  lastIndex = boldRegex.lastIndex;
+                }
+                if (lastIndex < content.length) {
+                  parts.push(content.substring(lastIndex));
+                }
+
+                return (
+                  <li key={idx} className="flex items-start gap-2.5 text-slate-600 text-xs leading-relaxed">
+                    <span className="text-indigo-500 font-extrabold mt-1">•</span>
+                    <span className="flex-1">{parts.length > 0 ? parts : content}</span>
+                  </li>
+                );
+              }
+              
+              // Non-bullet text formatting
+              const boldRegex = /\*\*(.*?)\*\*/g;
+              const parts = [];
+              let lastIndex = 0;
+              let match;
+              while ((match = boldRegex.exec(trimmed)) !== null) {
+                if (match.index > lastIndex) {
+                  parts.push(trimmed.substring(lastIndex, match.index));
+                }
+                parts.push(<strong key={match.index} className="font-extrabold text-slate-900">{match[1]}</strong>);
+                lastIndex = boldRegex.lastIndex;
+              }
+              if (lastIndex < trimmed.length) {
+                parts.push(trimmed.substring(lastIndex));
+              }
+
+              return (
+                <p key={idx} className="text-slate-500 text-xs leading-relaxed">
+                  {parts.length > 0 ? parts : trimmed}
+                </p>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="py-2 text-center">
+            <p className="text-xs text-slate-400">Click &quot;Run Intelligence Audit&quot; to compile your real-time advisory insights.</p>
+          </div>
+        )}
+      </motion.div>
 
       {/* Primary KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">

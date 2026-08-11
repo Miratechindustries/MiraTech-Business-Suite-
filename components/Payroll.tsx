@@ -125,6 +125,32 @@ export default function Payroll() {
   const [showEmailSuccessModal, setShowEmailSuccessModal] = useState(false);
   const [selectedPayslip, setSelectedPayslip] = useState<any>(null);
   const pdfAreaRef = useRef<HTMLDivElement>(null);
+  const [selectedBulkPayslip, setSelectedBulkPayslip] = useState<any>(null);
+  const hiddenPdfRef = useRef<HTMLDivElement>(null);
+  const [isExportingZip, setIsExportingZip] = useState(false);
+
+  const generateIntegrityStamp = (ps: any) => {
+    const str = `${ps.id || "TEMP"}-${ps.employeeName}-${ps.netSalary}`;
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return `MIRA-SECURE-${Math.abs(hash).toString(16).toUpperCase()}`;
+  };
+
+  const formatPaymentDate = (ps: any) => {
+    if (ps.date?.toDate) {
+      return new Date(ps.date.toDate()).toLocaleDateString();
+    }
+    if (ps.createdAt) {
+      return new Date(ps.createdAt).toLocaleDateString();
+    }
+    if (ps.issueDate) {
+      return ps.issueDate;
+    }
+    return ps.date || "N/A";
+  };
 
   const generatePDF = async () => {
     const input = pdfAreaRef.current;
@@ -146,6 +172,69 @@ export default function Payroll() {
     const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
     pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
     pdf.save(`${selectedPayslip?.employeeName || "Payslip"}.pdf`);
+  };
+
+  const generateBulkZip = async () => {
+    if (selectedPayslips.size === 0) {
+      addToast("Please select at least one payslip to generate bulk ZIP", "warning");
+      return;
+    }
+
+    const selectedHistoryItems = payslipsHistory.filter(ps => selectedPayslips.has(ps.id!));
+    if (selectedHistoryItems.length === 0) {
+      addToast("No matching payslip records found in local state", "warning");
+      return;
+    }
+
+    setIsExportingZip(true);
+    addToast(`Preparing bulk zip archive for ${selectedHistoryItems.length} payslips...`, "info");
+
+    try {
+      const zip = new JSZip();
+
+      for (const item of selectedHistoryItems) {
+        setSelectedBulkPayslip(item);
+        // Allow DOM to render the hidden block
+        await new Promise(resolve => setTimeout(resolve, 350));
+
+        const target = hiddenPdfRef.current;
+        if (!target) {
+          console.warn("Hidden PDF container element not found for item:", item.id);
+          continue;
+        }
+
+        const canvas = await html2canvas(target, { scale: 2 });
+        const imgData = canvas.toDataURL("image/png");
+        const pdf = new jsPDF("p", "mm", "a4");
+
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+
+        const pdfBlob = pdf.output("blob");
+        const fileName = `${item.employeeName.replace(/\s+/g, "_")}_Payslip_${(item.taxPeriod || "Period").replace(/\s+/g, "_")}.pdf`;
+        zip.file(fileName, pdfBlob);
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      saveAs(zipBlob, `Bulk_Payslips_${(taxPeriod || "Export").replace(/\s+/g, "_")}.zip`);
+      addToast(`Successfully generated bulk ZIP with ${selectedHistoryItems.length} payslips!`, "success");
+
+      await logAction(
+        "PAYROLL_BATCH_EXPORTS",
+        `Batch generated bulk ZIP with ${selectedHistoryItems.length} payslips securely.`,
+        businessId,
+        selectedHistoryItems.reduce((acc, current) => acc + (current.netSalary || 0), 0)
+      );
+
+    } catch (err: any) {
+      console.error("Bulk ZIP generation failed:", err);
+      addToast("Failed to compile ZIP archive: " + err.message, "error");
+    } finally {
+      setSelectedBulkPayslip(null);
+      setIsExportingZip(false);
+    }
   };
 
   // Search & Filter
@@ -184,6 +273,121 @@ export default function Payroll() {
   const [enpf, setEnpf] = useState(0);
   const [totalDeductions, setTotalDeductions] = useState(0);
   const [netSalary, setNetSalary] = useState(0);
+
+  // Payroll cycle states
+  const [showCycleModal, setShowCycleModal] = useState(false);
+  const [cyclePeriod, setCyclePeriod] = useState(taxPeriod || "June 2026");
+  const [processingCycle, setProcessingCycle] = useState(false);
+  const [cycleStatus, setCycleStatus] = useState<"Draft" | "Issued">("Draft");
+  const [cycleResults, setCycleResults] = useState<{ successCount: number; duplicateCount: number; totalNet: number } | null>(null);
+
+  // Auto sync cyclePeriod to taxPeriod
+  useEffect(() => {
+    setCyclePeriod(taxPeriod);
+  }, [taxPeriod]);
+
+  const handleRunPayrollCycle = async () => {
+    const activeEmployees = employees.filter(emp => emp.status === "Active");
+    if (activeEmployees.length === 0) {
+      addToast("No active employees found to process.", "warning");
+      return;
+    }
+
+    setProcessingCycle(true);
+    setCycleResults(null);
+
+    let successCount = 0;
+    let duplicateCount = 0;
+    let totalNet = 0;
+    const newSlips: Payslip[] = [];
+
+    try {
+      const payslipsRef = collection(db, "payslips");
+
+      for (const emp of activeEmployees) {
+        // Check if payslip already exists for this employee and taxPeriod
+        const hasExisting = payslipsHistory.some(
+          ps => ps.employeeId === emp.id && ps.taxPeriod.toLowerCase() === cyclePeriod.toLowerCase()
+        );
+
+        if (hasExisting) {
+          duplicateCount++;
+          continue;
+        }
+
+        const base = Number(emp.basicSalary) || 0;
+        const gross = base; // Set allowances to 0 on bulk run
+        const computedPaye = gross * 0.23;
+        const computedEnpf = base * 0.05;
+        const computedDeductions = computedPaye + computedEnpf + 120; // 120 standard medical aid
+        const computedNet = Math.max(0, gross - computedDeductions);
+
+        const newSlip: any = {
+          employeeId: emp.id,
+          employeeName: emp.name,
+          employeeEmail: emp.email,
+          employeeTitle: emp.title,
+          employeeDepartment: emp.department,
+          basicSalary: base,
+          taxPeriod: cyclePeriod,
+          issueDate: new Date().toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' }),
+          overtimeHours: 0,
+          overtimeRate: 25,
+          housingAllowance: 0,
+          transportAllowance: 0,
+          bonus: 0,
+          paye: computedPaye,
+          enpf: computedEnpf,
+          medicalAid: 120,
+          otherFeeAmount: 0,
+          otherFeeDescription: "",
+          grossSalary: gross,
+          totalDeductions: computedDeductions,
+          netSalary: computedNet,
+          status: cycleStatus,
+          tin: emp.tin || "",
+          enpfNumber: emp.enpfNumber || "",
+          businessId,
+          userId: auth.currentUser?.uidActual,
+          createdAt: new Date().toISOString()
+        };
+
+        const docRef = await addDoc(payslipsRef, newSlip);
+        newSlip.id = docRef.id;
+
+        newSlips.push(newSlip);
+        successCount++;
+        totalNet += computedNet;
+      }
+
+      if (successCount > 0) {
+        // Update history in local state
+        setPayslipsHistory(prev => [...newSlips, ...prev]);
+
+        // Log action to compliance ledger
+        await logAction(
+          "PAYROLL_CYCLE_PROCESSED",
+          `Automated payroll cycle processed for ${cyclePeriod}. Generated ${successCount} payslips. Total Net Payout: $${totalNet.toLocaleString()}.`,
+          businessId,
+          totalNet
+        );
+      }
+
+      setCycleResults({
+        successCount,
+        duplicateCount,
+        totalNet
+      });
+
+      addToast(`Payroll cycle completed: ${successCount} processed, ${duplicateCount} skipped.`, "success");
+
+    } catch (err: any) {
+      console.error("Error processing payroll cycle:", err);
+      addToast(`Cycle execution failed: ${err.message}`, "error");
+    } finally {
+      setProcessingCycle(false);
+    }
+  };
 
   // Fetch company info, employees list, and past payslips
   useEffect(() => {
@@ -541,6 +745,17 @@ export default function Payroll() {
           >
             <Plus className="w-4 h-4" />
             Add Employee
+          </button>
+
+          <button
+            onClick={() => {
+              setCycleResults(null);
+              setShowCycleModal(true);
+            }}
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 px-3 rounded-xl shadow-xs transition cursor-pointer"
+          >
+            <Coins className="w-4 h-4" />
+            Process Cycle
           </button>
         </div>
       </div>
@@ -1050,12 +1265,12 @@ export default function Payroll() {
                         </div>
                       </td>
                       <td className="p-4 font-bold text-slate-800">{ps.taxPeriod}</td>
-                      <td className="p-4 font-mono font-semibold">${ps.basicSalary.toLocaleString()}</td>
-                      <td className="p-4 font-mono font-semibold">${ps.grossSalary.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                      <td className="p-4 font-mono text-red-500">-${ps.paye.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                      <td className="p-4 font-mono text-red-500">-${ps.enpf.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                      <td className="p-4 font-mono text-red-500">-${ps.totalDeductions.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                      <td className="p-4 font-mono font-bold text-emerald-600 bg-emerald-50/30">${ps.netSalary.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td className="p-4 font-mono font-semibold">${(ps.basicSalary ?? 0).toLocaleString()}</td>
+                      <td className="p-4 font-mono font-semibold">${(ps.grossSalary ?? 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td className="p-4 font-mono text-red-500">-${(ps.paye ?? 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td className="p-4 font-mono text-red-500">-${(ps.enpf ?? 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td className="p-4 font-mono text-red-500">-${(ps.totalDeductions ?? 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                      <td className="p-4 font-mono font-bold text-emerald-600 bg-emerald-50/30">${(ps.netSalary ?? 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                       <td className="p-4">
                         <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100/50 px-2 py-0.5 rounded-full">
                           {ps.status}
@@ -1207,62 +1422,185 @@ export default function Payroll() {
       {/* MODAL: Payslip Preview */}
       {selectedPayslip && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full p-6">
-            <div className="flex justify-between items-center mb-4 no-print">
-               <h3 className="text-lg font-bold">Payslip Preview</h3>
-               <button onClick={() => setSelectedPayslip(null)} className="text-slate-500 hover:text-slate-900 cursor-pointer">
-                 <X className="w-5 h-5" />
+          <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full p-6 max-h-[90vh] overflow-y-auto border border-slate-150 flex flex-col gap-4">
+            
+            {/* Modal controls header */}
+            <div className="flex justify-between items-center pb-2 border-b no-print">
+               <div>
+                 <h3 className="text-base font-extrabold text-slate-900">Payslip Document Preview</h3>
+                 <p className="text-2xs text-slate-400">View detailed payroll earnings, statutory deductions, and compliance records</p>
+               </div>
+               <button 
+                 onClick={() => setSelectedPayslip(null)} 
+                 className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-850 rounded-lg cursor-pointer transition border border-slate-200"
+               >
+                 <X className="w-4 h-4" />
                </button>
             </div>
-            <div ref={pdfAreaRef} className="w-full bg-white text-slate-850 p-6 shadow-2xl border border-slate-200 rounded-lg flex flex-col gap-3 min-h-[640px] text-[10px] font-sans">
-                {/* Template Header */}
-                <div className="border-b border-slate-900 pb-2 mb-2 flex justify-between">
-                    <div>
-                        <h2 className="text-xl font-black uppercase tracking-tight">ABC Company</h2>
-                        <p className="text-2xs text-slate-500 whitespace-pre-line">{"Street Address\nCity, State, Zip"}</p>
-                    </div>
-                    <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900">PAYSLIP</h2>
-                </div>
-                
-                {/* Pay period / Date */}
-                <div className="grid grid-cols-2 gap-4 bg-slate-100 p-2 font-bold border border-slate-300 rounded-md">
-                    <div>Pay Period: <span className="font-normal">{selectedPayslip.taxPeriod}</span></div>
-                    <div>Date of Payment: <span className="font-normal">{selectedPayslip.date || "N/A"}</span></div>
-                </div>
 
-                {/* Employee Information */}
-                <div className="border border-slate-900 rounded-md overflow-hidden">
-                    <div className="bg-slate-800 text-white font-bold p-1 px-2 text-center text-xs">Employee Information</div>
-                    <div className="grid grid-cols-2 gap-x-4 p-2 text-[10px]">
-                    <div>Name: <span className="font-bold">{selectedPayslip.employeeName}</span></div>
-                    <div>Department: <span className="font-bold">N/A</span></div>
-                    <div>Employee ID: <span className="font-bold">{selectedPayslip.employeeId || "N/A"}</span></div>
-                    <div>Role: <span className="font-bold">N/A</span></div>
-                    </div>
-                </div>
-
-                {/* Financial Table */}
-                <div className="border border-slate-900 rounded-md overflow-hidden text-[10px]">
-                    <div className="bg-slate-800 text-white font-bold p-1 text-center">Summary</div>
-                    <div className="p-2 space-y-1">
-                        <div className="flex justify-between font-bold"><span>Net Pay</span> <span>${selectedPayslip.netSalary ? parseFloat(selectedPayslip.netSalary).toFixed(2) : "0.00"}</span></div>
-                        <div className="flex justify-between"><span>Adjustments</span> <span>{selectedPayslip.adjustments || "—"}</span></div>
-                    </div>
-                </div>
-                
-                {/* Footer */}
-                <div className="mt-auto text-center text-[8px] text-slate-400 font-medium">
-                    Powered by MiraTech Industries ©
-                </div>
-            </div>
-            <div className="flex gap-2 mt-4 no-print">
-              <button 
-                  onClick={generatePDF}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+            {/* A4 interactive render frame simulating paper */}
+            <div className="bg-slate-500 p-4 md:p-8 rounded-2xl max-h-[64vh] overflow-y-auto shadow-inner">
+              
+              <div 
+                ref={pdfAreaRef} 
+                className="w-full bg-white text-slate-850 p-6 md:p-8 shadow-2xl border border-slate-200 rounded-xl flex flex-col gap-4 min-h-[600px] text-[10px] md:text-[11px] font-sans text-left"
               >
-                  <Download className="w-4 h-4" /> Download PDF
+                  {/* Ledger Corporate Heading block */}
+                  <div className="border-b-2 border-slate-950 pb-3 mb-1 flex justify-between items-start">
+                      <div>
+                          {companyDetails?.logo ? (
+                              <div className="relative w-32 h-12 mb-1">
+                                  <img 
+                                      src={companyDetails.logo} 
+                                      alt="Company Logo" 
+                                      className="w-full h-full object-contain object-left" 
+                                      referrerPolicy="no-referrer"
+                                  />
+                              </div>
+                          ) : (
+                              <h2 className="text-lg font-black uppercase tracking-tight text-slate-900">{companyDetails?.name || "ABC Company"}</h2>
+                          )}
+                          <p className="text-[9px] text-slate-500 whitespace-pre-line leading-relaxed">{companyDetails?.address || "Street Address\nCity, State, Zip"}</p>
+                      </div>
+                      <div className="text-right">
+                        <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tighter text-slate-900 leading-tight">PAYSLIP</h2>
+                        <div className="mt-1 text-[9px] font-mono font-bold bg-slate-50 p-1 border border-slate-200 rounded inline-block text-slate-600">
+                          {generateIntegrityStamp(selectedPayslip)}
+                        </div>
+                      </div>
+                  </div>
+                  
+                  {/* Pay period and Date block */}
+                  <div className="grid grid-cols-2 gap-4 bg-slate-50 p-2 px-3 font-semibold border border-slate-200 rounded-lg">
+                      <div className="text-slate-600">Tax Period: <span className="font-extrabold text-slate-900">{selectedPayslip.taxPeriod || "N/A"}</span></div>
+                      <div className="text-slate-600">Date of Payment: <span className="font-extrabold text-slate-900">{formatPaymentDate(selectedPayslip)}</span></div>
+                  </div>
+
+                  {/* Employee Information */}
+                  <div className="border border-slate-900 rounded-lg overflow-hidden mt-0.5">
+                      <div className="bg-slate-900 text-white font-extrabold p-1.5 px-3 text-center text-xs tracking-wider uppercase">Employee Information</div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 p-3 text-[10px] md:text-[11px]">
+                        <div className="text-slate-500">Full Name: <span className="font-bold text-slate-900">{selectedPayslip.employeeName}</span></div>
+                        <div className="text-slate-500">Department: <span className="font-extrabold text-slate-900">{selectedPayslip.employeeDepartment || "N/A"}</span></div>
+                        <div className="text-slate-500">Employee ID: <span className="font-mono font-bold text-slate-900">{selectedPayslip.employeeId || "N/A"}</span></div>
+                        <div className="text-slate-500">Role Title: <span className="font-extrabold text-slate-900">{selectedPayslip.employeeTitle || "N/A"}</span></div>
+                        <div className="text-slate-500">Tax Registration (TIN): <span className="font-mono font-bold text-slate-900">{selectedPayslip.tin || "N/A"}</span></div>
+                        <div className="text-slate-500">ENPF Pension No.: <span className="font-mono font-bold text-slate-900">{selectedPayslip.enpfNumber || "N/A"}</span></div>
+                      </div>
+                  </div>
+
+                  {/* Financial Breakdown Table Grids */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-0.5">
+                      
+                      {/* Earnings Column */}
+                      <div className="border border-slate-900 rounded-lg overflow-hidden flex flex-col">
+                          <div className="bg-slate-800 text-white font-bold p-1 px-3 text-center text-xs">Earnings & Additions</div>
+                          <div className="p-3 space-y-2 text-[10px] md:text-[11px] flex-1">
+                              <div className="flex justify-between border-b border-dashed pb-1">
+                                <span className="text-slate-500">Basic Salary</span> 
+                                <span className="font-mono font-bold text-slate-900">${(selectedPayslip.basicSalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              </div>
+                              {selectedPayslip.overtimeHours && selectedPayslip.overtimeHours > 0 ? (
+                                <div className="flex justify-between border-b border-dashed pb-1">
+                                  <span className="text-slate-500">Overtime hours ({selectedPayslip.overtimeHours} x ${selectedPayslip.overtimeRate || 25})</span> 
+                                  <span className="font-mono font-bold text-slate-900">${((selectedPayslip.overtimeHours || 0) * (selectedPayslip.overtimeRate || 25)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              ) : null}
+                              {selectedPayslip.housingAllowance && selectedPayslip.housingAllowance > 0 ? (
+                                <div className="flex justify-between border-b border-dashed pb-1">
+                                  <span className="text-slate-500">Housing Allowance</span> 
+                                  <span className="font-mono font-bold text-slate-900">${selectedPayslip.housingAllowance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              ) : null}
+                              {selectedPayslip.transportAllowance && selectedPayslip.transportAllowance > 0 ? (
+                                <div className="flex justify-between border-b border-dashed pb-1">
+                                  <span className="text-slate-500">Transport Allowance</span> 
+                                  <span className="font-mono font-bold text-slate-900">${selectedPayslip.transportAllowance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              ) : null}
+                              {selectedPayslip.bonus && selectedPayslip.bonus > 0 ? (
+                                <div className="flex justify-between border-b border-dashed pb-1">
+                                  <span className="text-slate-500">Performance Bonus</span> 
+                                  <span className="font-mono font-bold text-slate-900">${selectedPayslip.bonus.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                              ) : null}
+                          </div>
+                      </div>
+
+                      {/* Deductions Column */}
+                      <div className="border border-slate-900 rounded-lg overflow-hidden flex flex-col">
+                          <div className="bg-slate-800 text-white font-bold p-1 px-3 text-center text-xs">Deductions & Levies</div>
+                          <div className="p-3 space-y-2 text-[10px] md:text-[11px] flex-1">
+                              <div className="flex justify-between border-b border-dashed pb-1">
+                                <span className="text-slate-500">PAYE Taxation (23% gross)</span> 
+                                <span className="font-mono font-bold text-red-600">{selectedPayslip.paye && selectedPayslip.paye > 0 ? `-$${parseFloat(selectedPayslip.paye).toFixed(2)}` : "—"}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-dashed pb-1">
+                                <span className="text-slate-500">ENPF Co-Fund (5% basic)</span> 
+                                <span className="font-mono font-bold text-red-600">{selectedPayslip.enpf && selectedPayslip.enpf > 0 ? `-$${parseFloat(selectedPayslip.enpf).toFixed(2)}` : "—"}</span>
+                              </div>
+                              {selectedPayslip.medicalAid && selectedPayslip.medicalAid > 0 ? (
+                                <div className="flex justify-between border-b border-dashed pb-1">
+                                  <span className="text-slate-500">Medical Aid Premium</span> 
+                                  <span className="font-mono font-bold text-red-600">-${parseFloat(selectedPayslip.medicalAid).toFixed(2)}</span>
+                                </div>
+                              ) : null}
+                              {selectedPayslip.otherFeeAmount && selectedPayslip.otherFeeAmount > 0 ? (
+                                <div className="flex justify-between border-b border-dashed pb-1">
+                                  <span className="text-slate-500">{selectedPayslip.otherFeeDescription || "Other Fee"}</span> 
+                                  <span className="font-mono font-bold text-red-600">-${parseFloat(selectedPayslip.otherFeeAmount).toFixed(2)}</span>
+                                </div>
+                              ) : null}
+                          </div>
+                      </div>
+
+                  </div>
+                  
+                  {/* Totals Summary Row */}
+                  <div className="grid grid-cols-3 gap-2 border-t-2 border-b-2 border-slate-900 bg-slate-100 p-2 md:p-3 font-extrabold text-center text-[10px] md:text-xs rounded-lg mt-0.5">
+                      <div>Gross Earnings: ${(selectedPayslip.grossSalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      <div className="text-rose-600">Total Deductions: ${(selectedPayslip.totalDeductions || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      <div className="text-emerald-700 bg-emerald-50 rounded border border-emerald-150 p-0.5 font-bold">Net Paid: ${(selectedPayslip.netSalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  </div>
+
+                  {/* Security envelope or compliance stamp */}
+                  <div className="p-2 px-3 bg-indigo-50 border border-indigo-100 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between text-[9px] font-mono text-slate-500 gap-1 uppercase">
+                    <span>SECURITY COMPLIANCE ENVELOPE VERIFIED | DIRECTIVE REF: {selectedPayslip.id || "DRAFT"}</span>
+                    <span>AUDITED SEAL: {generateIntegrityStamp(selectedPayslip)}</span>
+                  </div>
+
+                  {/* Custom Adjustments / Notes statement if any */}
+                  {selectedPayslip.adjustments && (
+                    <div className="p-2.5 bg-slate-50 border rounded-lg text-[9px] md:text-[10px] text-slate-600 italic">
+                      <span className="font-bold not-italic block text-slate-800">HR Advisory & Payout notes:</span>
+                      {selectedPayslip.adjustments}
+                    </div>
+                  )}
+                  
+                  {/* Footer metadata */}
+                  <div className="mt-auto border-t pt-4 text-center text-[9px] text-slate-400 font-semibold tracking-tight">
+                      Issued securely via MiraTech Workspace • Authenticated Enterprise Document © {new Date().getFullYear()}
+                  </div>
+              </div>
+
+            </div>
+
+            {/* Modal actions trigger */}
+            <div className="flex gap-2 justify-end no-print pt-2">
+              <button 
+                onClick={() => window.print()}
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 border text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition"
+              >
+                <Printer className="w-4 h-4" /> Print Document
+              </button>
+              <button 
+                onClick={generatePDF}
+                className="flex items-center gap-1.5 px-5 py-2 bg-slate-900 border border-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold cursor-pointer transition shadow-xs"
+              >
+                <Download className="w-4 h-4" /> Export To PDF
               </button>
             </div>
+
           </div>
         </div>
       )}
@@ -1299,6 +1637,293 @@ export default function Payroll() {
           </div>
         </div>
       )}
+
+      {/* MODAL: Run Payroll Cycle Dialog */}
+      {showCycleModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-3xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full shadow-2xl p-6 space-y-5 animate-fade-in text-left">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Coins className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-extrabold text-slate-950 text-sm">Execute Monthly Payroll Cycle</h3>
+              </div>
+              <button 
+                onClick={() => setShowCycleModal(false)}
+                className="p-1 hover:bg-slate-100 rounded-md transition cursor-pointer"
+              >
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {!cycleResults ? (
+                <>
+                  <div className="bg-blue-50/50 border border-blue-150 p-3 rounded-xl flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-blue-800 leading-normal">
+                      This action will automatically generate payslip records for all <strong>Active employees</strong> currently in your directory for the selected month. Base earnings and standard statutory deductions will be automatically computed.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700">Monthly Tax Period</label>
+                      <input
+                        type="text"
+                        value={cyclePeriod}
+                        onChange={(e) => setCyclePeriod(e.target.value)}
+                        placeholder="e.g. June 2026"
+                        className="w-full border border-slate-200 px-3 py-2 rounded-xl bg-slate-50 focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700">Initial Payslip Status</label>
+                      <select
+                        value={cycleStatus}
+                        onChange={(e: any) => setCycleStatus(e.target.value)}
+                        className="w-full border border-slate-200 px-3 py-2 rounded-xl bg-slate-50 focus:bg-white focus:outline-hidden"
+                      >
+                        <option value="Draft">Draft (Inspect and approve individually)</option>
+                        <option value="Issued">Issued (Pre-approved / Ready for archive)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-100 rounded-xl overflow-hidden mt-2">
+                    <div className="bg-slate-50 border-b border-slate-100 p-2.5 flex justify-between font-bold text-slate-700">
+                      <span>Active Roster to Process</span>
+                      <span>{employees.filter(e => e.status === "Active").length} Employees</span>
+                    </div>
+                    <div className="max-h-36 overflow-y-auto divide-y divide-slate-100 p-1 bg-white">
+                      {employees.filter(e => e.status === "Active").map(emp => (
+                        <div key={emp.id} className="p-2 flex justify-between items-center text-[11px]">
+                          <div>
+                            <p className="font-bold text-slate-800">{emp.name}</p>
+                            <p className="text-[10px] text-slate-400">{emp.title}</p>
+                          </div>
+                          <span className="font-mono text-slate-600">${emp.basicSalary.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex gap-3 border-t border-slate-100">
+                    <button
+                      onClick={handleRunPayrollCycle}
+                      disabled={processingCycle}
+                      className="flex-1 flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl cursor-pointer"
+                    >
+                      {processingCycle ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Processing Cycle Calculations...
+                        </>
+                      ) : (
+                        "Generate Monthly Cycle"
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setShowCycleModal(false)}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-150 text-slate-700 font-bold rounded-xl cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-4 space-y-4">
+                  <div className="mx-auto h-12 w-12 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center animate-bounce">
+                    <Check className="h-6 w-6" />
+                  </div>
+
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-extrabold text-slate-900 uppercase">Payroll Cycle Executed!</h4>
+                    <p className="text-xs text-slate-500">
+                      The automated ledger cycle has completed processing for <strong>{cyclePeriod}</strong>.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl text-left font-mono space-y-1.5 max-w-sm mx-auto">
+                    <div className="flex justify-between border-b border-slate-200 pb-1.5 text-slate-400 font-bold text-3xs">
+                      <span>AUDIT METRIC</span>
+                      <span>VALUE</span>
+                    </div>
+                    <p className="flex justify-between">
+                      <span>Generated Slips:</span>
+                      <span className="font-bold text-emerald-700 font-sans">+{cycleResults.successCount} Drafts</span>
+                    </p>
+                    <p className="flex justify-between">
+                      <span>Skipped (Duplicates):</span>
+                      <span className="font-bold text-amber-600 font-sans">{cycleResults.duplicateCount} Skipped</span>
+                    </p>
+                    <p className="flex justify-between pt-1 border-t border-dashed border-slate-200">
+                      <span>Total Net Payout:</span>
+                      <span className="font-extrabold text-slate-800 font-sans">${cycleResults.totalNet.toLocaleString()}</span>
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setShowCycleModal(false);
+                      setCycleResults(null);
+                    }}
+                    className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-xl transition cursor-pointer"
+                  >
+                    Finish and Inspect Slips
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden batch ZIP rendering portal reference */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+        <div ref={hiddenPdfRef} className="w-[800px] bg-white text-slate-850 p-10 flex flex-col gap-5 text-xs font-sans text-left">
+          {selectedBulkPayslip && (
+            <>
+              {/* Ledger Corporate Heading block */}
+              <div className="border-b-2 border-slate-950 pb-4 mb-2 flex justify-between items-start">
+                  <div>
+                      {companyDetails?.logo ? (
+                          <div className="relative w-40 h-16 mb-2">
+                              <img 
+                                  src={companyDetails.logo} 
+                                  alt="Company Logo" 
+                                  className="w-full h-full object-contain object-left" 
+                                  referrerPolicy="no-referrer"
+                              />
+                          </div>
+                      ) : (
+                          <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">{companyDetails?.name || "ABC Company"}</h2>
+                      )}
+                      <p className="text-[10px] text-slate-500 whitespace-pre-line leading-relaxed">{companyDetails?.address || "Street Address\nCity, State, Zip"}</p>
+                  </div>
+                  <div className="text-right">
+                    <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900 leading-tight">PAYSLIP</h2>
+                    <div className="mt-2 text-[10px] font-mono font-bold bg-slate-50 p-1 border border-slate-200 rounded inline-block text-slate-600">
+                      {generateIntegrityStamp(selectedBulkPayslip)}
+                    </div>
+                  </div>
+              </div>
+              
+              {/* Pay period and Date block */}
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-2 px-3 font-semibold border border-slate-200 rounded-lg">
+                  <div className="text-slate-600">Tax Period: <span className="font-extrabold text-slate-900">{selectedBulkPayslip.taxPeriod || "N/A"}</span></div>
+                  <div className="text-slate-600">Date of Payment: <span className="font-extrabold text-slate-900">{formatPaymentDate(selectedBulkPayslip)}</span></div>
+              </div>
+
+              {/* Employee Information */}
+              <div className="border border-slate-900 rounded-lg overflow-hidden mt-0.5">
+                  <div className="bg-slate-900 text-white font-extrabold p-1.5 px-3 text-center text-xs tracking-wider uppercase">Employee Information</div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 p-3 text-[11px]">
+                    <div className="text-slate-500">Full Name: <span className="font-bold text-slate-900">{selectedBulkPayslip.employeeName}</span></div>
+                    <div className="text-slate-500">Department: <span className="font-extrabold text-slate-900">{selectedBulkPayslip.employeeDepartment || "N/A"}</span></div>
+                    <div className="text-slate-500">Employee ID: <span className="font-mono font-bold text-slate-900">{selectedBulkPayslip.employeeId || "N/A"}</span></div>
+                    <div className="text-slate-500">Role Title: <span className="font-extrabold text-slate-900">{selectedBulkPayslip.employeeTitle || "N/A"}</span></div>
+                    <div className="text-slate-500">Tax Registration (TIN): <span className="font-mono font-bold text-slate-900">{selectedBulkPayslip.tin || "N/A"}</span></div>
+                    <div className="text-slate-500">ENPF Pension No.: <span className="font-mono font-bold text-slate-900">{selectedBulkPayslip.enpfNumber || "N/A"}</span></div>
+                  </div>
+              </div>
+
+              {/* Financial Breakdown Table Grids */}
+              <div className="grid grid-cols-2 gap-4 mt-0.5">
+                  
+                  {/* Earnings Column */}
+                  <div className="border border-slate-900 rounded-lg overflow-hidden flex flex-col">
+                      <div className="bg-slate-800 text-white font-bold p-1 px-3 text-center text-xs">Earnings & Additions</div>
+                      <div className="p-3 space-y-2 text-[11px] flex-1">
+                          <div className="flex justify-between border-b border-dashed pb-1">
+                            <span className="text-slate-500">Basic Salary</span> 
+                            <span className="font-mono font-bold text-slate-900">${(selectedBulkPayslip.basicSalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          {selectedBulkPayslip.overtimeHours && selectedBulkPayslip.overtimeHours > 0 ? (
+                            <div className="flex justify-between border-b border-dashed pb-1">
+                              <span className="text-slate-500">Overtime hours ({selectedBulkPayslip.overtimeHours} x ${selectedBulkPayslip.overtimeRate || 25})</span> 
+                              <span className="font-mono font-bold text-slate-900">${((selectedBulkPayslip.overtimeHours || 0) * (selectedBulkPayslip.overtimeRate || 25)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          ) : null}
+                          {selectedBulkPayslip.housingAllowance && selectedBulkPayslip.housingAllowance > 0 ? (
+                            <div className="flex justify-between border-b border-dashed pb-1">
+                              <span className="text-slate-500">Housing Allowance</span> 
+                              <span className="font-mono font-bold text-slate-900">${selectedBulkPayslip.housingAllowance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          ) : null}
+                          {selectedBulkPayslip.transportAllowance && selectedBulkPayslip.transportAllowance > 0 ? (
+                            <div className="flex justify-between border-b border-dashed pb-1">
+                              <span className="text-slate-500">Transport Allowance</span> 
+                              <span className="font-mono font-bold text-slate-900">${selectedBulkPayslip.transportAllowance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          ) : null}
+                          {selectedBulkPayslip.bonus && selectedBulkPayslip.bonus > 0 ? (
+                            <div className="flex justify-between border-b border-dashed pb-1">
+                              <span className="text-slate-500">Performance Bonus</span> 
+                              <span className="font-mono font-bold text-slate-900">${selectedBulkPayslip.bonus.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          ) : null}
+                      </div>
+                  </div>
+
+                  {/* Deductions Column */}
+                  <div className="border border-slate-900 rounded-lg overflow-hidden flex flex-col">
+                      <div className="bg-slate-800 text-white font-bold p-1 px-3 text-center text-xs">Deductions & Levies</div>
+                      <div className="p-3 space-y-2 text-[11px] flex-1">
+                          <div className="flex justify-between border-b border-dashed pb-1">
+                            <span className="text-slate-500">PAYE Taxation (23% gross)</span> 
+                            <span className="font-mono font-bold text-red-600">{selectedBulkPayslip.paye && selectedBulkPayslip.paye > 0 ? `-$${parseFloat(selectedBulkPayslip.paye).toFixed(2)}` : "—"}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-dashed pb-1">
+                            <span className="text-slate-500">ENPF Co-Fund (5% basic)</span> 
+                            <span className="font-mono font-bold text-red-600">{selectedBulkPayslip.enpf && selectedBulkPayslip.enpf > 0 ? `-$${parseFloat(selectedBulkPayslip.enpf).toFixed(2)}` : "—"}</span>
+                          </div>
+                          {selectedBulkPayslip.medicalAid && selectedBulkPayslip.medicalAid > 0 ? (
+                            <div className="flex justify-between border-b border-dashed pb-1">
+                              <span className="text-slate-500">Medical Aid Premium</span> 
+                              <span className="font-mono font-bold text-red-600">-${parseFloat(selectedBulkPayslip.medicalAid).toFixed(2)}</span>
+                            </div>
+                          ) : null}
+                          {selectedBulkPayslip.otherFeeAmount && selectedBulkPayslip.otherFeeAmount > 0 ? (
+                            <div className="flex justify-between border-b border-dashed pb-1">
+                              <span className="text-slate-500">{selectedBulkPayslip.otherFeeDescription || "Other Fee"}</span> 
+                              <span className="font-mono font-bold text-red-600">-${parseFloat(selectedBulkPayslip.otherFeeAmount).toFixed(2)}</span>
+                            </div>
+                          ) : null}
+                      </div>
+                  </div>
+
+              </div>
+              
+              {/* Totals Summary Row */}
+              <div className="grid grid-cols-3 gap-2 border-t-2 border-b-2 border-slate-900 bg-slate-100 p-3 font-extrabold text-center text-xs rounded-lg mt-0.5">
+                  <div>Gross Earnings: ${(selectedBulkPayslip.grossSalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div className="text-rose-600">Total Deductions: ${(selectedBulkPayslip.totalDeductions || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div className="text-emerald-700 bg-emerald-50 rounded border border-emerald-150 p-0.5 font-bold font-sans">Net Paid: ${(selectedBulkPayslip.netSalary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              </div>
+
+              {/* Security envelope or compliance stamp */}
+              <div className="p-2 px-3 bg-indigo-50 border border-indigo-100 rounded-lg flex justify-between text-[9px] font-mono text-slate-500 gap-1 uppercase">
+                <span>SECURITY COMPLIANCE ENVELOPE VERIFIED | DIRECTIVE REF: {selectedBulkPayslip.id || "DRAFT"}</span>
+                <span>AUDITED SEAL: {generateIntegrityStamp(selectedBulkPayslip)}</span>
+              </div>
+
+              {/* Custom Adjustments / Notes statement if any */}
+              {selectedBulkPayslip.adjustments && (
+                <div className="p-2.5 bg-slate-50 border rounded-lg text-[10px] text-slate-600 italic">
+                  <span className="font-bold not-italic block text-slate-800">HR Advisory & Payout notes:</span>
+                  {selectedBulkPayslip.adjustments}
+                </div>
+              )}
+              
+              {/* Footer metadata */}
+              <div className="mt-auto border-t pt-4 text-center text-[10px] text-slate-400 font-semibold tracking-tight">
+                  Issued securely via MiraTech Workspace • Authenticated Enterprise Document © {new Date().getFullYear()}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
 
     </div>
   );
