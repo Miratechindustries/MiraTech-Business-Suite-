@@ -41,6 +41,7 @@ const ALL_MODULES: ModuleConfig[] = [
   { id: "projects", name: "Projects & Tasks", description: "Track active milestones, task distributions, and sprint roadmaps.", icon: FolderKanban, color: "#06B6D4" },
   { id: "support", name: "Customer Support", description: "Process customer ticketing queues and review user grades.", icon: HeartHandshake, color: "#EC4899" },
   { id: "procurement", name: "Procurement", description: "Control partner suppliers and manage bulk purchase orders.", icon: ShoppingCart, color: "#0EA5E9" },
+  { id: "pos", name: "POS System", description: "Manage walk-in sales and cash drawer operations.", icon: ShoppingCart, color: "#10B981" },
   { id: "administration", name: "Administration", description: "Manage system configurations, uptime, and critical keys.", icon: Settings, color: "#14B8A6" },
   { id: "executive", name: "Executive Lounge", description: "Review consolidated business KPIs and high-level strategic feed.", icon: Layers, color: "#F43F5E" }
 ];

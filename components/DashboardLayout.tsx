@@ -107,7 +107,7 @@ const tabModules: Record<string, string> = {
   marketing: "marketing",
   support: "support",
   procurement: "procurement",
-  pos: "inventory",
+  pos: "pos",
   projects: "projects",
   executive: "executive",
 };
@@ -163,6 +163,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     const baseTabs = [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
       { id: "inventory", label: "Inventory", icon: Box },
+      { id: "pos", label: "POS System", icon: ShoppingCart },
       { id: "clients", label: "Clients", icon: Users },
       { id: "payroll", label: "HR and Payroll", icon: Coins },
       { id: "quotations", label: "Quotations", icon: FileText },
@@ -175,7 +176,6 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
       { id: "marketing", label: "Marketing Hub", icon: TrendingUp },
       { id: "support", label: "Customer Support", icon: HeartHandshake },
       { id: "procurement", label: "Procurement", icon: ShoppingCart },
-      { id: "pos", label: "POS System", icon: ShoppingCart },
       { id: "projects", label: "Projects & Tasks", icon: FolderKanban },
       { id: "executive", label: "Executive Lounge", icon: Layers },
       ...(currentUser?.email?.toLowerCase() === 'miratechindustries@gmail.com' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
