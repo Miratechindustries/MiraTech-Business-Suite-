@@ -70,6 +70,7 @@ import AuditLogs from "./AuditLogs";
 import ProjectTaskDashboard from "./ProjectTaskDashboard";
 import ProjectDashboard from "./ProjectDashboard";
 import SocialMediaHub from "./SocialMediaHub";
+import ProcurementHub from "./ProcurementHub";
 
 interface DepartmentDashboardProps {
   departmentType: string;
@@ -891,6 +892,19 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
             <Share2 className="w-3.5 h-3.5" /> Social Hub & Analytics
           </button>
         );
+      case "procurement":
+        return (
+          <button
+            onClick={() => setActiveSubTab("procurement_hub")}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
+              activeSubTab === "procurement_hub"
+                ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <ShoppingCart className="w-3.5 h-3.5" /> Procurement Suite
+          </button>
+        );
     }
   };
 
@@ -945,7 +959,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
           <Activity className="w-3.5 h-3.5" /> Overview
         </button>
 
-      {depLower !== "audit" && (
+      {depLower !== "audit" && depLower !== "procurement" && (
         <>
           <button
             onClick={() => setActiveSubTab("quotations")}
@@ -1316,6 +1330,12 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
         {activeSubTab === "social" && depLower === "marketing" && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs animate-fade-in">
             <SocialMediaHub companyId={businessId!} />
+          </div>
+        )}
+
+        {activeSubTab === "procurement_hub" && depLower === "procurement" && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs animate-fade-in">
+            <ProcurementHub companyId={businessId!} />
           </div>
         )}
 

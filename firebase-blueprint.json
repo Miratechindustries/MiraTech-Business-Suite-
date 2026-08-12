@@ -24,56 +24,35 @@
       },
       "required": ["ownerId", "name"]
     },
-    "Quotation": {
-      "title": "Quotation",
-      "description": "Quotation details containing items and client address.",
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Vendor contact details, credit terms, and lead times.",
       "type": "object",
       "properties": {
         "ownerId": { "type": "string" },
-        "number": { "type": "string" },
-        "clientName": { "type": "string" },
-        "clientEmail": { "type": "string" },
-        "clientAddress": { "type": "string" },
-        "date": { "type": "string" },
-        "validUntil": { "type": "string" },
-        "total": { "type": "number" },
-        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] }
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "creditTerms": { "type": "string" },
+        "leadTime": { "type": "number" }
       },
-      "required": ["ownerId", "number", "clientName", "total", "status"]
+      "required": ["ownerId", "name"]
     },
-    "Invoice": {
-      "title": "Invoice",
-      "description": "Corporate invoice representing billable items.",
+    "PurchaseOrder": {
+      "title": "Purchase Order",
+      "description": "Incoming request for goods or services.",
       "type": "object",
       "properties": {
         "ownerId": { "type": "string" },
-        "number": { "type": "string" },
-        "clientName": { "type": "string" },
-        "clientEmail": { "type": "string" },
-        "clientAddress": { "type": "string" },
-        "date": { "type": "string" },
-        "dueDate": { "type": "string" },
-        "total": { "type": "number" },
-        "status": { "type": "string", "enum": ["unpaid", "paid", "overdue"] }
+        "poNumber": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Draft", "Pending", "Approved", "Sent"] },
+        "deliveryDate": { "type": "string" }
       },
-      "required": ["ownerId", "number", "clientName", "total", "status"]
-    },
-    "Receipt": {
-      "title": "Receipt",
-      "description": "Payment receipt proving invoices were settled.",
-      "type": "object",
-      "properties": {
-        "ownerId": { "type": "string" },
-        "number": { "type": "string" },
-        "invoiceNumber": { "type": "string" },
-        "clientName": { "type": "string" },
-        "clientEmail": { "type": "string" },
-        "paymentMethod": { "type": "string" },
-        "date": { "type": "string" },
-        "amount": { "type": "number" },
-        "status": { "type": "string", "enum": ["completed", "refunded"] }
-      },
-      "required": ["ownerId", "number", "clientName", "amount", "status"]
+      "required": ["ownerId", "poNumber", "supplierId", "totalAmount", "status"]
     },
     "Notification": {
       "title": "Notification",
@@ -142,17 +121,13 @@
       "schema": "Company",
       "description": "Company registration directory."
     },
-    "/companies/{companyId}/quotations/{quotationId}": {
-      "schema": "Quotation",
-      "description": "Quotations sub-directory."
+    "/companies/{companyId}/suppliers/{supplierId}": {
+      "schema": "Supplier",
+      "description": "Suppliers sub-directory."
     },
-    "/companies/{companyId}/invoices/{invoiceId}": {
-      "schema": "Invoice",
-      "description": "Invoices sub-directory."
-    },
-    "/companies/{companyId}/receipts/{receiptId}": {
-      "schema": "Receipt",
-      "description": "Receipts sub-directory."
+    "/companies/{companyId}/purchase_orders/{poId}": {
+      "schema": "PurchaseOrder",
+      "description": "Purchase Orders sub-directory."
     },
     "/notifications/{notificationId}": {
       "schema": "Notification",
