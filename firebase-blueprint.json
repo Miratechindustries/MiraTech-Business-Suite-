@@ -24,6 +24,34 @@
       },
       "required": ["ownerId", "name"]
     },
+    "PurchaseRequest": {
+      "title": "Purchase Request",
+      "description": "Internal request for procurement.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "prNumber": { "type": "string" },
+        "requestedBy": { "type": "string" },
+        "items": { "type": "array" },
+        "status": { "type": "string", "enum": ["Draft", "Pending", "Approved", "Rejected"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["ownerId", "prNumber", "requestedBy", "items", "status", "createdAt"]
+    },
+    "RFQ": {
+      "title": "Request for Quotation",
+      "description": "RFQ sent to suppliers.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "rfqNumber": { "type": "string" },
+        "supplierIds": { "type": "array" },
+        "items": { "type": "array" },
+        "status": { "type": "string", "enum": ["Open", "Closed"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["ownerId", "rfqNumber", "supplierIds", "items", "status", "createdAt"]
+    },
     "Supplier": {
       "title": "Supplier",
       "description": "Vendor contact details, credit terms, and lead times.",
@@ -53,6 +81,33 @@
         "deliveryDate": { "type": "string" }
       },
       "required": ["ownerId", "poNumber", "supplierId", "totalAmount", "status"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Supplier invoice for goods or services.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "poNumber": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Unpaid", "Paid"] }
+      },
+      "required": ["ownerId", "poNumber", "supplierId", "totalAmount", "status"]
+    },
+    "GoodsReceived": {
+      "title": "Goods Received",
+      "description": "Goods received record from a supplier.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "poNumber": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "items": { "type": "array" },
+        "receivedDate": { "type": "string" }
+      },
+      "required": ["ownerId", "poNumber", "supplierId", "receivedDate"]
     },
     "Notification": {
       "title": "Notification",
@@ -121,6 +176,14 @@
       "schema": "Company",
       "description": "Company registration directory."
     },
+    "/companies/{companyId}/purchase_requests/{prId}": {
+      "schema": "PurchaseRequest",
+      "description": "Purchase requests sub-directory."
+    },
+    "/companies/{companyId}/rfqs/{rfqId}": {
+      "schema": "RFQ",
+      "description": "RFQs sub-directory."
+    },
     "/companies/{companyId}/suppliers/{supplierId}": {
       "schema": "Supplier",
       "description": "Suppliers sub-directory."
@@ -128,6 +191,14 @@
     "/companies/{companyId}/purchase_orders/{poId}": {
       "schema": "PurchaseOrder",
       "description": "Purchase Orders sub-directory."
+    },
+    "/companies/{companyId}/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Invoices sub-directory."
+    },
+    "/companies/{companyId}/goods_received/{grnId}": {
+      "schema": "GoodsReceived",
+      "description": "Goods Received sub-directory."
     },
     "/notifications/{notificationId}": {
       "schema": "Notification",

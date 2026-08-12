@@ -959,7 +959,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
           <Activity className="w-3.5 h-3.5" /> Overview
         </button>
 
-      {depLower !== "audit" && depLower !== "procurement" && (
+      {(depLower === "crm" || depLower === "finance") && (
         <>
           <button
             onClick={() => setActiveSubTab("quotations")}
