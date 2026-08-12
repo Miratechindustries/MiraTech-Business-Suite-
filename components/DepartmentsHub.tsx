@@ -40,6 +40,7 @@ const DEPARTMENTS: DepartmentConfig[] = [
   { id: "reports", name: "Reports & Analytics", description: "Consolidated system performance, graphs, and performance sheets.", subtitle: "Analytics Trends & Sheets", icon: BarChart3, color: "#8B5CF6", tabId: "reports" },
   { id: "support", name: "Customer Support", description: "Process customer ticketing queues and review user grades.", subtitle: "Ticketing & Customer Sat", icon: HeartHandshake, color: "#EC4899", tabId: "support" },
   { id: "procurement", name: "Procurement", description: "Control partner suppliers and manage bulk purchase orders.", subtitle: "Suppliers & Supplier Orders", icon: ShoppingCart, color: "#0EA5E9", tabId: "procurement" },
+  { id: "pos", name: "POS System", description: "Manage walk-in sales and cash drawer operations.", subtitle: "Cash Sales & Drawer Logs", icon: ShoppingCart, color: "#10B981", tabId: "pos" },
   { id: "marketing", name: "Marketing Hub", description: "Create, target, and monitor campaign workflows and pipelines.", subtitle: "Campaign Pipelines & Funnels", icon: TrendingUp, color: "#EC4899", tabId: "marketing" },
   { id: "audit", name: "Security Audit Logs", description: "Log immutable ledger actions and compliance operations.", subtitle: "SecOps Compliance & Trails", icon: ShieldCheck, color: "#64748B", tabId: "audit" },
   { id: "executive", name: "Executive Lounge", description: "Review consolidated business KPIs and high-level strategic feed.", subtitle: "C-Suite PDF & Sync Panels", icon: Layers, color: "#F43F5E", tabId: "executive" },
@@ -54,7 +55,7 @@ export default function DepartmentsHub({ company, onSelectTab }: DepartmentsHubP
   const { currentUser } = useUserStore();
 
   const enabledModules = company?.enabledModules || company?.modules || [
-    "sales", "finance", "hr", "inventory", "projects", "reports", "support", "procurement", "marketing", "audit", "executive"
+    "sales", "finance", "hr", "inventory", "projects", "reports", "support", "procurement", "pos", "marketing", "audit", "executive"
   ];
 
   const plan = SUBSCRIPTION_PLANS.find(p => p.id === company?.subscriptionPlanId) || SUBSCRIPTION_PLANS[0];

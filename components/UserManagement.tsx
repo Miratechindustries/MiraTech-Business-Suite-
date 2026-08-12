@@ -76,7 +76,8 @@ export default function UserManagement() {
     { id: "procurement", name: "Procurement" },
     { id: "marketing", name: "Marketing Hub" },
     { id: "audit", name: "Security Audit Logs" },
-    { id: "executive", name: "Executive Lounge" }
+    { id: "executive", name: "Executive Lounge" },
+    { id: "pos", name: "POS System" }
   ];
 
   const fetchData = async () => {

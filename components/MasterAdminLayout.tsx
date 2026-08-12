@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useUserStore } from "../lib/store";
 import { logout } from "../lib/firebase";
-import { LayoutDashboard, Users, Building2, ShieldAlert, LogOut, FileText, ShieldCheck, X } from "lucide-react";
+import { LayoutDashboard, Users, Building2, ShieldAlert, LogOut, FileText, ShieldCheck, X, ShoppingCart } from "lucide-react";
 import LoadingSkeleton from "./LoadingSkeleton";
 
 const MasterAdminDashboard = dynamic(() => import("./MasterAdminDashboard"), { loading: () => <LoadingSkeleton /> });
@@ -13,6 +13,7 @@ const AuditLogs = dynamic(() => import("./AuditLogs"), { loading: () => <Loading
 const CompanyCreation = dynamic(() => import("./CompanyCreation"), { loading: () => <LoadingSkeleton /> });
 const CompaniesTable = dynamic(() => import("./CompaniesTable"), { loading: () => <LoadingSkeleton /> });
 const SecurityOperations = dynamic(() => import("./SecurityOperations"), { loading: () => <LoadingSkeleton /> });
+const POSHub = dynamic(() => import("./POSHub"), { loading: () => <LoadingSkeleton /> });
 
 export default function MasterAdminLayout() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -57,6 +58,7 @@ export default function MasterAdminLayout() {
     { id: "createCompany", label: "Create Company", icon: FileText },
     { id: "logs", label: "Audit Logs", icon: ShieldAlert },
     { id: "security", label: "Cyber Security Shield", icon: ShieldCheck },
+    { id: "pos", label: "POS System", icon: ShoppingCart },
   ];
 
   const NavItem = ({ tab }: { tab: typeof navItems[0] }) => {
@@ -184,6 +186,7 @@ export default function MasterAdminLayout() {
           {activeTab === "createCompany" && <CompanyCreation />}
           {activeTab === "logs" && <AuditLogs />}
           {activeTab === "security" && <SecurityOperations />}
+          {activeTab === "pos" && <POSHub />}
         </main>
       </div>
     </div>
