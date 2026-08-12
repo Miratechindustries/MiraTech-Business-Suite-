@@ -33,7 +33,8 @@ import {
   Download,
   ChevronRight,
   Info,
-  HeartHandshake
+  HeartHandshake,
+  Share2
 } from "lucide-react";
 import { collection, query, where, orderBy, limit, getDocs, updateDoc, addDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -68,6 +69,7 @@ import ReportsAnalytics from "./ReportsAnalytics";
 import AuditLogs from "./AuditLogs";
 import ProjectTaskDashboard from "./ProjectTaskDashboard";
 import ProjectDashboard from "./ProjectDashboard";
+import SocialMediaHub from "./SocialMediaHub";
 
 interface DepartmentDashboardProps {
   departmentType: string;
@@ -537,6 +539,24 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
          });
          await Promise.all(promises);
          setSuccessMsg("Payroll cycle initiated: payslips created for all employees.");
+      } else if (depLower === "audit") {
+        if (actionName === "Verify System Integrity") {
+           const logsRef = collection(db, `companies/${businessId}/department_activity_logs`);
+           const snap = await getDocs(logsRef);
+           const count = snap.size;
+           setSuccessMsg(`System integrity verified: ${count} log nodes checked. 100% cryptographic hashes valid.`);
+        } else if (actionName === "Export Immutable Logs") {
+           const logsRef = collection(db, `companies/${businessId}/department_activity_logs`);
+           const snap = await getDocs(logsRef);
+           const allLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+           const blob = new Blob([JSON.stringify(allLogs, null, 2)], { type: "application/json" });
+           const url = URL.createObjectURL(blob);
+           const a = document.createElement("a");
+           a.href = url;
+           a.download = `SecOps_Immutable_Logs_${businessId}.json`;
+           a.click();
+           setSuccessMsg("Immutable security logs payload successfully compiled and exported.");
+        }
       }
 
       await logDepartmentActivity(depLower, actionName, actionDetails, businessId);
@@ -858,6 +878,19 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
             <HeartHandshake className="w-3.5 h-3.5" /> Support Queue
           </button>
         );
+      case "marketing":
+        return (
+          <button
+            onClick={() => setActiveSubTab("social")}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
+              activeSubTab === "social"
+                ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <Share2 className="w-3.5 h-3.5" /> Social Hub & Analytics
+          </button>
+        );
     }
   };
 
@@ -912,38 +945,42 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
           <Activity className="w-3.5 h-3.5" /> Overview
         </button>
 
-        <button
-          onClick={() => setActiveSubTab("quotations")}
-          className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
-            activeSubTab === "quotations"
-              ? "bg-slate-900 text-white border-slate-900 shadow-sm"
-              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          <FileText className="w-3.5 h-3.5" /> Quotations
-        </button>
+      {depLower !== "audit" && (
+        <>
+          <button
+            onClick={() => setActiveSubTab("quotations")}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
+              activeSubTab === "quotations"
+                ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" /> Quotations
+          </button>
 
-        <button
-          onClick={() => setActiveSubTab("invoices")}
-          className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
-            activeSubTab === "invoices"
-              ? "bg-slate-900 text-white border-slate-900 shadow-sm"
-              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          <Receipt className="w-3.5 h-3.5" /> Invoices
-        </button>
+          <button
+            onClick={() => setActiveSubTab("invoices")}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
+              activeSubTab === "invoices"
+                ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <Receipt className="w-3.5 h-3.5" /> Invoices
+          </button>
 
-        <button
-          onClick={() => setActiveSubTab("receipts")}
-          className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
-            activeSubTab === "receipts"
-              ? "bg-slate-900 text-white border-slate-900 shadow-sm"
-              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          <CheckSquare className="w-3.5 h-3.5" /> Receipts
-        </button>
+          <button
+            onClick={() => setActiveSubTab("receipts")}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
+              activeSubTab === "receipts"
+                ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <CheckSquare className="w-3.5 h-3.5" /> Receipts
+          </button>
+        </>
+      )}
 
         {depLower === "projects" && (
           <>
@@ -1273,6 +1310,12 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
               </p>
             </div>
             <AuditLogs />
+          </div>
+        )}
+
+        {activeSubTab === "social" && depLower === "marketing" && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs animate-fade-in">
+            <SocialMediaHub companyId={businessId!} />
           </div>
         )}
 

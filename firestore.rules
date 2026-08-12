@@ -193,6 +193,22 @@ service cloud.firestore {
         allow read, write: if isMemberOfCompany(companyId);
       }
 
+      match /projects/{projectId} {
+        allow read, write: if isMemberOfCompany(companyId);
+      }
+
+      match /customers/{customerId} {
+        allow read, write: if isMemberOfCompany(companyId);
+      }
+
+      match /tasks/{taskId} {
+        allow read, write: if isMemberOfCompany(companyId);
+      }
+
+      match /notifications/{notificationId} {
+        allow read, write: if isMemberOfCompany(companyId);
+      }
+
       // Other child directories under /companies/
       match /receipts/{receiptId} {
         allow read, write: if isMemberOfCompany(companyId);
