@@ -218,6 +218,9 @@ service cloud.firestore {
       match /goods_received/{id} {
         allow read, write: if isMemberOfCompany(companyId);
       }
+      match /pos_sales/{id} {
+        allow read, write: if isMemberOfCompany(companyId);
+      }
       match /supplier_invoices/{id} {
         allow read, write: if isMemberOfCompany(companyId);
       }

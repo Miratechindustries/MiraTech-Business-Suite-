@@ -66,6 +66,9 @@ import SubscriptionsView from "./SubscriptionsView";
 import DepartmentDashboard from "./DepartmentDashboard";
 import { withDepartmentAccess } from "./withDepartmentAccess";
 import DepartmentsHub from "./DepartmentsHub";
+import POSHub from "./POSHub";
+
+// Wrapped dynamic department dashboards
 
 // Wrapped dynamic department dashboards
 const ProtectedSales = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="sales" onBack={onBack} />, "sales");
@@ -104,6 +107,7 @@ const tabModules: Record<string, string> = {
   marketing: "marketing",
   support: "support",
   procurement: "procurement",
+  pos: "inventory",
   projects: "projects",
   executive: "executive",
 };
@@ -171,6 +175,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
       { id: "marketing", label: "Marketing Hub", icon: TrendingUp },
       { id: "support", label: "Customer Support", icon: HeartHandshake },
       { id: "procurement", label: "Procurement", icon: ShoppingCart },
+      { id: "pos", label: "POS System", icon: ShoppingCart },
       { id: "projects", label: "Projects & Tasks", icon: FolderKanban },
       { id: "executive", label: "Executive Lounge", icon: Layers },
       ...(currentUser?.email?.toLowerCase() === 'miratechindustries@gmail.com' ? [{ id: "admin", label: "Master Admin", icon: UserCog }] : []),
@@ -1168,6 +1173,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                 {activeTab === "reports" && <ProtectedReports onBack={() => setActiveTab("dashboard")} />}
                 {activeTab === "support" && <ProtectedSupport onBack={() => setActiveTab("dashboard")} />}
                 {activeTab === "procurement" && <ProtectedProcurement onBack={() => setActiveTab("dashboard")} />}
+                {activeTab === "pos" && <POSHub companyId={company?.ownerId || user.uid} />}
                 {activeTab === "marketing" && <ProtectedMarketing onBack={() => setActiveTab("dashboard")} />}
                 {activeTab === "audit" && <ProtectedAudit onBack={() => setActiveTab("dashboard")} />}
                 {activeTab === "executive" && <ProtectedExecutive onBack={() => setActiveTab("dashboard")} />}

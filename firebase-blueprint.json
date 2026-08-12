@@ -109,6 +109,19 @@
       },
       "required": ["ownerId", "poNumber", "supplierId", "receivedDate"]
     },
+    "POSSale": {
+      "title": "POS Sale",
+      "description": "Walk-in customer sale record.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["ownerId", "items", "totalAmount", "createdAt"]
+    },
     "Notification": {
       "title": "Notification",
       "description": "A notification dispatch for a business tenant.",
@@ -199,6 +212,10 @@
     "/companies/{companyId}/goods_received/{grnId}": {
       "schema": "GoodsReceived",
       "description": "Goods Received sub-directory."
+    },
+    "/companies/{companyId}/pos_sales/{saleId}": {
+      "schema": "POSSale",
+      "description": "POS sales sub-directory."
     },
     "/notifications/{notificationId}": {
       "schema": "Notification",
