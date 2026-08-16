@@ -11,6 +11,7 @@ import jsPDF from "jspdf";
 import safeHtml2Canvas from "../lib/safeHtml2canvas";
 import * as XLSX from "xlsx";
 import LoadingSkeleton from "./LoadingSkeleton";
+import { notifyManagersForApproval } from "../lib/approvalNotifications";
 
 interface Item {
   description: string;
@@ -120,11 +121,12 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
       comments: workflowComments || `${actionName} performed by ${currentUser?.email || "User"}.`
     };
 
+    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
     const updatedHistory = [...(previewInvoice.approvalHistory || []), newEvent];
 
     try {
       setSubmitting(true);
-      await updateDoc(doc(db, "companies", user.uid, "invoices", previewInvoice.id), {
+      await updateDoc(doc(db, "companies", businessId, "invoices", previewInvoice.id), {
         approvalStatus: nextStatus,
         approvalHistory: updatedHistory,
         approvalComments: workflowComments || ""
@@ -152,8 +154,8 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
         notificationType = "warning";
       }
 
-      await addDoc(collection(db, "companies", user.uid, "notifications"), {
-        businessId: user.uid,
+      await addDoc(collection(db, "companies", businessId, "notifications"), {
+        businessId: businessId,
         title: notificationTitle,
         message: notificationMsg,
         read: false,
@@ -319,16 +321,15 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
     } catch (err) {
       if (isOfflineError(err)) {
         console.warn("[Invoices Offline Fallback] Loading data from local cache.");
-        const cachedCompany = localStorage.getItem(`miratech_offline_company_${user.uid}`);
+        const cachedCompany = localStorage.getItem(`miratech_offline_company_${businessId}`);
         if (cachedCompany) setCompany(JSON.parse(cachedCompany));
-        const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${user.uid}`);
+        const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${businessId}`);
         if (cachedInvs) {
           const rawList = JSON.parse(cachedInvs) as Invoice[];
           setInvoices(departmentId ? rawList.filter(inv => inv.department === departmentId) : rawList);
         } else {
           setInvoices([]);
         }
-        const user = auth.currentUser;
         const cacheKey = user ? `miratech_customers_${user.uid}` : "miratech_customers_guest";
         const cachedClients = localStorage.getItem(cacheKey);
         if (cachedClients) setClients(JSON.parse(cachedClients));
@@ -383,64 +384,96 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
   const handleSubmit = async (e: React.FormEvent, isDraft = false) => {
     if (e) e.preventDefault();
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user) {
+      addToast("Authentication required to save invoice.", "error");
+      return;
+    }
 
     setSubmitting(true);
     const total = calculateTotal();
+    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
+
+    const finalNumber = number.trim() || generateNextInvoiceNumber();
+    const finalClientName = clientName.trim() || (isDraft ? "Draft Client" : "");
+    const finalDate = date || new Date().toISOString().split("T")[0];
+    const finalDueDate = dueDate || new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
+
+    if (!isDraft) {
+      if (!finalClientName) {
+        addToast("Please enter a client name before submitting.", "error");
+        setSubmitting(false);
+        return;
+      }
+      if (items.length === 0 || !items.some((it) => it.description && it.description.trim())) {
+        addToast("Please provide at least one line item with a description.", "error");
+        setSubmitting(false);
+        return;
+      }
+    }
 
     const payload: Invoice = {
       ownerId: user.uid,
-      number,
-      clientName,
+      number: finalNumber,
+      clientName: finalClientName || "Draft Client",
       clientEmail,
       clientAddress,
-      date,
-      dueDate,
-      items,
+      date: finalDate,
+      dueDate: finalDueDate,
+      items: items.length > 0 ? items : [{ description: "Draft Item", quantity: 1, price: 0 }],
       total,
       status: "unpaid",
       approvalStatus: isDraft ? "draft" : "pending_admin",
       approvalHistory: [
         {
           type: isDraft ? "draft_saved" : "submitted",
-          user: currentUser?.email || "Unknown Staff",
-          userId: currentUser?.uid || "unknown",
+          user: currentUser?.displayName || currentUser?.email || "Billing Staff",
+          userId: user.uid,
           role: currentUser?.role || "STAFF",
+          position: currentUser?.position || "Billing Staff",
           date: new Date().toISOString().split("T")[0],
           time: new Date().toLocaleTimeString(),
           comments: isDraft ? "Draft document saved." : "Document submitted for administrative approval."
         }
       ],
-      ...(departmentId ? { department: departmentId } : {}),
+      ...(departmentId ? { department: departmentId } : { department: "finance" }),
       ...(projectId ? { projectId } : {}),
     };
 
-    const invoicesPath = `companies/${user.uid}/invoices`;
+    const invoicesPath = `companies/${businessId}/invoices`;
     try {
       let newId = "offline-" + Date.now();
       try {
-        const colRef = collection(db, "companies", user.uid, "invoices");
+        const colRef = collection(db, "companies", businessId, "invoices");
         const addedDoc = await addDoc(colRef, payload);
         newId = addedDoc.id;
 
         // Log database audit trail
-        await logAction(
-          "Invoice Created",
-          `Billed invoice #${payload.number} to client '${payload.clientName}'. Total amount: E${payload.total} (${isDraft ? 'Draft' : 'Submitted'})`,
-          user.uid,
-          payload.total
-        );
+        try {
+          await logAction(
+            "Invoice Created",
+            `Billed invoice #${payload.number} to client '${payload.clientName}'. Total amount: E${payload.total} (${isDraft ? 'Draft' : 'Submitted'})`,
+            user.uid,
+            payload.total
+          );
+        } catch (logErr) {
+          console.warn("Audit log warning:", logErr);
+        }
 
-        // Submit notification if not a draft
+        // Submit notification and email alerts if not a draft
         if (!isDraft) {
-          await addDoc(collection(db, "companies", user.uid, "notifications"), {
-            businessId: user.uid,
-            title: "New Invoice Submitted",
-            message: `Invoice #${payload.number} was submitted by Staff (${currentUser?.email}) and requires review.`,
-            read: false,
-            createdAt: new Date().toISOString(),
-            type: "info"
-          });
+          try {
+            await notifyManagersForApproval({
+              businessId: businessId,
+              documentType: "invoice",
+              documentNumber: payload.number,
+              creatorName: currentUser?.displayName || currentUser?.email || "Billing Staff",
+              department: payload.department || "finance",
+              totalAmount: payload.total,
+              companyName: company?.name || "MIRA SUITE"
+            });
+          } catch (notifErr) {
+            console.warn("Approval notification warning:", notifErr);
+          }
         }
       } catch (err) {
         if (!isOfflineError(err)) throw err;
@@ -448,10 +481,10 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
       }
 
       // Local storage cache update
-      const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${user.uid}`);
+      const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${businessId}`);
       const invsList: Invoice[] = cachedInvs ? JSON.parse(cachedInvs) : [];
       invsList.unshift({ id: newId, ...payload });
-      localStorage.setItem(`miratech_offline_invoices_${user.uid}`, JSON.stringify(invsList));
+      localStorage.setItem(`miratech_offline_invoices_${businessId}`, JSON.stringify(invsList));
 
       setIsOpen(false);
       // Reset State
@@ -476,9 +509,10 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
     if (!payingInvoice) return;
     const user = auth.currentUser;
     if (!user) return;
+    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
 
-    const invoicePath = `companies/${user.uid}/invoices/${payingInvoice.id}`;
-    const receiptsPath = `companies/${user.uid}/receipts`;
+    const invoicePath = `companies/${businessId}/invoices/${payingInvoice.id}`;
+    const receiptsPath = `companies/${businessId}/receipts`;
     let isOffline = false;
 
     // Receipt payload
@@ -497,12 +531,12 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
 
     try {
       // 1. Update status to paid
-      await updateDoc(doc(db, "companies", user.uid, "invoices", payingInvoice.id!), {
+      await updateDoc(doc(db, "companies", businessId, "invoices", payingInvoice.id!), {
         status: "paid",
       });
 
       // 2. Automatically generate Receipt
-      const recColRef = collection(db, "companies", user.uid, "receipts");
+      const recColRef = collection(db, "companies", businessId, "receipts");
       await addDoc(recColRef, receiptPayload);
 
       // Log database audit trail
@@ -522,21 +556,21 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
     }
 
     // 1. Reflect payment in local cache of invoices
-    const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${user.uid}`);
+    const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${businessId}`);
     if (cachedInvs) {
       const invsList: Invoice[] = JSON.parse(cachedInvs);
       const updatedList = invsList.map((i) => (i.id === payingInvoice.id ? { ...i, status: "paid" as const } : i));
-      localStorage.setItem(`miratech_offline_invoices_${user.uid}`, JSON.stringify(updatedList));
+      localStorage.setItem(`miratech_offline_invoices_${businessId}`, JSON.stringify(updatedList));
       if (isOffline) {
         setInvoices(updatedList);
       }
     }
 
     // 2. Reflect receipt in local cache of receipts
-    const cachedRecs = localStorage.getItem(`miratech_offline_receipts_${user.uid}`);
+    const cachedRecs = localStorage.getItem(`miratech_offline_receipts_${businessId}`);
     const recsList = cachedRecs ? JSON.parse(cachedRecs) : [];
     recsList.unshift({ id: "offline-rec-" + Date.now(), ...receiptPayload });
-    localStorage.setItem(`miratech_offline_receipts_${user.uid}`, JSON.stringify(recsList));
+    localStorage.setItem(`miratech_offline_receipts_${businessId}`, JSON.stringify(recsList));
 
     addToast(`Payment recorded, Receipt #${receiptPayload.number} created successfully`, "success");
     setPayingInvoice(null);
@@ -548,11 +582,12 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
   const handleDelete = async (id: string) => {
     const user = auth.currentUser;
     if (!user) return;
+    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
 
-    const invoicePath = `companies/${user.uid}/invoices/${id}`;
+    const invoicePath = `companies/${businessId}/invoices/${id}`;
     let isOffline = false;
     try {
-      await deleteDoc(doc(db, "companies", user.uid, "invoices", id));
+      await deleteDoc(doc(db, "companies", businessId, "invoices", id));
 
       // Log database audit trail
       await logAction(
@@ -570,11 +605,11 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
     }
 
     // Reflect deletion in local cache of invoices
-    const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${user.uid}`);
+    const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${businessId}`);
     if (cachedInvs) {
       const invsList: Invoice[] = JSON.parse(cachedInvs);
       const updatedList = invsList.filter((i) => i.id !== id);
-      localStorage.setItem(`miratech_offline_invoices_${user.uid}`, JSON.stringify(updatedList));
+      localStorage.setItem(`miratech_offline_invoices_${businessId}`, JSON.stringify(updatedList));
       if (isOffline) {
         setInvoices(updatedList);
       }
@@ -589,11 +624,12 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
   const handleBatchStatusUpdate = async (newStatus: "paid" | "unpaid") => {
     const user = auth.currentUser;
     if (!user) return;
+    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
     
     try {
       setSubmitting(true);
       await Promise.all(Array.from(selectedInvoices).map(async (id) => {
-        await updateDoc(doc(db, "companies", user.uid, "invoices", id), {
+        await updateDoc(doc(db, "companies", businessId, "invoices", id), {
           status: newStatus,
         });
       }));
@@ -655,8 +691,9 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
       try {
         const fileId = await uploadToDrive(pdfBlob, fileName);
         const user = auth.currentUser;
-        if (user && previewInvoice.id) {
-          await updateDoc(doc(db, "companies", user.uid, "invoices", previewInvoice.id), {
+        const businessId = currentUser?.companyId || currentUser?.businessId || user?.uid;
+        if (user && businessId && previewInvoice.id) {
+          await updateDoc(doc(db, "companies", businessId, "invoices", previewInvoice.id), {
             driveFileId: fileId
           });
           fetchInvoicesAndCompany();

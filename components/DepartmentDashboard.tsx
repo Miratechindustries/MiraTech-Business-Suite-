@@ -60,6 +60,7 @@ import {
 import Quotations from "./Quotations";
 import Invoices from "./Invoices";
 import Receipts from "./Receipts";
+import Approvals from "./Approvals";
 import Customers from "./Customers";
 import Transactions from "./Transactions";
 import AuditCenter from "./finance/AuditCenter";
@@ -959,7 +960,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
           <Activity className="w-3.5 h-3.5" /> Overview
         </button>
 
-      {(depLower === "crm" || depLower === "finance") && (
+      {(depLower === "sales" || depLower === "crm" || depLower === "finance") && (
         <>
           <button
             onClick={() => setActiveSubTab("quotations")}
@@ -969,7 +970,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
                 : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
             }`}
           >
-            <FileText className="w-3.5 h-3.5" /> Quotations
+            <FileText className="w-3.5 h-3.5 text-blue-500" /> Quotations
           </button>
 
           <button
@@ -980,7 +981,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
                 : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
             }`}
           >
-            <Receipt className="w-3.5 h-3.5" /> Invoices
+            <Receipt className="w-3.5 h-3.5 text-emerald-500" /> Invoices
           </button>
 
           <button
@@ -991,10 +992,21 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
                 : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
             }`}
           >
-            <CheckSquare className="w-3.5 h-3.5" /> Receipts
+            <CheckSquare className="w-3.5 h-3.5 text-indigo-500" /> Receipts
           </button>
         </>
       )}
+
+      <button
+        onClick={() => setActiveSubTab("approvals")}
+        className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg border transition uppercase tracking-wider cursor-pointer ${
+          activeSubTab === "approvals"
+            ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+            : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+        }`}
+      >
+        <ShieldCheck className="w-3.5 h-3.5" /> Approvals
+      </button>
 
         {depLower === "projects" && (
           <>
@@ -1197,6 +1209,13 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
               </p>
             </div>
             <Receipts departmentId={depLower} />
+          </div>
+        )}
+
+        {/* APPROVALS TAB */}
+        {activeSubTab === "approvals" && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs animate-fade-in">
+            <Approvals departmentId={depLower} />
           </div>
         )}
 

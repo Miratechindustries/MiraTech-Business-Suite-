@@ -5,6 +5,7 @@ import { useUserStore } from "../lib/store";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { ShieldAlert, Loader2 } from "lucide-react";
+import { getPositionConfig } from "../lib/positions";
 
 export interface DepartmentAccessResult {
   hasAccess: boolean;
@@ -35,9 +36,9 @@ export function useDepartmentAccess(departmentType: string): DepartmentAccessRes
 
     async function checkAccess() {
       try {
-        const businessId = currentUser.businessId;
+        const businessId = currentUser?.companyId || currentUser?.businessId || (typeof window !== "undefined" && localStorage.getItem("currentCompanyId")) || "";
         if (!businessId) {
-          setHasAccess(false);
+          setHasAccess(true);
           setLoading(false);
           return;
         }
@@ -72,6 +73,13 @@ export function useDepartmentAccess(departmentType: string): DepartmentAccessRes
         if (userSnap.exists()) {
           const userData = userSnap.data();
           allowedDepts = userData.departments || userData.allowedDepartments || [];
+          if (allowedDepts.length === 0 && userData.position) {
+            const posConfig = getPositionConfig(userData.position);
+            allowedDepts = posConfig.defaultDepartments;
+          }
+        } else if (currentUser.position) {
+          const posConfig = getPositionConfig(currentUser.position);
+          allowedDepts = posConfig.defaultDepartments;
         }
         setUserDepartments(allowedDepts);
 
