@@ -242,13 +242,15 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         isMasterAdmin() ||
         request.auth.uid == businessId ||
+        resource.data.ownerId == request.auth.uid ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
           getUserData().businessId == businessId ||
           getUserData().companyId == businessId
         ))
       );
       
-      allow write: if isAuthorizedAdminForCompany(businessId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isAuthorizedAdminForCompany(businessId) || resource.data.ownerId == request.auth.uid;
     }
 
     // =========================================================================
@@ -268,23 +270,23 @@ service cloud.firestore {
       );
       
       allow create: if isSignedIn() && (
-        request.auth.uid == userId && (
-          isMasterAdmin() || (
-            request.resource.data.role == 'STAFF' || request.resource.data.role == 'MASTER_ADMIN'
-          )
-        ) ||
-        isMasterAdmin()
+        isMasterAdmin() ||
+        (request.auth.uid == userId && (request.resource.data.role == 'STAFF' || isMiratechEmail()))
       );
       
       allow update: if isSignedIn() && (
-        request.auth.uid == userId && (
-          isMasterAdmin() || (
+        isMasterAdmin() ||
+        (request.auth.uid == userId && (
+          (
             (!request.resource.data.keys().hasAny(['role']) || request.resource.data.role == resource.data.role) &&
             (!request.resource.data.keys().hasAny(['businessId']) || request.resource.data.businessId == resource.data.businessId) &&
             (!request.resource.data.keys().hasAny(['companyId']) || request.resource.data.companyId == resource.data.companyId)
+          ) || (
+            request.resource.data.role == 'BUSINESS_ADMIN' &&
+            request.resource.data.keys().hasAny(['businessId']) &&
+            getAfter(/databases/$(database)/documents/businesses/$(request.resource.data.businessId)).data.ownerId == request.auth.uid
           )
-        ) || 
-        isMasterAdmin()
+        ))
       );
       
       allow delete: if isSignedIn() && isMasterAdmin();
