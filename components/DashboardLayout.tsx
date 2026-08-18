@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { User } from "firebase/auth";
 import { googleSignIn, logout, auth, initAuth, emailSignIn, emailSignUp, handleFirestoreError, OperationType } from "../lib/firebase";
-import { getDoc, getDocs, doc, collection, query, where, orderBy, limit, onSnapshot, updateDoc, deleteDoc, addDoc, setDoc } from "firebase/firestore";
+import { getDoc, doc, collection, query, where, orderBy, limit, onSnapshot, updateDoc, deleteDoc, addDoc, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
 import { 
@@ -43,9 +43,7 @@ import {
   ShoppingCart,
   FolderKanban,
   Layers,
-  ArrowLeft,
-  Crown,
-  Sparkles
+  ArrowLeft
 } from "lucide-react";
 
 // Subcomponents
@@ -55,8 +53,6 @@ import Quotations from "./Quotations";
 import Invoices from "./Invoices";
 import Receipts from "./Receipts";
 import CompanyProfile from "./CompanyProfile";
-import CompanyAdminDashboard from "./CompanyAdminDashboard";
-import CompanyOnboarding from "./CompanyOnboarding";
 import ToastContainer from "./ToastContainer";
 import Inventory from "./Inventory";
 import Customers from "./Customers";
@@ -162,12 +158,10 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   const { setCurrentUser, currentUser } = useUserStore();
 
   const isMasterAdmin = currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' || user?.email?.toLowerCase() === 'miratechindustries@gmail.com';
-  const isCompanyAdmin = currentUser?.role === 'BUSINESS_ADMIN' || currentUser?.role === 'COMPANY_ADMIN' || currentUser?.role === 'COMPANY_OWNER' || currentUser?.role === 'MANAGING_DIRECTOR' || isMasterAdmin;
 
   const getEnabledTabs = () => {
     const baseTabs = [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-      ...(isCompanyAdmin ? [{ id: "company_admin", label: "Company Admin", icon: Crown }] : []),
       { id: "inventory", label: "Inventory", icon: Box },
       { id: "pos", label: "POS System", icon: ShoppingCart },
       { id: "clients", label: "Clients", icon: Users },
@@ -484,119 +478,27 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
             const isGoogleUser = currentUser.providerData?.some(p => p.providerId === 'google.com') || false;
             
-            const cleanEmail = (currentUser.email || '').toLowerCase().trim();
-            const isMaster = cleanEmail === 'miratechindustries@gmail.com';
-
             if (!userDoc.exists()) {
-              // Check if user was pre-authorized by a company administrator via Google SSO or email
-              let invitedCompanyId = '';
-              let invitedCompanyName = '';
-              let invitedRole = isMaster ? 'MASTER_ADMIN' : 'STAFF';
-              let invitedPosition = 'Operations Officer';
-              let invitedDepartments = ['sales'];
-              let canApproveQuotations = false;
-              let canApproveInvoices = false;
-              let canOverrideHR = false;
-              let canFinalizeDocuments = false;
-
-              try {
-                const invQuery = query(
-                  collection(db, 'user_invitations'),
-                  where('email', '==', cleanEmail),
-                  where('status', '==', 'pending')
-                );
-                const invSnap = await getDocs(invQuery);
-                if (!invSnap.empty) {
-                  const invDoc = invSnap.docs[0];
-                  const invData = invDoc.data();
-                  invitedCompanyId = invData.companyId || '';
-                  invitedCompanyName = invData.companyName || '';
-                  invitedRole = invData.role || (isMaster ? 'MASTER_ADMIN' : 'STAFF');
-                  invitedPosition = invData.position || 'Operations Officer';
-                  invitedDepartments = invData.departments || ['sales'];
-                  canApproveQuotations = !!invData.canApproveQuotations;
-                  canApproveInvoices = !!invData.canApproveInvoices;
-                  canOverrideHR = !!invData.canOverrideHR;
-                  canFinalizeDocuments = !!invData.canFinalizeDocuments;
-
-                  // Mark invitation accepted
-                  await updateDoc(doc(db, 'user_invitations', invDoc.id), {
-                    status: 'accepted',
-                    acceptedByUid: currentUser.uid,
-                    acceptedAt: new Date().toISOString()
-                  });
-                }
-              } catch (invErr) {
-                console.warn("Could not check pending user invitations:", invErr);
-              }
-
+              // If user profile is not saved in Firestore at all (meaning no company is assigned either),
+              // we auto-register them as a STAFF user with empty companyId so they appear in User Management roster.
+              const isMaster = currentUser.email?.toLowerCase() === 'miratechindustries@gmail.com';
               const newUserPayload = {
-                id: currentUser.uid,
                 email: currentUser.email || '',
-                name: currentUser.displayName || cleanEmail.split('@')[0],
-                displayName: currentUser.displayName || cleanEmail.split('@')[0],
-                role: invitedRole,
-                position: invitedPosition,
-                companyId: invitedCompanyId,
-                businessId: invitedCompanyId,
-                companyName: invitedCompanyName,
-                departments: invitedDepartments,
-                canApproveQuotations,
-                canApproveInvoices,
-                canOverrideHR,
-                canFinalizeDocuments,
-                approvalRights: canApproveQuotations || canApproveInvoices || canOverrideHR || canFinalizeDocuments,
+                role: isMaster ? 'MASTER_ADMIN' : 'STAFF',
+                companyId: '',
+                businessId: '',
                 isGoogleUser,
                 status: 'ACTIVE',
                 createdAt: new Date().toISOString()
               };
               await setDoc(doc(db, 'users', currentUser.uid), newUserPayload);
-              userData = newUserPayload;
+              userData = { id: currentUser.uid, ...newUserPayload };
               console.log("DEBUG: Auto-registered user in Firestore:", userData);
             } else {
               userData = { id: userDoc.id, ...userDoc.data() };
               // Support legacy businessId mapping
               if (!userData.companyId && userData.businessId) {
                 userData.companyId = userData.businessId;
-              }
-
-              // If user was previously registered without a company, check if an admin has recently pre-authorized them
-              if (!userData.companyId && cleanEmail) {
-                try {
-                  const invQuery = query(
-                    collection(db, 'user_invitations'),
-                    where('email', '==', cleanEmail),
-                    where('status', '==', 'pending')
-                  );
-                  const invSnap = await getDocs(invQuery);
-                  if (!invSnap.empty) {
-                    const invDoc = invSnap.docs[0];
-                    const invData = invDoc.data();
-                    const updates = {
-                      companyId: invData.companyId || '',
-                      businessId: invData.companyId || '',
-                      companyName: invData.companyName || '',
-                      role: invData.role || userData.role,
-                      position: invData.position || userData.position || 'Operations Officer',
-                      departments: invData.departments || userData.departments || ['sales'],
-                      canApproveQuotations: invData.canApproveQuotations ?? userData.canApproveQuotations ?? false,
-                      canApproveInvoices: invData.canApproveInvoices ?? userData.canApproveInvoices ?? false,
-                      canOverrideHR: invData.canOverrideHR ?? userData.canOverrideHR ?? false,
-                      canFinalizeDocuments: invData.canFinalizeDocuments ?? userData.canFinalizeDocuments ?? false,
-                      approvalRights: !!(invData.canApproveQuotations || invData.canApproveInvoices || invData.canOverrideHR || invData.canFinalizeDocuments)
-                    };
-                    await updateDoc(doc(db, 'users', currentUser.uid), updates);
-                    userData = { ...userData, ...updates };
-
-                    await updateDoc(doc(db, 'user_invitations', invDoc.id), {
-                      status: 'accepted',
-                      acceptedByUid: currentUser.uid,
-                      acceptedAt: new Date().toISOString()
-                    });
-                  }
-                } catch (invErr) {
-                  console.warn("Could not check pending user invitations for existing user:", invErr);
-                }
               }
             }
             
@@ -925,16 +827,6 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             </svg>
             Continue with Google
           </button>
-
-          <div className="pt-2 border-t border-slate-100 text-center">
-            <a
-              href="/register"
-              className="inline-flex items-center justify-center gap-1.5 text-xs font-extrabold text-indigo-600 hover:text-indigo-800 transition py-1"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              Register New Company & Start 14-Day Free Trial →
-            </a>
-          </div>
         </div>
       </div>
     );
@@ -1266,30 +1158,6 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
               <div className={company?.lockedFeatures?.includes(activeTab) && !isMasterAdmin ? "blur-md pointer-events-none select-none transition-all duration-300" : ""}>
                 {/* Render Active View Tab */}
-                {company?.isOnboardingCompleted === false && activeTab !== "company_admin" && isCompanyAdmin && (
-                  <div className="mb-4 p-4 bg-gradient-to-r from-indigo-900 to-indigo-800 text-white rounded-2xl shadow-lg border border-indigo-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <span className="p-2.5 bg-white/10 text-amber-400 rounded-xl">
-                        <Sparkles className="w-5 h-5" />
-                      </span>
-                      <div>
-                        <h4 className="text-xs font-black tracking-tight">Complete Your Company Setup Wizard</h4>
-                        <p className="text-[11px] text-indigo-200">
-                          Configure your legal letterhead, corporate logo, assign team emails & roles, and review your 14-day trial.
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setActiveTab("company_admin")}
-                      className="px-4 py-2 bg-white text-indigo-950 hover:bg-indigo-50 font-extrabold text-xs rounded-xl shadow-xs transition cursor-pointer whitespace-nowrap"
-                    >
-                      Open Onboarding Setup →
-                    </button>
-                  </div>
-                )}
-
-                {activeTab === "company_admin" && <CompanyAdminDashboard />}
-
                 {activeTab === "dashboard" && (
                   <DepartmentsHub
                     company={company}

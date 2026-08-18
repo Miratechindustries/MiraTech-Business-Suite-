@@ -1,6 +1,6 @@
 {
   "name": "MiraTech Executive Report & Ledger Engine",
-  "description": "Multi-tenant enterprise suite with self-service company onboarding, role-based user management, 14-day free trials, multi-currency conversion with SZL (E) and ZAR (R) support, custom letterheads & branding, tiered plans ($200/$700/$1500), and Company Admin Dashboard.",
+  "description": "Full-stack ledger, invoicing, quotation, and receipt suite with corporate letterhead A4 PDF/CSV exports, and Google Sheets/Drive synchronization.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -133,12 +133,11 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
       comments: workflowComments || `${actionName} performed by ${currentUser?.email || "User"}.`
     };
 
-    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
     const updatedHistory = [...(previewQuotation.approvalHistory || []), newEvent];
 
     try {
       setSubmitting(true);
-      await updateDoc(doc(db, "companies", businessId, "quotations", previewQuotation.id), {
+      await updateDoc(doc(db, "companies", user.uid, "quotations", previewQuotation.id), {
         approvalStatus: nextStatus,
         approvalHistory: updatedHistory,
         approvalComments: workflowComments || ""
@@ -166,8 +165,8 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
         notificationType = "warning";
       }
 
-      await addDoc(collection(db, "companies", businessId, "notifications"), {
-        businessId: businessId,
+      await addDoc(collection(db, "companies", user.uid, "notifications"), {
+        businessId: user.uid,
         title: notificationTitle,
         message: notificationMsg,
         read: false,
@@ -347,15 +346,16 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
     } catch (err) {
       if (isOfflineError(err)) {
         console.warn("[Quotations Offline Fallback] Loading data from local cache.");
-        const cachedCompany = localStorage.getItem(`miratech_offline_company_${businessId}`);
+        const cachedCompany = localStorage.getItem(`miratech_offline_company_${user.uid}`);
         if (cachedCompany) setCompany(JSON.parse(cachedCompany));
-        const cachedQuots = localStorage.getItem(`miratech_offline_quotations_${businessId}`);
+        const cachedQuots = localStorage.getItem(`miratech_offline_quotations_${user.uid}`);
         if (cachedQuots) {
           const rawList = JSON.parse(cachedQuots) as Quotation[];
           setQuotations(departmentId ? rawList.filter(q => q.department === departmentId) : rawList);
         } else {
           setQuotations([]);
         }
+        const user = auth.currentUser;
         const cacheKey = user ? `miratech_customers_${user.uid}` : "miratech_customers_guest";
         const cachedClients = localStorage.getItem(cacheKey);
         if (cachedClients) setClients(JSON.parse(cachedClients));
@@ -428,96 +428,65 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
   const handleSubmit = async (e: React.FormEvent, isDraft = false) => {
     if (e) e.preventDefault();
     const user = auth.currentUser;
-    if (!user) {
-      addToast("Authentication required to draft quotation.", "error");
-      return;
-    }
+    if (!user) return;
 
     setSubmitting(true);
     const total = calculateTotal();
-    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
-
-    const finalNumber = number.trim() || generateNextQuotationNumber();
-    const finalClientName = clientName.trim() || (isDraft ? "Draft Client" : "");
-    const finalDate = date || new Date().toISOString().split("T")[0];
-    const finalValidUntil = validUntil || new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
-
-    if (!isDraft) {
-      if (!finalClientName) {
-        addToast("Please provide a client name before submitting for approval.", "error");
-        setSubmitting(false);
-        return;
-      }
-      if (items.length === 0 || !items.some((it) => it.description && it.description.trim())) {
-        addToast("Please enter at least one line item with a description.", "error");
-        setSubmitting(false);
-        return;
-      }
-    }
 
     const payload: Quotation = {
       ownerId: user.uid,
-      number: finalNumber,
-      clientName: finalClientName || "Draft Client",
+      number,
+      clientName,
       clientEmail,
       clientAddress,
-      date: finalDate,
-      validUntil: finalValidUntil,
-      items: items.length > 0 ? items : [{ description: "Draft Item", quantity: 1, price: 0 }],
+      date,
+      validUntil,
+      items,
       total,
       status: "pending",
       approvalStatus: isDraft ? "draft" : "pending_admin",
       approvalHistory: [
         {
           type: isDraft ? "draft_saved" : "submitted",
-          user: currentUser?.displayName || currentUser?.email || "Sales Staff",
-          userId: user.uid,
+          user: currentUser?.email || "Unknown Staff",
+          userId: currentUser?.uid || "unknown",
           role: currentUser?.role || "STAFF",
-          position: currentUser?.position || "Sales Staff",
           date: new Date().toISOString().split("T")[0],
           time: new Date().toLocaleTimeString(),
           comments: isDraft ? "Draft quotation saved." : "Quotation submitted for administrative review."
         }
       ],
-      ...(departmentId ? { department: departmentId } : { department: "sales" }),
+      ...(departmentId ? { department: departmentId } : {}),
       ...(projectId ? { projectId } : {}),
     };
 
-    const quotsPath = `companies/${businessId}/quotations`;
+    const quotsPath = `companies/${user.uid}/quotations`;
     try {
       let newId = "offline-" + Date.now();
       try {
-        const colRef = collection(db, "companies", businessId, "quotations");
+        const colRef = collection(db, "companies", user.uid, "quotations");
         const addedDoc = await addDoc(colRef, payload);
         newId = addedDoc.id;
 
         // Log database audit trail
-        try {
-          await logAction(
-            "Quotation Drafted",
-            `Drafted quotation #${payload.number} for client '${payload.clientName}'. Total value: E${payload.total} (${isDraft ? 'Draft' : 'Submitted'})`,
-            user.uid,
-            payload.total
-          );
-        } catch (logErr) {
-          console.warn("Audit log warning:", logErr);
-        }
+        await logAction(
+          "Quotation Drafted",
+          `Drafted quotation #${payload.number} for client '${payload.clientName}'. Total value: E${payload.total} (${isDraft ? 'Draft' : 'Submitted'})`,
+          user.uid,
+          payload.total
+        );
 
         // Submit notification and email alerts if not draft
         if (!isDraft) {
-          try {
-            await notifyManagersForApproval({
-              businessId: businessId,
-              documentType: "quotation",
-              documentNumber: payload.number,
-              creatorName: currentUser?.displayName || currentUser?.email || "Sales Staff",
-              department: payload.department || "sales",
-              totalAmount: payload.total,
-              companyName: company?.name || "MIRA SUITE"
-            });
-          } catch (notifErr) {
-            console.warn("Approval notification warning:", notifErr);
-          }
+          await notifyManagersForApproval({
+            businessId: user.uid,
+            documentType: "quotation",
+            documentNumber: payload.number,
+            creatorName: currentUser?.displayName || currentUser?.email || "Sales Staff",
+            department: payload.department || "sales",
+            totalAmount: payload.total,
+            companyName: company?.name || "MIRA SUITE"
+          });
         }
       } catch (err) {
         if (!isOfflineError(err)) throw err;
@@ -525,10 +494,10 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
       }
 
       // Local storage cache update
-      const cachedQuots = localStorage.getItem(`miratech_offline_quotations_${businessId}`);
+      const cachedQuots = localStorage.getItem(`miratech_offline_quotations_${user.uid}`);
       const quotsList: Quotation[] = cachedQuots ? JSON.parse(cachedQuots) : [];
       quotsList.unshift({ id: newId, ...payload });
-      localStorage.setItem(`miratech_offline_quotations_${businessId}`, JSON.stringify(quotsList));
+      localStorage.setItem(`miratech_offline_quotations_${user.uid}`, JSON.stringify(quotsList));
 
       setIsOpen(false);
       // Reset State
@@ -553,13 +522,12 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
     const user = auth.currentUser;
     if (!user) return;
 
-    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
     const targetQuot = quotations.find((element) => element.id === id);
-    const quotPath = `companies/${businessId}/quotations/${id}`;
+    const quotPath = `companies/${user.uid}/quotations/${id}`;
     let isOffline = false;
 
     try {
-      await updateDoc(doc(db, "companies", businessId, "quotations", id), { status: nextStatus });
+      await updateDoc(doc(db, "companies", user.uid, "quotations", id), { status: nextStatus });
 
       if (targetQuot && targetQuot.status !== "accepted" && nextStatus === "accepted") {
         for (const item of targetQuot.items) {
@@ -715,12 +683,11 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
   const handleBatchStatusUpdate = async (newStatus: "pending" | "accepted" | "declined") => {
     const user = auth.currentUser;
     if (!user) return;
-    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
     
     try {
       setSubmitting(true);
       await Promise.all(Array.from(selectedQuotations).map(async (id) => {
-        await updateDoc(doc(db, "companies", businessId, "quotations", id), {
+        await updateDoc(doc(db, "companies", user.uid, "quotations", id), {
           status: newStatus,
         });
       }));
@@ -738,12 +705,11 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
   const handleDelete = async (id: string) => {
     const user = auth.currentUser;
     if (!user) return;
-    const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
 
-    const quotPath = `companies/${businessId}/quotations/${id}`;
+    const quotPath = `companies/${user.uid}/quotations/${id}`;
     let isOffline = false;
     try {
-      await deleteDoc(doc(db, "companies", businessId, "quotations", id));
+      await deleteDoc(doc(db, "companies", user.uid, "quotations", id));
 
       // Log database audit trail
       await logAction(
@@ -761,11 +727,11 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
     }
 
     // Reflect deletion in local cache of quotations
-    const cachedQuots = localStorage.getItem(`miratech_offline_quotations_${businessId}`);
+    const cachedQuots = localStorage.getItem(`miratech_offline_quotations_${user.uid}`);
     if (cachedQuots) {
       const quotsList: Quotation[] = JSON.parse(cachedQuots);
       const updatedList = quotsList.filter((q) => q.id !== id);
-      localStorage.setItem(`miratech_offline_quotations_${businessId}`, JSON.stringify(updatedList));
+      localStorage.setItem(`miratech_offline_quotations_${user.uid}`, JSON.stringify(updatedList));
       if (isOffline) {
         setQuotations(updatedList);
       }
@@ -801,9 +767,8 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
       try {
         const fileId = await uploadToDrive(pdfBlob, fileName);
         const user = auth.currentUser;
-        const businessId = currentUser?.companyId || currentUser?.businessId || user?.uid;
-        if (user && businessId && previewQuotation.id) {
-          await updateDoc(doc(db, "companies", businessId, "quotations", previewQuotation.id), {
+        if (user && previewQuotation.id) {
+          await updateDoc(doc(db, "companies", user.uid, "quotations", previewQuotation.id), {
             driveFileId: fileId
           });
           fetchQuotationsAndCompany();
