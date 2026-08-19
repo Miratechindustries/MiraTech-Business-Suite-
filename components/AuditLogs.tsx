@@ -60,11 +60,7 @@ export default function AuditLogs({ userLogsOnly = false }: AuditLogsProps = {})
   }, [currentUser]);
 
   // Refetch logs when businessId settles or when roles change
-  useEffect(() => {
-    loadLogs();
-  }, [businessId]);
-
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     setRefreshing(true);
     setError(null);
     try {
@@ -107,7 +103,11 @@ export default function AuditLogs({ userLogsOnly = false }: AuditLogsProps = {})
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [businessId, isMasterAdmin]);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
 
   const handleRefresh = () => {
     loadLogs();

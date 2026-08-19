@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Search, Plus, Trash2, Edit, X, ArrowUpRight, ArrowDownLeft, FileSpreadsheet, Download, Calendar, Settings, DollarSign, Wallet2, CheckCircle, AlertCircle } from "lucide-react";
 import { auth, db, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
 import { collection, doc, addDoc, getDocs, deleteDoc, getDoc, query, setDoc } from "firebase/firestore";
@@ -72,7 +72,7 @@ export default function Transactions() {
     loadBusiness();
   }, [currentUser]);
 
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
     setErrorSignal(null);
@@ -138,13 +138,13 @@ export default function Transactions() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [businessId]);
 
   useEffect(() => {
     if (businessId) {
       loadTransactions();
     }
-  }, [businessId]);
+  }, [loadTransactions, businessId]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

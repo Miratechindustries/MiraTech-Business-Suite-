@@ -9,7 +9,6 @@ import firebaseConfig from '../firebase-applet-config.json';
 import { Role } from '../lib/types';
 import { logAction } from '../lib/audit';
 import { SUBSCRIPTION_PLANS } from '../lib/subscriptions';
-import { STAFF_POSITIONS, getPositionConfig } from '../lib/positions';
 import { 
   Users, 
   Plus, 
@@ -41,32 +40,6 @@ export default function UserManagement() {
   const [editCompanyId, setEditCompanyId] = useState('');
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const [editDepartments, setEditDepartments] = useState<string[]>([]);
-  const [position, setPosition] = useState<string>('custom');
-  const [editPosition, setEditPosition] = useState<string>('custom');
-
-  const handlePositionChange = (posId: string) => {
-    setPosition(posId);
-    const config = getPositionConfig(posId);
-    if (config.id !== 'custom') {
-      setSelectedDepartments(config.defaultDepartments);
-      setCanApproveQuotations(config.canApproveQuotations);
-      setCanApproveInvoices(config.canApproveInvoices);
-      setApprovalRights(config.approvalRights);
-      setCanFinalizeDocuments(config.canFinalizeDocuments);
-    }
-  };
-
-  const handleEditPositionChange = (posId: string) => {
-    setEditPosition(posId);
-    const config = getPositionConfig(posId);
-    if (config.id !== 'custom') {
-      setEditDepartments(config.defaultDepartments);
-      setEditCanApproveQuotations(config.canApproveQuotations);
-      setEditCanApproveInvoices(config.canApproveInvoices);
-      setEditApprovalRights(config.approvalRights);
-      setEditCanFinalizeDocuments(config.canFinalizeDocuments);
-    }
-  };
 
   // Approval Permissions creation states
   const [canApproveQuotations, setCanApproveQuotations] = useState(false);
@@ -134,7 +107,6 @@ export default function UserManagement() {
   const startEdit = (user: any) => {
     setEditingUserId(user.id);
     setEditRole(user.role || 'STAFF');
-    setEditPosition(user.position || 'custom');
     setEditCompanyId(user.companyId || '');
     setEditDepartments(user.departments || []);
     setEditCanApproveQuotations(user.canApproveQuotations || false);
@@ -151,10 +123,8 @@ export default function UserManagement() {
 
   const saveEdit = async (userId: string) => {
     try {
-      const posConfig = getPositionConfig(editPosition);
       await updateDoc(doc(db, 'users', userId), {
         role: editRole,
-        position: posConfig.title,
         companyId: editCompanyId,
         businessId: editCompanyId, // Supporting legacy
         departments: editRole === 'STAFF' ? editDepartments : [],
@@ -247,11 +217,9 @@ export default function UserManagement() {
       const userUid = await createAuthUserSecondary(email, password);
 
       // 3. User Document Creation using setDoc with Auth UID
-      const posConfig = getPositionConfig(position);
       const userPayload = {
         email,
         role,
-        position: posConfig.title,
         companyId: selectedCompanyId,
         businessId: selectedCompanyId,
         status: 'ACTIVE',
@@ -421,19 +389,6 @@ export default function UserManagement() {
                 className="w-full text-xs font-mono font-medium border border-slate-200 p-2 rounded-lg bg-slate-50 focus:bg-white focus:outline-hidden transition text-slate-700" 
                 required
               />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Staff Position / Designation</label>
-              <select 
-                value={position} 
-                onChange={(e) => handlePositionChange(e.target.value)} 
-                className="w-full text-xs font-bold border border-slate-200 p-2 rounded-lg bg-slate-50 text-indigo-700"
-              >
-                {STAFF_POSITIONS.map(p => (
-                  <option key={p.id} value={p.id}>{p.title}</option>
-                ))}
-              </select>
             </div>
 
             <div>
@@ -752,19 +707,6 @@ export default function UserManagement() {
 
               <form onSubmit={(e) => { e.preventDefault(); saveEdit(editingUserId); }} className="flex flex-col flex-1 overflow-hidden">
                 <div className="p-4 sm:p-6 space-y-3 sm:space-y-4 overflow-y-auto flex-1 text-xs">
-                  <div>
-                    <label className="block font-bold text-slate-600 mb-1">Staff Position / Designation</label>
-                    <select 
-                      value={editPosition} 
-                      onChange={(e) => handleEditPositionChange(e.target.value)}
-                      className="text-xs font-bold border border-slate-250 rounded-lg p-2 w-full bg-slate-50/30 text-indigo-700"
-                    >
-                      {STAFF_POSITIONS.map(p => (
-                        <option key={p.id} value={p.id}>{p.title}</option>
-                      ))}
-                    </select>
-                  </div>
-
                   <div>
                     <label className="block font-bold text-slate-600 mb-1">User Role Status</label>
                     <select 

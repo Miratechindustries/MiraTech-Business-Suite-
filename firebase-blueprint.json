@@ -1,23 +1,5 @@
 {
   "entities": {
-    "Business": {
-      "title": "Business",
-      "description": "Tenant business profile.",
-      "type": "object",
-      "properties": {
-        "ownerId": { "type": "string" },
-        "name": { "type": "string" },
-        "address": { "type": "string" },
-        "phone": { "type": "string" },
-        "email": { "type": "string" },
-        "taxId": { "type": "string", "description": "Tax Identification Number / EIN" },
-        "registrationNumber": { "type": "string", "description": "Official company registration number" },
-        "subscriptionPlan": { "type": "string", "enum": ["starter", "pro", "enterprise"] },
-        "status": { "type": "string", "enum": ["pending_payment", "active", "suspended"] },
-        "createdAt": { "type": "string" }
-      },
-      "required": ["ownerId", "name", "address", "phone", "email", "taxId", "registrationNumber", "subscriptionPlan", "status", "createdAt"]
-    },
     "Company": {
       "title": "Company Settings",
       "description": "Information about the registered company including its base64 letterhead logo.",
@@ -203,10 +185,6 @@
     }
   },
   "firestore": {
-    "/businesses/{businessId}": {
-      "schema": "Business",
-      "description": "Registered businesses directory."
-    },
     "/companies/{companyId}": {
       "schema": "Company",
       "description": "Company registration directory."

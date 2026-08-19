@@ -49,6 +49,8 @@ export default function ProjectDetailsModal({
   const [editStatus, setEditStatus] = useState("planning");
   const [editPriority, setEditPriority] = useState("medium");
 
+  const matchedClient = customers.find(c => c.id === project?.clientId);
+
   useEffect(() => {
     if (!project || !companyId) return;
     setEditName(project.name || "");
@@ -100,11 +102,9 @@ export default function ProjectDetailsModal({
       }
     }
     fetchProjectDocs();
-  }, [project, companyId]);
+  }, [project, companyId, matchedClient?.name]);
 
   if (!isOpen || !project) return null;
-
-  const matchedClient = customers.find(c => c.id === project.clientId);
 
   // Financial calculations
   const totalQuoted = quotations.reduce((sum, q) => sum + (Number(q.total) || 0), 0);

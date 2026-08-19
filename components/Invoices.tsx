@@ -11,7 +11,6 @@ import jsPDF from "jspdf";
 import safeHtml2Canvas from "../lib/safeHtml2canvas";
 import * as XLSX from "xlsx";
 import LoadingSkeleton from "./LoadingSkeleton";
-import { notifyManagersForApproval } from "../lib/approvalNotifications";
 
 interface Item {
   description: string;
@@ -264,6 +263,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
 
     setLoading(true);
     const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
+    if (!businessId) return;
     const invoicesPath = `companies/${businessId}/invoices`;
     try {
       // Fetch settings
@@ -432,16 +432,15 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
           payload.total
         );
 
-        // Submit notification and email alerts if not a draft
+        // Submit notification if not a draft
         if (!isDraft) {
-          await notifyManagersForApproval({
+          await addDoc(collection(db, "companies", user.uid, "notifications"), {
             businessId: user.uid,
-            documentType: "invoice",
-            documentNumber: payload.number,
-            creatorName: currentUser?.displayName || currentUser?.email || "Billing Staff",
-            department: payload.department || "finance",
-            totalAmount: payload.total,
-            companyName: company?.name || "MIRA SUITE"
+            title: "New Invoice Submitted",
+            message: `Invoice #${payload.number} was submitted by Staff (${currentUser?.email}) and requires review.`,
+            read: false,
+            createdAt: new Date().toISOString(),
+            type: "info"
           });
         }
       } catch (err) {

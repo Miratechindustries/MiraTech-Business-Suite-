@@ -10,7 +10,6 @@ import { FileText, Plus, Search, Trash, Edit, Download, Loader2, Eye, X, Check, 
 import jsPDF from "jspdf";
 import safeHtml2Canvas from "../lib/safeHtml2canvas";
 import LoadingSkeleton from "./LoadingSkeleton";
-import { notifyManagersForApproval } from "../lib/approvalNotifications";
 
 interface Item {
   description: string;
@@ -273,6 +272,7 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
 
     setLoading(true);
     const businessId = currentUser?.companyId || currentUser?.businessId || user.uid;
+    if (!businessId) return;
     const quotsPath = `companies/${businessId}/quotations`;
     try {
       // Fetch settings
@@ -476,16 +476,15 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
           payload.total
         );
 
-        // Submit notification and email alerts if not draft
+        // Submit notification if not draft
         if (!isDraft) {
-          await notifyManagersForApproval({
+          await addDoc(collection(db, "companies", user.uid, "notifications"), {
             businessId: user.uid,
-            documentType: "quotation",
-            documentNumber: payload.number,
-            creatorName: currentUser?.displayName || currentUser?.email || "Sales Staff",
-            department: payload.department || "sales",
-            totalAmount: payload.total,
-            companyName: company?.name || "MIRA SUITE"
+            title: "New Quotation Submitted",
+            message: `Quotation #${payload.number} was submitted by Staff (${currentUser?.email}) and requires review.`,
+            read: false,
+            createdAt: new Date().toISOString(),
+            type: "info"
           });
         }
       } catch (err) {

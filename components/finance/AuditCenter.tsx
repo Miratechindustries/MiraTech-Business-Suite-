@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { 
   ShieldCheck, 
   ShieldAlert, 
@@ -199,7 +199,7 @@ export default function AuditCenter() {
   // Load accounting data whenever targets change
   useEffect(() => {
     fetchAccountingLogs();
-  }, [businessId, selectedTenantId, isSuperAdminView]);
+  }, [fetchAccountingLogs]);
 
   const syncDatabaseTransactionsToLedger = async (targetScope: string) => {
     try {
@@ -326,7 +326,7 @@ export default function AuditCenter() {
     }
   };
 
-  const fetchAccountingLogs = async () => {
+  const fetchAccountingLogs = useCallback(async () => {
     // If not a master admin and we do not have a company/business ID scope set, avoid sending un-scoped requests
     if (!isMasterAdmin && !businessId) {
       console.log("No business ID scope set yet for standard user, skipping fetch.");
@@ -414,7 +414,7 @@ export default function AuditCenter() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isMasterAdmin, businessId, isSuperAdminView, selectedTenantId, tenants, addToast]);
 
   const handleSaveBalanceForward = async (e: React.FormEvent) => {
     e.preventDefault();

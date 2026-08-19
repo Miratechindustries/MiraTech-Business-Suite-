@@ -68,7 +68,6 @@ export default function POSHub({ companyId, userId }: { companyId: string, userI
 
   useEffect(() => {
     const fetchCompanyData = async () => {
-        if (!companyId) return;
         const compDoc = await getDocs(query(collection(db, "companies"), where("ownerId", "==", companyId)));
         if (!compDoc.empty) {
             setCompanyName(compDoc.docs[0].data().name || 'My Company');
@@ -91,7 +90,6 @@ export default function POSHub({ companyId, userId }: { companyId: string, userI
 
     // Check if user has an active shift
     const checkShift = async () => {
-        if (!companyId) return;
         const shiftsRef = collection(db, "companies", companyId, "shifts");
         const q = query(shiftsRef, where("userId", "==", userId), where("endTime", "==", null));
         const snap = await getDocs(q);

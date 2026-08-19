@@ -20,7 +20,9 @@ service cloud.firestore {
     }
 
     function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) ? 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data : 
+        {'role': 'STAFF', 'businessId': request.auth.uid, 'companyId': request.auth.uid};
     }
     
     function isMiratechEmail() {
@@ -171,18 +173,6 @@ service cloud.firestore {
       allow write: if isAuthorizedAdminForCompany(companyId);
       
       // Nested Approval-Driven Collections:
-      match /quotations/{quotationId} {
-        allow read, create: if isMemberOfCompany(companyId);
-        allow update: if canUpdateDocument(companyId, resource.data, request.resource.data);
-        allow delete: if canDeleteDocument(companyId, resource.data);
-      }
-
-      match /invoices/{invoiceId} {
-        allow read, create: if isMemberOfCompany(companyId);
-        allow update: if canUpdateDocument(companyId, resource.data, request.resource.data);
-        allow delete: if canDeleteDocument(companyId, resource.data);
-      }
-
       match /support_tickets/{ticketId} {
         allow read, write: if isMemberOfCompany(companyId);
       }
@@ -242,15 +232,13 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         isMasterAdmin() ||
         request.auth.uid == businessId ||
-        resource.data.ownerId == request.auth.uid ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
           getUserData().businessId == businessId ||
           getUserData().companyId == businessId
         ))
       );
       
-      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isAuthorizedAdminForCompany(businessId) || resource.data.ownerId == request.auth.uid;
+      allow write: if isAuthorizedAdminForCompany(businessId);
     }
 
     // =========================================================================
@@ -270,23 +258,23 @@ service cloud.firestore {
       );
       
       allow create: if isSignedIn() && (
-        isMasterAdmin() ||
-        (request.auth.uid == userId && (request.resource.data.role == 'STAFF' || isMiratechEmail()))
+        request.auth.uid == userId && (
+          isMasterAdmin() || (
+            request.resource.data.role == 'STAFF' || request.resource.data.role == 'MASTER_ADMIN'
+          )
+        ) ||
+        isMasterAdmin()
       );
       
       allow update: if isSignedIn() && (
-        isMasterAdmin() ||
-        (request.auth.uid == userId && (
-          (
+        request.auth.uid == userId && (
+          isMasterAdmin() || (
             (!request.resource.data.keys().hasAny(['role']) || request.resource.data.role == resource.data.role) &&
             (!request.resource.data.keys().hasAny(['businessId']) || request.resource.data.businessId == resource.data.businessId) &&
             (!request.resource.data.keys().hasAny(['companyId']) || request.resource.data.companyId == resource.data.companyId)
-          ) || (
-            request.resource.data.role == 'BUSINESS_ADMIN' &&
-            request.resource.data.keys().hasAny(['businessId']) &&
-            getAfter(/databases/$(database)/documents/businesses/$(request.resource.data.businessId)).data.ownerId == request.auth.uid
           )
-        ))
+        ) || 
+        isMasterAdmin()
       );
       
       allow delete: if isSignedIn() && isMasterAdmin();

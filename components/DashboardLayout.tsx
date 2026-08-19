@@ -1174,7 +1174,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                 {activeTab === "reports" && <ProtectedReports onBack={() => setActiveTab("dashboard")} />}
                 {activeTab === "support" && <ProtectedSupport onBack={() => setActiveTab("dashboard")} />}
                 {activeTab === "procurement" && <ProtectedProcurement onBack={() => setActiveTab("dashboard")} />}
-                {activeTab === "pos" && <POSHub companyId={currentUser?.companyId || currentUser?.businessId || user.uid} userId={user.uid} />}
+                {activeTab === "pos" && <POSHub companyId={company?.ownerId || user.uid} />}
                 {activeTab === "marketing" && <ProtectedMarketing onBack={() => setActiveTab("dashboard")} />}
                 {activeTab === "audit" && <ProtectedAudit onBack={() => setActiveTab("dashboard")} />}
                 {activeTab === "executive" && <ProtectedExecutive onBack={() => setActiveTab("dashboard")} />}
