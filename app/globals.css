@@ -7,7 +7,7 @@
 
 @layer base {
   body {
-    @apply bg-slate-50/60 text-slate-800 min-h-screen font-sans antialiased text-xs;
+    @apply bg-slate-50 text-slate-800 min-h-screen font-sans antialiased text-xs;
   }
 
   /* Compact Input, Select, Textarea default styling for High-Density */

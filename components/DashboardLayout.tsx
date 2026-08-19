@@ -67,6 +67,7 @@ import DepartmentDashboard from "./DepartmentDashboard";
 import { withDepartmentAccess } from "./withDepartmentAccess";
 import DepartmentsHub from "./DepartmentsHub";
 import POSHub from "./POSHub";
+import CompanyCreation from "./CompanyCreation";
 
 // Wrapped dynamic department dashboards
 
@@ -718,22 +719,22 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   // Not authenticated landing screen
   if (!user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-blue-50/20 p-6">
-        <div className="max-w-md w-full bg-white border border-blue-100 rounded-xl shadow-xs p-8 text-center space-y-5">
-          <div className="space-y-2">
-            <span className="inline-flex p-3 bg-blue-50 text-blue-600 rounded-full mb-1 border border-blue-100/30">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4 sm:p-6 overflow-y-auto">
+        <div className={`w-full bg-white border border-slate-200 rounded-2xl shadow-xl p-6 sm:p-8 space-y-6 my-8 ${isRegisterMode ? 'max-w-4xl' : 'max-w-md text-center'}`}>
+          <div className="text-center space-y-2">
+            <span className="inline-flex p-3 bg-blue-50 text-blue-600 rounded-full mb-1 border border-blue-100">
               <Landmark className="h-7 w-7" />
             </span>
-            <h1 className="text-lg font-extrabold font-sans text-slate-900 tracking-tight">
+            <h1 className="text-xl font-extrabold font-sans text-slate-900 tracking-tight">
               MiraTech Report & Ledger Engine
             </h1>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Draft official quotations, bill invoices, compile payments, and synchronize reports with Google Workspace active sheets.
+            <p className="text-xs text-slate-500 leading-relaxed max-w-md mx-auto">
+              Enterprise quotation, billing, payroll, and active Google Workspace synchronization engine.
             </p>
           </div>
 
           {/* Tab Selector */}
-          <div className="flex bg-slate-100 p-1 rounded-lg">
+          <div className="flex bg-slate-100 p-1 rounded-xl max-w-sm mx-auto">
             <button
               type="button"
               onClick={() => {
@@ -741,9 +742,9 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                 setAuthError("");
                 setAuthSuccess("");
               }}
-              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition duration-150 ${!isRegisterMode ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'}`}
+              className={`flex-1 text-xs font-bold py-2 rounded-lg transition duration-150 cursor-pointer ${!isRegisterMode ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
             >
-              Sign In
+              Company Login
             </button>
             <button
               type="button"
@@ -752,81 +753,97 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                 setAuthError("");
                 setAuthSuccess("");
               }}
-              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition duration-150 ${isRegisterMode ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'}`}
+              className={`flex-1 text-xs font-bold py-2 rounded-lg transition duration-150 cursor-pointer ${isRegisterMode ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
             >
-              Register
+              Company Registration (Onboarding)
             </button>
           </div>
 
           {isRegisterMode ? (
-            <div className="p-3 bg-blue-50 rounded-lg text-left text-[11px] text-blue-700 leading-relaxed border border-blue-100/40">
-              <strong>System Initialization:</strong> Creating an account registers you with Firebase Auth. If your email is <strong>miratechindustries@gmail.com</strong>, you will be initialized automatically as the Master Admin.
+            <div className="space-y-4">
+              <div className="p-3.5 bg-blue-50 rounded-xl text-left text-xs text-blue-800 leading-relaxed border border-blue-100">
+                <strong>Company Onboarding & Checkout:</strong> Fill in your company details, select a subscription plan (checkout tier), assign administrative and staff credentials, and provision your active corporate workspace tenant.
+              </div>
+              <CompanyCreation />
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRegisterMode(false)}
+                  className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+                >
+                  Already registered? Sign in to your company account
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="p-3 bg-amber-50 rounded-lg text-left text-[11px] text-amber-700 leading-relaxed border border-amber-100/40">
-              <strong>Security Notice:</strong> Logging in establishes active OAuth requests for Google Sheets & Google Drive capabilities in this full-stack sandbox environment.
+            <div className="max-w-md mx-auto space-y-5 text-left">
+              <div className="p-3.5 bg-amber-50 rounded-xl text-xs text-amber-800 leading-relaxed border border-amber-100">
+                <strong>Company Login:</strong> Sign in securely with your corporate credentials or Google Workspace account.
+              </div>
+
+              <form onSubmit={handleEmailSignIn} className="space-y-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Corporate Email</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <input
+                      type="email"
+                      value={emailValue}
+                      onChange={(e) => setEmailValue(e.target.value)}
+                      placeholder="admin@company.com"
+                      className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <input
+                      type="password"
+                      value={passwordValue}
+                      onChange={(e) => setPasswordValue(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition"
+                      required
+                    />
+                  </div>
+                </div>
+                {authError && (
+                  <p className="text-[11px] text-red-500 bg-red-50 p-2.5 rounded-lg border border-red-100">{authError}</p>
+                )}
+                {authSuccess && (
+                  <p className="text-[11px] text-emerald-600 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 font-medium">{authSuccess}</p>
+                )}
+                <button
+                  type="submit"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-[#0F172A] text-white hover:bg-slate-900 font-bold text-xs rounded-xl shadow-xs transition duration-200 cursor-pointer mt-2"
+                >
+                  Sign In to Company Account
+                </button>
+              </form>
+
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-slate-200" />
+                <span className="text-[10px] text-slate-400 uppercase font-bold">or</span>
+                <div className="flex-1 h-px bg-slate-200" />
+              </div>
+
+              <button
+                onClick={handleGoogleLogin}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 font-bold text-xs rounded-xl shadow-xs transition duration-200 cursor-pointer"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.3-4.74 3.3-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Continue with Google Workspace
+              </button>
             </div>
           )}
-
-          <form onSubmit={isRegisterMode ? handleEmailSignUp : handleEmailSignIn} className="space-y-3">
-            <div>
-              <div className="relative">
-                <Mail className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                <input
-                  type="email"
-                  value={emailValue}
-                  onChange={(e) => setEmailValue(e.target.value)}
-                  placeholder="Email Address"
-                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition"
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                <input
-                  type="password"
-                  value={passwordValue}
-                  onChange={(e) => setPasswordValue(e.target.value)}
-                  placeholder="Password"
-                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition"
-                  required
-                />
-              </div>
-            </div>
-            {authError && (
-              <p className="text-[10px] text-red-500 bg-red-50 p-2 rounded-md border border-red-100">{authError}</p>
-            )}
-            {authSuccess && (
-              <p className="text-[10px] text-emerald-600 bg-emerald-50 p-2 rounded-md border border-emerald-100 font-medium">{authSuccess}</p>
-            )}
-            <button
-              type="submit"
-              className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-[#0F172A] text-white hover:bg-slate-900 font-bold text-xs rounded-lg shadow-xs transition duration-200 cursor-pointer"
-            >
-              {isRegisterMode ? "Register with Email" : "Sign In with Email"}
-            </button>
-          </form>
-
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-slate-200" />
-            <span className="text-[10px] text-slate-400 uppercase font-bold">or</span>
-            <div className="flex-1 h-px bg-slate-200" />
-          </div>
-
-          <button
-            onClick={handleGoogleLogin}
-            className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 font-bold text-xs rounded-lg shadow-xs transition duration-200 cursor-pointer"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.3-4.74 3.3-8.09z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-            Continue with Google
-          </button>
         </div>
       </div>
     );
