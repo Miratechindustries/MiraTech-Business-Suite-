@@ -224,7 +224,6 @@ export default function UserManagement() {
         businessId: selectedCompanyId,
         status: 'ACTIVE',
         createdAt: new Date().toISOString(),
-        rawPassword: password, // Plain password credentials auditable by Master Admin
         departments: role === 'STAFF' ? selectedDepartments : [],
         canApproveQuotations,
         canApproveInvoices,
@@ -584,7 +583,7 @@ export default function UserManagement() {
                     <th className="p-3">User Email Address</th>
                     <th className="p-3">Role Status</th>
                     <th className="p-3">Workspace Business</th>
-                    <th className="p-3">Email Password Credentials</th>
+                    <th className="p-3">Auth Security</th>
                      <th className="p-3 text-right pr-6">Actions</th>
                   </tr>
                 </thead>
@@ -623,26 +622,10 @@ export default function UserManagement() {
                       <td className="p-3 font-medium text-slate-600">
                         {companies.find(c => c.id === u.companyId)?.name || 'Direct / System Node'}
                       </td>
-                      <td className="p-3 font-mono text-xs">
-                        {u.rawPassword ? (
-                          <div className="flex items-center gap-1.5">
-                            <input 
-                              type={revealedPasswords[u.id] ? "text" : "password"} 
-                              value={u.rawPassword} 
-                              readOnly 
-                              className="bg-transparent border-0 font-mono text-xs text-slate-700 focus:ring-0 p-0 w-24 outline-hidden leading-none select-all"
-                            />
-                            <button 
-                              onClick={() => togglePasswordVisibility(u.id)}
-                              className="text-slate-400 hover:text-slate-600 p-0.5"
-                              title="Toggle plain-text view"
-                            >
-                              {revealedPasswords[u.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] font-sans text-slate-400">Master Secret Only</span>
-                        )}
+                      <td className="p-3">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                          <Key className="w-2.5 h-2.5 text-slate-500" /> Firebase Auth (Hashed)
+                        </span>
                       </td>
                       <td className="p-3 text-right pr-6 space-x-2">
                         <button onClick={() => startEdit(u)} className="text-[11px] font-extrabold text-indigo-600 hover:text-indigo-800">Edit</button>
