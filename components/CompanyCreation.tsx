@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { doc, setDoc, addDoc, collection } from 'firebase/firestore';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { db, emailSignIn } from '../lib/firebase';
 import firebaseConfig from '../firebase-applet-config.json';
-import { SUBSCRIPTION_PLANS, getLockedFeaturesForPlan } from '../lib/subscriptions';
+import { SUBSCRIPTION_PLANS, getLockedFeaturesForPlan, isFeatureAllowedForPlan, FEATURE_DEFINITIONS } from '../lib/subscriptions';
 import { useToastStore } from '../lib/store';
 import { 
   Building2, 
@@ -40,7 +40,10 @@ import {
   DollarSign,
   BriefcaseBusiness,
   AlertCircle,
-  Edit3
+  Edit3,
+  KeyRound,
+  RefreshCw,
+  X
 } from 'lucide-react';
 
 interface StaffInput {
@@ -58,23 +61,24 @@ interface ModuleOption {
   category: 'core' | 'finance' | 'operations' | 'hr' | 'security';
   icon: string;
   popular?: boolean;
+  minPlan?: string;
 }
 
 const AVAILABLE_MODULES: ModuleOption[] = [
-  { id: 'quotations', name: 'Sales & Quotations', description: 'Interactive quote drafts, price calculations & client PDF delivery.', category: 'operations', icon: 'FileText', popular: true },
-  { id: 'invoices', name: 'Billing & Tax Invoices', description: 'Automated invoice generation, tax rules & overdue tracking.', category: 'finance', icon: 'CreditCard', popular: true },
-  { id: 'receipts', name: 'Receipts & Payment Ledger', description: 'Capture proof of payment, digital receipts & revenue logs.', category: 'finance', icon: 'Receipt', popular: true },
-  { id: 'inventory', name: 'Inventory & Stock Management', description: 'Multi-warehouse stock counts, SKU tracking & reorder alerts.', category: 'operations', icon: 'Layers', popular: true },
-  { id: 'pos', name: 'Point of Sale (POS)', description: 'Fast register checkout, barcode scanning & digital till reconciliation.', category: 'operations', icon: 'DollarSign' },
-  { id: 'payroll', name: 'HR, Staff & Payroll Engine', description: 'Employee records, PAYE/UIF tax calculations & salary payslips.', category: 'hr', icon: 'Users', popular: true },
-  { id: 'clients', name: 'CRM & Client Directory', description: 'Customer profiles, contact history, receivables & credit limits.', category: 'core', icon: 'Briefcase' },
-  { id: 'procurement', name: 'Procurement & 3-Way Match', description: 'Purchase orders, supplier bills & goods receipt verification.', category: 'operations', icon: 'BadgeCheck' },
-  { id: 'transactions', name: 'Bank & Cash Transactions', description: 'Income/expense categorization & cashflow reconciliation.', category: 'finance', icon: 'DollarSign' },
-  { id: 'reports', name: 'Reports & Business Intelligence', description: 'P&L statements, balance sheets, sales trends & export to Excel/PDF.', category: 'core', icon: 'Sliders', popular: true },
-  { id: 'audit_center', name: 'Audit Center & Compliance', description: 'Financial controls, anomalous transaction detection & compliance audits.', category: 'security', icon: 'ShieldCheck' },
-  { id: 'audit', name: 'Security & Audit Trail Logs', description: 'Immutable activity logs, IP tracking & access history.', category: 'security', icon: 'ShieldCheck' },
-  { id: 'marketing', name: 'Marketing & Outbound Hub', description: 'Customer broadcast newsletters, campaigns & promotional tracking.', category: 'core', icon: 'Sparkles' },
-  { id: 'executive', name: 'Executive Analytics Lounge', description: 'C-Suite revenue KPI forecasts, burn rate & business valuation metrics.', category: 'core', icon: 'BriefcaseBusiness' },
+  { id: 'quotations', name: 'Sales & Quotations', description: 'Interactive quote drafts, price calculations & client PDF delivery.', category: 'operations', icon: 'FileText', popular: true, minPlan: 'Starter' },
+  { id: 'invoices', name: 'Billing & Tax Invoices', description: 'Automated invoice generation, tax rules & overdue tracking.', category: 'finance', icon: 'CreditCard', popular: true, minPlan: 'Starter' },
+  { id: 'receipts', name: 'Receipts & Payment Ledger', description: 'Capture proof of payment, digital receipts & revenue logs.', category: 'finance', icon: 'Receipt', popular: true, minPlan: 'Starter' },
+  { id: 'inventory', name: 'Inventory & Stock Management', description: 'Multi-warehouse stock counts, SKU tracking & reorder alerts.', category: 'operations', icon: 'Layers', popular: true, minPlan: 'Growth' },
+  { id: 'pos', name: 'Point of Sale (POS)', description: 'Fast register checkout, barcode scanning & digital till reconciliation.', category: 'operations', icon: 'DollarSign', minPlan: 'Growth' },
+  { id: 'payroll', name: 'HR, Staff & Payroll Engine', description: 'Employee records, PAYE/UIF tax calculations & salary payslips.', category: 'hr', icon: 'Users', popular: true, minPlan: 'Growth' },
+  { id: 'clients', name: 'CRM & Client Directory', description: 'Customer profiles, contact history, receivables & credit limits.', category: 'core', icon: 'Briefcase', minPlan: 'Starter' },
+  { id: 'procurement', name: 'Procurement & 3-Way Match', description: 'Purchase orders, supplier bills & goods receipt verification.', category: 'operations', icon: 'BadgeCheck', minPlan: 'Professional' },
+  { id: 'transactions', name: 'Bank & Cash Transactions', description: 'Income/expense categorization & cashflow reconciliation.', category: 'finance', icon: 'DollarSign', minPlan: 'Starter' },
+  { id: 'reports', name: 'Reports & Business Intelligence', description: 'P&L statements, balance sheets, sales trends & export to Excel/PDF.', category: 'core', icon: 'Sliders', popular: true, minPlan: 'Starter' },
+  { id: 'audit_center', name: 'Audit Center & Compliance', description: 'Financial controls, anomalous transaction detection & compliance audits.', category: 'security', icon: 'ShieldCheck', minPlan: 'Elite' },
+  { id: 'audit', name: 'Security & Audit Trail Logs', description: 'Immutable activity logs, IP tracking & access history.', category: 'security', icon: 'ShieldCheck', minPlan: 'Professional' },
+  { id: 'marketing', name: 'Marketing & Outbound Hub', description: 'Customer broadcast newsletters, campaigns & promotional tracking.', category: 'core', icon: 'Sparkles', minPlan: 'Growth' },
+  { id: 'executive', name: 'Executive Analytics Lounge', description: 'C-Suite revenue KPI forecasts, burn rate & business valuation metrics.', category: 'core', icon: 'BriefcaseBusiness', minPlan: 'Enterprise' },
 ];
 
 const AVAILABLE_DEPARTMENTS = [
@@ -219,6 +223,35 @@ export default function CompanyCreation() {
   // Step 7: Review & Terms
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
+  // Email Verification State (Triggered before Step 7)
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [isVerifyingModalOpen, setIsVerifyingModalOpen] = useState(false);
+  const [verificationCodeInput, setVerificationCodeInput] = useState(['', '', '', '', '', '']);
+  const [dispatchedCode, setDispatchedCode] = useState('');
+  const [verificationSending, setVerificationSending] = useState(false);
+  const [verificationChecking, setVerificationChecking] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [editingEmailInModal, setEditingEmailInModal] = useState(false);
+  const [modalTempEmail, setModalTempEmail] = useState('');
+
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Timer for resend cooldown
+  useEffect(() => {
+    let timer: any = null;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => {
+        setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [resendCooldown]);
+
   // Theme defaults
   const [themePreset] = useState('default');
   const [primaryColor] = useState('#0F172A');
@@ -355,7 +388,7 @@ export default function CompanyCreation() {
       return !!subscriptionPlanId;
     }
     if (stepNumber === 7) {
-      return agreedToTerms;
+      return agreedToTerms && isEmailVerified && verifiedEmail === accountEmail;
     }
     return true;
   };
@@ -432,6 +465,10 @@ export default function CompanyCreation() {
     }
 
     if (stepNumber === 7) {
+      if (!isEmailVerified || verifiedEmail !== accountEmail) {
+        setError("Please verify your company email address before finalizing corporate tenant registration.");
+        return false;
+      }
       if (!agreedToTerms) {
         setError("Please agree to the Terms of Service and Corporate Privacy Policy to finalize.");
         return false;
@@ -441,10 +478,124 @@ export default function CompanyCreation() {
     return true;
   };
 
+  // Email verification actions
+  const sendVerificationCode = async (targetEmail = accountEmail) => {
+    const cleanEmail = (targetEmail || '').trim();
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setError("Please provide a valid corporate email address in Step 1.");
+      return;
+    }
+    setVerificationSending(true);
+    setVerificationError(null);
+    setVerificationSuccess(null);
+    setIsVerifyingModalOpen(true);
+    setModalTempEmail(cleanEmail);
+    try {
+      const res = await fetch('/api/auth/send-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to dispatch verification code.');
+      }
+      setDispatchedCode(data.previewCode || '');
+      setResendCooldown(60);
+      setVerificationSuccess(`Verification code dispatched to ${cleanEmail}`);
+      addToast(`Security verification code sent to ${cleanEmail}`, "info");
+      setTimeout(() => {
+        otpInputRefs.current[0]?.focus();
+      }, 150);
+    } catch (err: any) {
+      setVerificationError(err.message || "Failed to send email verification code.");
+    } finally {
+      setVerificationSending(false);
+    }
+  };
+
+  const handleVerifyCode = async (codeToTest?: string) => {
+    const code = (codeToTest || verificationCodeInput.join('')).trim();
+    if (code.length < 6) {
+      setVerificationError("Please enter all 6 digits of the verification code.");
+      return;
+    }
+    setVerificationChecking(true);
+    setVerificationError(null);
+    try {
+      const res = await fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: accountEmail.trim(), code })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        throw new Error(data.error || 'Invalid verification code. Please check and try again.');
+      }
+      setIsEmailVerified(true);
+      setVerifiedEmail(accountEmail.trim());
+      setIsVerifyingModalOpen(false);
+      setVerificationSuccess("Company email verified successfully!");
+      addToast("Corporate email verified successfully!", "success");
+      setCurrentStep(7);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err: any) {
+      setVerificationError(err.message || "Invalid or expired verification code.");
+    } finally {
+      setVerificationChecking(false);
+    }
+  };
+
+  const handleOtpChange = (index: number, val: string) => {
+    const cleaned = val.replace(/\D/g, '');
+    if (!cleaned) {
+      const next = [...verificationCodeInput];
+      next[index] = '';
+      setVerificationCodeInput(next);
+      return;
+    }
+
+    if (cleaned.length === 1) {
+      const next = [...verificationCodeInput];
+      next[index] = cleaned;
+      setVerificationCodeInput(next);
+      if (index < 5) {
+        otpInputRefs.current[index + 1]?.focus();
+      }
+      if (index === 5) {
+        const fullCode = next.join('');
+        if (fullCode.length === 6) {
+          handleVerifyCode(fullCode);
+        }
+      }
+    } else if (cleaned.length >= 6) {
+      // Pasted full 6-digit code
+      const digits = cleaned.slice(0, 6).split('');
+      setVerificationCodeInput(digits);
+      otpInputRefs.current[5]?.focus();
+      handleVerifyCode(cleaned.slice(0, 6));
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !verificationCodeInput[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
   const handleNext = () => {
     if (validateStep(currentStep)) {
       setError(null);
       saveDraft();
+
+      // Email Verification Checkpoint: Must verify before entering Step 7
+      if (currentStep === 6) {
+        if (!isEmailVerified || verifiedEmail !== accountEmail) {
+          sendVerificationCode(accountEmail);
+          return;
+        }
+      }
+
       setCurrentStep(prev => Math.min(prev + 1, 7));
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -458,6 +609,11 @@ export default function CompanyCreation() {
 
   const handleJumpToStep = (stepNumber: number) => {
     setError(null);
+    // Disallow jumping to Step 7 without email verification
+    if (stepNumber === 7 && (!isEmailVerified || verifiedEmail !== accountEmail)) {
+      sendVerificationCode(accountEmail);
+      return;
+    }
     setCurrentStep(stepNumber);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -598,6 +754,9 @@ export default function CompanyCreation() {
         inactivityTimeout: 900,
         threatLevel: 'elevated',
         mfaEnforced: true,
+        isEmailVerified: true,
+        emailVerifiedAt: new Date().toISOString(),
+        verifiedEmail: accountEmail,
         argon2Iterations: 4,
         argon2SaltLength: 16,
         subscriptionPlanId,
@@ -624,6 +783,8 @@ export default function CompanyCreation() {
         companyId: adminUid,
         businessId: adminUid,
         status: 'ACTIVE',
+        isEmailVerified: true,
+        emailVerifiedAt: new Date().toISOString(),
         permissions,
         isAuthorizedSignatory: true,
         createdAt: new Date().toISOString(),
@@ -1224,11 +1385,18 @@ export default function CompanyCreation() {
                         className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
                       />
                       <div className="flex-1 space-y-0.5">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-1">
                           <span className="text-xs font-bold text-slate-900">{mod.name}</span>
-                          {mod.popular && (
-                            <span className="text-[9px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">Core</span>
-                          )}
+                          <div className="flex items-center gap-1 shrink-0">
+                            {mod.minPlan && (
+                              <span className="text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.2 rounded">
+                                {mod.minPlan}+
+                              </span>
+                            )}
+                            {mod.popular && (
+                              <span className="text-[9px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">Core</span>
+                            )}
+                          </div>
                         </div>
                         <p className="text-[10px] text-slate-500 leading-normal">{mod.description}</p>
                       </div>
@@ -1658,7 +1826,14 @@ export default function CompanyCreation() {
 
                     <div className="space-y-3">
                       <div>
-                        <h4 className="text-xs font-bold text-slate-900">{plan.name}</h4>
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-slate-900">{plan.name}</h4>
+                          {plan.badge && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-md">
+                              {plan.badge}
+                            </span>
+                          )}
+                        </div>
                         <div className="mt-2 flex items-baseline gap-1">
                           <span className="text-lg font-black font-sans text-slate-900">
                             {currency === 'USD' ? '$' : 'E'}{displayPrice.toLocaleString()}
@@ -1680,13 +1855,35 @@ export default function CompanyCreation() {
                           <span className="font-bold text-slate-900">{plan.maxStaff >= 9999 ? 'Unlimited' : plan.maxStaff}</span>
                         </div>
                         <div className="flex items-center justify-between text-slate-600">
-                          <span>Features:</span>
-                          <span className="font-bold text-blue-600">{plan.features.length} Modules</span>
+                          <span>Unlocked Modules:</span>
+                          <span className="font-bold text-blue-600">{plan.features.length} / 12</span>
+                        </div>
+                      </div>
+
+                      {/* Feature Checklist Breakdown */}
+                      <div className="pt-2 border-t border-slate-100/80 space-y-1">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Plan Access</span>
+                        <div className="space-y-0.5 max-h-28 overflow-y-auto pr-1">
+                          {FEATURE_DEFINITIONS.slice(0, 6).map((feat) => {
+                            const isAllowed = isFeatureAllowedForPlan(plan.id, feat.id);
+                            return (
+                              <div key={feat.id} className="flex items-center justify-between text-[9px] py-0.5">
+                                <span className={isAllowed ? "text-slate-700 font-medium truncate" : "text-slate-400 truncate"}>
+                                  {feat.name}
+                                </span>
+                                {isAllowed ? (
+                                  <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                                ) : (
+                                  <Lock className="w-2.5 h-2.5 text-slate-300 shrink-0" />
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
 
-                    <div className="pt-4 mt-3 border-t border-slate-100">
+                    <div className="pt-3 mt-3 border-t border-slate-100">
                       <button
                         type="button"
                         className={`w-full py-1.5 text-[11px] font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1 ${
@@ -1716,7 +1913,7 @@ export default function CompanyCreation() {
                 </span>
               </div>
               <p className="text-xs text-emerald-800 leading-relaxed">
-                Your workspace will be provisioned with immediate access to all <strong>{selectedPlanDetails.name}</strong> modules for 14 days without charge. You can upgrade, change billing cycles, or cancel at any time.
+                Your workspace will be provisioned with immediate access to all <strong>{selectedPlanDetails.name}</strong> modules for 14 days without charge. Locked modules under your plan will require a tier upgrade.
               </p>
             </div>
           </div>
@@ -1740,6 +1937,56 @@ export default function CompanyCreation() {
               </div>
             </div>
 
+            {/* Email Verification Status Banner */}
+            <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${
+              isEmailVerified && verifiedEmail === accountEmail
+                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                : 'bg-amber-50 border-amber-200 text-amber-900'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-xl ${
+                  isEmailVerified && verifiedEmail === accountEmail
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-amber-500 text-white'
+                }`}>
+                  {isEmailVerified && verifiedEmail === accountEmail ? (
+                    <ShieldCheck className="w-5 h-5" />
+                  ) : (
+                    <KeyRound className="w-5 h-5" />
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-extrabold font-sans uppercase tracking-wide">
+                      {isEmailVerified && verifiedEmail === accountEmail 
+                        ? 'Corporate Email Verified' 
+                        : 'Email Verification Required'}
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      isEmailVerified && verifiedEmail === accountEmail 
+                        ? 'bg-emerald-200 text-emerald-800' 
+                        : 'bg-amber-200 text-amber-900'
+                    }`}>
+                      {isEmailVerified && verifiedEmail === accountEmail ? 'Verified' : 'Action Required'}
+                    </span>
+                  </div>
+                  <p className="text-xs mt-0.5 text-slate-600">
+                    Target Primary Corporate Address: <strong className="text-slate-900 font-mono">{accountEmail}</strong>
+                  </p>
+                </div>
+              </div>
+
+              {(!isEmailVerified || verifiedEmail !== accountEmail) && (
+                <button
+                  type="button"
+                  onClick={() => sendVerificationCode(accountEmail)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer shrink-0 flex items-center gap-1.5"
+                >
+                  <KeyRound className="w-3.5 h-3.5" /> Verify Email Now
+                </button>
+              )}
+            </div>
+
             {/* Summary Bento Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               
@@ -1759,7 +2006,14 @@ export default function CompanyCreation() {
                 </div>
                 <div className="space-y-1 text-slate-600">
                   <p><strong className="text-slate-800">Full Name:</strong> {accountFullName}</p>
-                  <p><strong className="text-slate-800">Sign-in Email:</strong> {accountEmail}</p>
+                  <p className="flex items-center gap-1.5">
+                    <strong className="text-slate-800">Sign-in Email:</strong> {accountEmail}
+                    {isEmailVerified && verifiedEmail === accountEmail && (
+                      <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-100 px-1.5 rounded">
+                        <Check className="w-2.5 h-2.5 mr-0.5" /> Verified
+                      </span>
+                    )}
+                  </p>
                   <p><strong className="text-slate-800">Contact Phone:</strong> {accountPhone}</p>
                 </div>
               </div>
@@ -1875,6 +2129,153 @@ export default function CompanyCreation() {
         )}
 
       </div>
+
+      {/* Corporate Email Verification Modal Dialog */}
+      {isVerifyingModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in font-sans">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-6 relative">
+            
+            {/* Close / Cancel Button */}
+            <button
+              type="button"
+              onClick={() => setIsVerifyingModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Icon & Title */}
+            <div className="text-center space-y-2">
+              <div className="inline-flex p-3.5 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 shadow-2xs">
+                <ShieldCheck className="w-8 h-8" />
+              </div>
+              <h3 className="text-lg font-extrabold text-slate-900 tracking-tight font-sans">
+                Verify Corporate Email
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
+                To guarantee tenant ownership and secure provisioning, we dispatched a 6-digit confirmation code to:
+              </p>
+              
+              {/* Target Email Badge & Edit Trigger */}
+              <div className="flex items-center justify-center gap-2 pt-1">
+                <span className="font-mono text-xs font-bold text-slate-900 bg-slate-100 border border-slate-200 px-3 py-1 rounded-xl">
+                  {accountEmail}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsVerifyingModalOpen(false);
+                    handleJumpToStep(1);
+                  }}
+                  className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <Edit3 className="w-3 h-3" /> Edit
+                </button>
+              </div>
+            </div>
+
+            {/* Sandbox Quick Testing Helper */}
+            {dispatchedCode && (
+              <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-2xl flex items-center justify-between gap-2 text-xs">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">
+                    Security Sandbox Code
+                  </span>
+                  <span className="font-mono text-base font-extrabold text-blue-900 tracking-widest">
+                    {dispatchedCode}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const digits = dispatchedCode.split('');
+                    setVerificationCodeInput(digits);
+                    handleVerifyCode(dispatchedCode);
+                  }}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-xl shadow-2xs transition cursor-pointer"
+                >
+                  Autofill & Verify
+                </button>
+              </div>
+            )}
+
+            {/* 6-Digit OTP Boxes */}
+            <div className="space-y-3">
+              <label className="block text-center text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                Enter 6-Digit Security Code
+              </label>
+              <div className="flex items-center justify-center gap-2">
+                {[0, 1, 2, 3, 4, 5].map((index) => (
+                  <input
+                    key={index}
+                    ref={(el) => { otpInputRefs.current[index] = el; }}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={verificationCodeInput[index]}
+                    onChange={(e) => handleOtpChange(index, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                    className="w-11 h-13 text-center font-mono text-xl font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition shadow-2xs"
+                  />
+                ))}
+              </div>
+
+              {verificationError && (
+                <p className="text-center text-xs text-rose-600 bg-rose-50 p-2.5 rounded-xl border border-rose-100 font-medium">
+                  {verificationError}
+                </p>
+              )}
+
+              {verificationSuccess && (
+                <p className="text-center text-xs text-emerald-600 bg-emerald-50 p-2.5 rounded-xl border border-emerald-100 font-medium">
+                  {verificationSuccess}
+                </p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => handleVerifyCode()}
+                disabled={verificationChecking || verificationCodeInput.join('').length < 6}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {verificationChecking ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Validating Code...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" /> Verify & Proceed to Step 7
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <span>Didn't receive code?</span>
+                {resendCooldown > 0 ? (
+                  <span className="font-mono text-xs font-semibold text-slate-400">
+                    Resend in {resendCooldown}s
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => sendVerificationCode(accountEmail)}
+                    disabled={verificationSending}
+                    className="font-bold text-blue-600 hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    {verificationSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    Resend Code
+                  </button>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* Navigation Controls Bar */}
       <div className="flex items-center justify-between pt-2">

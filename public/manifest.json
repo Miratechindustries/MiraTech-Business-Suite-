@@ -1,0 +1,21 @@
+{
+  "name": "MiraTech Business Suite",
+  "short_name": "MiraTech",
+  "description": "Comprehensive business and financial management application",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563EB",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

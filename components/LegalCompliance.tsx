@@ -16,6 +16,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 
 export default function LegalCompliance() {
+  const [mounted, setMounted] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [activeTab, setActiveTab] = useState<"terms" | "privacy" | "cookies">("terms");
@@ -29,6 +30,7 @@ export default function LegalCompliance() {
   });
 
   useEffect(() => {
+    setMounted(true);
     if (typeof window === "undefined") return;
 
     // Check if user has already made a preference
@@ -41,6 +43,8 @@ export default function LegalCompliance() {
       return () => clearTimeout(timer);
     }
   }, []);
+
+  if (!mounted) return null;
 
   const saveConsent = (allAccepted: boolean, choices?: typeof preferences) => {
     if (typeof window === "undefined") return;
