@@ -76,19 +76,33 @@ export function useDepartmentAccess(departmentType: string): DepartmentAccessRes
         setUserDepartments(allowedDepts);
 
         // 3. Execute RBAC evaluation rules
-        const isUserAdmin = currentUser.role === "MASTER_ADMIN" || currentUser.role === "BUSINESS_ADMIN";
+        const userRole = (currentUser.role || "").toUpperCase();
+        const isMasterOrBusinessAdmin = userRole === "MASTER_ADMIN" || userRole === "SUPER_ADMIN" || userRole === "BUSINESS_ADMIN" || userRole === "COMPANY_OWNER";
         
         let hasPerm = false;
-        if (isUserAdmin) {
-          hasPerm = true; // Administrators inherit access to all active departments
+        if (isMasterOrBusinessAdmin) {
+          hasPerm = true; // Business Admins inherit administrative governance across the company
         } else {
-          // Core modules are visible to staff; other modules require assigned departments
-          hasPerm = isCoreModule || allowedDepts.map(d => d.toLowerCase()).includes(depLower);
+          // Core modules (dashboard overview, settings)
+          if (isCoreModule) {
+            hasPerm = true;
+          } else {
+            // Check specific role shortcuts
+            if (userRole === "HR" && depLower === "hr") {
+              hasPerm = true;
+            } else if (userRole === "FINANCE_MANAGER" && (depLower === "finance" || depLower === "procurement")) {
+              hasPerm = true;
+            } else if ((userRole === "DEPARTMENT_MANAGER" || userRole === "MANAGER" || userRole === "STAFF" || userRole === "DEPARTMENT_STAFF") && allowedDepts.length > 0) {
+              hasPerm = allowedDepts.map(d => d.toLowerCase()).includes(depLower);
+            } else {
+              hasPerm = allowedDepts.map(d => d.toLowerCase()).includes(depLower);
+            }
+          }
         }
 
         setHasAccess(isModuleEnabled && hasPerm);
       } catch (err) {
-        console.error("Access valuation error:", err);
+        console.error("Access evaluation error:", err);
         setError("Error validating department level privileges.");
         setHasAccess(false);
       } finally {
@@ -122,26 +136,30 @@ export function withDepartmentAccess<P extends object>(
       );
     }
 
-    // if (!hasAccess) {
-    //   return (
-    //     <div className="bg-white border border-slate-250 rounded-2xl p-8 max-w-md mx-auto text-center space-y-4 shadow-3xs mt-12 animate-fade-in">
-    //       <div className="mx-auto h-12 w-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200">
-    //         <ShieldAlert className="h-5 w-5" />
-    //       </div>
-    //       <div className="space-y-1.5">
-    //         <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest leading-none">
-    //           Administrative Gate
-    //         </h3>
-    //         <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-    //           Your security clear level is insufficient for the <span className="font-bold uppercase text-indigo-600 font-mono">{departmentType}</span> department, or this specific module has been toggled offline by the organization administrator.
-    //         </p>
-    //       </div>
-    //       <p className="text-[10px] text-slate-400 font-semibold italic">
-    //         Please log dynamic authorizations request with your corporate tenant lead.
-    //       </p>
-    //     </div>
-    //   );
-    // }
+    if (!hasAccess) {
+      return (
+        <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-lg mx-auto text-center space-y-4 shadow-xs mt-12 animate-fade-in">
+          <div className="mx-auto h-14 w-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200 shadow-xs">
+            <ShieldAlert className="h-6 w-6" />
+          </div>
+          <div className="space-y-2">
+            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700">
+              Governance & Least-Privilege Gate
+            </span>
+            <h3 className="text-base font-black text-slate-900 tracking-tight">
+              Department Access Restricted
+            </h3>
+            <p className="text-xs text-slate-600 font-medium leading-relaxed">
+              Your user credentials are not assigned to the <span className="font-bold uppercase text-indigo-600 font-mono">{departmentType}</span> division, or this operational module has been toggled offline by your Business Administrator.
+            </p>
+          </div>
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-500 font-medium text-left space-y-1">
+            <span className="font-bold text-slate-700 block">Corporate Governance Policy:</span>
+            <span>Department managers and staff operate under strictly scoped role privileges to maintain audit ledger integrity and segregation of duties.</span>
+          </div>
+        </div>
+      );
+    }
 
     return <WrappedComponent {...props} />;
   };

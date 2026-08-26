@@ -123,11 +123,12 @@ export default function UserManagement() {
 
   const saveEdit = async (userId: string) => {
     try {
+      const isScopedRole = editRole === 'STAFF' || editRole === 'DEPARTMENT_MANAGER' || editRole === 'HR' || editRole === 'FINANCE_MANAGER' || editRole === 'OPERATIONS_MANAGER';
       await updateDoc(doc(db, 'users', userId), {
         role: editRole,
         companyId: editCompanyId,
         businessId: editCompanyId, // Supporting legacy
-        departments: editRole === 'STAFF' ? editDepartments : [],
+        departments: isScopedRole ? editDepartments : [],
         canApproveQuotations: editCanApproveQuotations,
         canApproveInvoices: editCanApproveInvoices,
         canOverrideHR: editCanOverrideHR,
@@ -397,13 +398,14 @@ export default function UserManagement() {
                 onChange={(e) => setRole(e.target.value as Role)} 
                 className="w-full text-xs font-bold border border-slate-200 p-2 rounded-lg bg-slate-50"
               >
-                <option value="STAFF">Staff (Standard Ledger Clerk)</option>
+                <option value="DEPARTMENT_MANAGER">Department Manager (Scoped Clearance)</option>
+                <option value="STAFF">Staff (Standard Operational Clerk)</option>
                 <option value="BUSINESS_ADMIN">Business Admin (Workspace Owner)</option>
                 <option value="MASTER_ADMIN">Master Admin (System Supervisor)</option>
                 <option value="HR">HR Manager</option>
-                <option value="GENERAL_MANAGER">General Manager</option>
-                <option value="OPERATIONS_MANAGER">Operations Manager</option>
                 <option value="FINANCE_MANAGER">Finance Manager</option>
+                <option value="OPERATIONS_MANAGER">Operations Manager</option>
+                <option value="GENERAL_MANAGER">General Manager</option>
                 <option value="MANAGING_DIRECTOR">Managing Director</option>
                 <option value="COMPANY_OWNER">Company Owner</option>
               </select>
@@ -422,10 +424,10 @@ export default function UserManagement() {
               </select>
             </div>
 
-            {role === 'STAFF' && (
+            {(role === 'STAFF' || role === 'DEPARTMENT_MANAGER' || role === 'HR' || role === 'FINANCE_MANAGER' || role === 'OPERATIONS_MANAGER') && (
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  Assigned Departments
+                  Assigned Departments (Scoped Access)
                 </label>
                 <div className="grid grid-cols-2 gap-1.5 max-h-[160px] overflow-y-auto">
                   {AVAILABLE_DEPARTMENTS.map((dept) => {
@@ -697,13 +699,14 @@ export default function UserManagement() {
                       onChange={(e) => setEditRole(e.target.value as Role)}
                       className="text-xs font-bold border border-slate-250 rounded-lg p-2 w-full bg-slate-50/30"
                     >
-                      <option value="STAFF">STAFF</option>
-                      <option value="BUSINESS_ADMIN">BUSINESS_ADMIN</option>
-                      <option value="MASTER_ADMIN">MASTER_ADMIN</option>
+                      <option value="DEPARTMENT_MANAGER">DEPARTMENT_MANAGER (Scoped Clearance)</option>
+                      <option value="STAFF">STAFF (Operational Staff)</option>
+                      <option value="BUSINESS_ADMIN">BUSINESS_ADMIN (Workspace Owner)</option>
+                      <option value="MASTER_ADMIN">MASTER_ADMIN (System Supervisor)</option>
                       <option value="HR">HR</option>
-                      <option value="GENERAL_MANAGER">GENERAL_MANAGER</option>
-                      <option value="OPERATIONS_MANAGER">OPERATIONS_MANAGER</option>
                       <option value="FINANCE_MANAGER">FINANCE_MANAGER</option>
+                      <option value="OPERATIONS_MANAGER">OPERATIONS_MANAGER</option>
+                      <option value="GENERAL_MANAGER">GENERAL_MANAGER</option>
                       <option value="MANAGING_DIRECTOR">MANAGING_DIRECTOR</option>
                       <option value="COMPANY_OWNER">COMPANY_OWNER</option>
                     </select>
@@ -721,7 +724,7 @@ export default function UserManagement() {
                     </select>
                   </div>
 
-                  {editRole === 'STAFF' && (
+                  {(editRole === 'STAFF' || editRole === 'DEPARTMENT_MANAGER' || editRole === 'HR' || editRole === 'FINANCE_MANAGER' || editRole === 'OPERATIONS_MANAGER') && (
                     <div>
                       <label className="block font-bold text-slate-600 mb-1">Assigned Department Access Node(s)</label>
                       <div className="border border-slate-200 bg-slate-50/50 p-3 rounded-xl space-y-1.5 max-h-48 overflow-y-auto">

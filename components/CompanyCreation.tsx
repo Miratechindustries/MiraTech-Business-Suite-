@@ -829,12 +829,13 @@ export default function CompanyCreation() {
       });
 
       // 6. Direct sign-in with newly created administrator credentials
-      logStatus(`6/6 Launching authenticated enterprise dashboard session...`);
+      logStatus(`6/6 Launching Business Administration Control Center...`);
       localStorage.removeItem(DRAFT_STORAGE_KEY);
+      localStorage.setItem('mira_post_register_redirect', 'business_admin');
       setSuccess(true);
-      addToast("Company workspace created successfully! Launching dashboard...", "success");
+      addToast("Company workspace created successfully! Directing to Business Admin Dashboard...", "success");
 
-      // Auto sign-in to seamlessly enter dashboard
+      // Auto sign-in to seamlessly enter Business Admin Dashboard
       setTimeout(async () => {
         try {
           await emailSignIn(accountEmail, accountPassword);

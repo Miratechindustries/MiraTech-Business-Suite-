@@ -99,6 +99,16 @@ export default function DepartmentsHub({ company, onSelectTab }: DepartmentsHubP
         </div>
 
         <div className="flex items-center gap-3 self-start md:self-center shrink-0">
+          {(currentUser?.role === 'BUSINESS_ADMIN' || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'COMPANY_OWNER' || currentUser?.role === 'COMPANY_ADMIN' || currentUser?.role === 'MASTER_ADMIN') && (
+            <button
+              type="button"
+              onClick={() => onSelectTab("business_admin")}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition cursor-pointer uppercase tracking-wider"
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>Business Admin Hub</span>
+            </button>
+          )}
           <div className="bg-slate-50 border border-slate-200 p-2.5 px-3.5 rounded-xl text-center shadow-3xs">
             <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-0.5">Active Portals</span>
             <span className="font-mono text-xl font-extrabold text-blue-600 tracking-tight">{visibleDeps.length} Nodes</span>

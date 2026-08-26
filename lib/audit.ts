@@ -22,8 +22,16 @@ if (typeof window !== "undefined") {
     });
 }
 
-export async function logAction(action: string, detail: string, businessId: string, impact?: number) {
-  const user = auth.currentUser;
+export async function logAction(
+  actionOrCompanyId: string,
+  detailOrUserId: string,
+  businessIdOrUserEmail: string,
+  impactOrAction?: number | string,
+  metaOrDetail?: any,
+  dept?: string,
+  severity?: string
+) {
+  const currentUser = auth.currentUser;
 
   // On-demand fetch if still null
   if (!cachedIp && typeof window !== "undefined") {
@@ -35,37 +43,72 @@ export async function logAction(action: string, detail: string, businessId: stri
       // Silent catch
     }
   }
-  
+
+  let finalAction = "";
+  let finalDetail = "";
+  let finalBusinessId = "";
+  let finalImpact: number | null = null;
+  let finalDepartment = dept || "general";
+  let finalSeverity = severity || "INFO";
+  let actorEmail = currentUser?.email || "Unknown";
+  let actorId = currentUser?.uid || "Unknown";
+
+  // Check if called with legacy/overloaded (companyId, userId, userEmail, action, detail, department, severity)
+  if (typeof impactOrAction === "string" && typeof metaOrDetail === "string") {
+    finalBusinessId = actionOrCompanyId;
+    actorId = detailOrUserId || actorId;
+    actorEmail = businessIdOrUserEmail || actorEmail;
+    finalAction = impactOrAction;
+    finalDetail = metaOrDetail;
+  } else {
+    // Called with (action, detail, businessId, impact?, metadata?)
+    finalAction = actionOrCompanyId;
+    finalDetail = detailOrUserId;
+    finalBusinessId = businessIdOrUserEmail;
+    if (typeof impactOrAction === "number" && !isNaN(impactOrAction)) {
+      finalImpact = impactOrAction;
+    }
+    if (metaOrDetail && typeof metaOrDetail === "object") {
+      if (metaOrDetail.department) finalDepartment = metaOrDetail.department;
+      if (metaOrDetail.severity) finalSeverity = metaOrDetail.severity;
+      if (metaOrDetail.role) finalSeverity = `${finalSeverity} [${metaOrDetail.role}]`;
+    }
+  }
+
   const payload: any = {
-    action,
-    detail,
-    businessId,
+    action: finalAction,
+    detail: finalDetail,
+    businessId: finalBusinessId,
+    department: finalDepartment,
+    severity: finalSeverity,
     timestamp: serverTimestamp(),
-    user: user?.email || "Unknown",
-    userId: user?.uid || "Unknown",
+    user: actorEmail,
+    userId: actorId,
     ip: cachedIp || "127.0.0.1"
   };
 
-  // Only append impact if it is a valid defined number to prevent Firestore serialization errors
-  if (impact !== undefined && !isNaN(impact)) {
-    payload.impact = impact;
-  } else {
-    payload.impact = null;
+  if (finalImpact !== null) {
+    payload.impact = finalImpact;
   }
 
-  await addDoc(collection(db, "audit_logs"), payload);
+  try {
+    await addDoc(collection(db, "audit_logs"), payload);
+  } catch (err) {
+    console.error("Failed to write to audit_logs:", err);
+  }
 
   // Auto-generate a multi-tenant notification from the audit log
   try {
     let type: "info" | "success" | "warning" | "error" = "info";
-    const lowercaseAction = action.toLowerCase();
+    const lowercaseAction = finalAction.toLowerCase();
     
     if (
       lowercaseAction.includes("create") || 
       lowercaseAction.includes("add") || 
       lowercaseAction.includes("success") || 
       lowercaseAction.includes("paid") || 
-      lowercaseAction.includes("complete")
+      lowercaseAction.includes("complete") ||
+      lowercaseAction.includes("enrolled")
     ) {
       type = "success";
     } else if (
@@ -74,24 +117,27 @@ export async function logAction(action: string, detail: string, businessId: stri
       lowercaseAction.includes("reject") || 
       lowercaseAction.includes("cancel") || 
       lowercaseAction.includes("error") || 
-      lowercaseAction.includes("fail")
+      lowercaseAction.includes("fail") ||
+      lowercaseAction.includes("revoked")
     ) {
       type = "error";
     } else if (
       lowercaseAction.includes("update") || 
       lowercaseAction.includes("edit") || 
       lowercaseAction.includes("modify") || 
-      lowercaseAction.includes("warn")
+      lowercaseAction.includes("warn") ||
+      lowercaseAction.includes("reassigned")
     ) {
       type = "warning";
     }
 
     await addDoc(collection(db, "notifications"), {
-      businessId,
-      userId: user?.uid || "SYSTEM",
-      userEmail: user?.email || "SYSTEM",
-      title: action,
-      message: detail,
+      businessId: finalBusinessId,
+      userId: actorId,
+      userEmail: actorEmail,
+      title: finalAction,
+      message: finalDetail,
+      department: finalDepartment,
       read: false,
       createdAt: new Date().toISOString(),
       type

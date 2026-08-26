@@ -1,5 +1,6 @@
 export type Role = 
   | 'MASTER_ADMIN' 
+  | 'SUPER_ADMIN'
   | 'BUSINESS_ADMIN' 
   | 'STAFF'
   | 'COMPANY_OWNER'
@@ -14,16 +15,36 @@ export type Role =
   | 'FINANCE_MANAGER'
   | 'MANAGING_DIRECTOR';
 
+export interface ScopedPermissions {
+  canApproveQuotations?: boolean;
+  canApproveInvoices?: boolean;
+  canApproveExpenses?: boolean;
+  canOverrideHR?: boolean;
+  canManageStaff?: boolean;
+  canExportReports?: boolean;
+  canViewAuditLogs?: boolean;
+  canFinalizeDocuments?: boolean;
+  canRejectDocuments?: boolean;
+  canReturnForEditing?: boolean;
+}
+
 export interface User {
   id: string;
   email: string;
   role: Role;
   businessId: string;
+  companyId?: string;
   displayName?: string;
+  positionTitle?: string;
+  phone?: string;
+  departments?: string[];
+  permissions?: ScopedPermissions;
   photoURL?: string;
   isVerified?: boolean;
   isEmailVerified?: boolean;
   emailVerified?: boolean;
+  status?: 'ACTIVE' | 'DEACTIVATED' | 'PENDING';
+  createdAt?: string;
 }
 
 export interface Business {

@@ -69,6 +69,7 @@ import { withPlanAccess } from "./withPlanAccess";
 import DepartmentsHub from "./DepartmentsHub";
 import POSHub from "./POSHub";
 import CompanyCreation from "./CompanyCreation";
+import BusinessAdminDashboard from "./BusinessAdminDashboard";
 
 // Wrapped dynamic department dashboards with both Plan-level Gating & RBAC Department Security
 const ProtectedSales = withPlanAccess(
@@ -193,9 +194,29 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
   const isMasterAdmin = currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' || user?.email?.toLowerCase() === 'miratechindustries@gmail.com';
 
+  const isBusinessAdmin = 
+    currentUser?.role?.toUpperCase() === 'BUSINESS_ADMIN' || 
+    currentUser?.role?.toUpperCase() === 'SUPER_ADMIN' || 
+    currentUser?.role?.toUpperCase() === 'COMPANY_OWNER' || 
+    currentUser?.role?.toUpperCase() === 'COMPANY_ADMIN' ||
+    company?.ownerId === user?.uid ||
+    company?.ownerId === currentUser?.id;
+
+  // Handle post-registration auto-redirect to Business Admin Dashboard
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const redirectTarget = localStorage.getItem("mira_post_register_redirect");
+      if (redirectTarget === "business_admin") {
+        setActiveTab("business_admin");
+        localStorage.removeItem("mira_post_register_redirect");
+      }
+    }
+  }, [user, currentUser]);
+
   const getEnabledTabs = () => {
     const baseTabs = [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+      ...(isBusinessAdmin ? [{ id: "business_admin", label: "Business Admin", icon: Building2 }] : []),
       { id: "inventory", label: "Inventory", icon: Box },
       { id: "pos", label: "POS System", icon: ShoppingCart },
       { id: "clients", label: "Clients", icon: Users },
@@ -1065,11 +1086,36 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
             {/* Right identity layout */}
             <div className="flex items-center gap-3">
+              {/* Quick Switch Button between Business Admin and Company Dashboard */}
+              {activeTab === "business_admin" ? (
+                <button
+                  type="button"
+                  id="btn-desktop-go-to-company-hub"
+                  onClick={() => setActiveTab("dashboard")}
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[11px] font-black rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer uppercase tracking-wider group"
+                >
+                  <LayoutDashboard className="h-3.5 w-3.5 text-blue-100 group-hover:scale-110 transition-transform" />
+                  <span>Go to Company Dashboard</span>
+                </button>
+              ) : isBusinessAdmin ? (
+                <button
+                  type="button"
+                  id="btn-desktop-open-business-admin"
+                  onClick={() => setActiveTab("business_admin")}
+                  className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer uppercase tracking-wider"
+                >
+                  <Building2 className="h-3.5 w-3.5 text-indigo-400" />
+                  <span>Business Admin Hub</span>
+                </button>
+              ) : null}
+
               <div className="text-right flex flex-col justify-center items-end max-w-[150px] overflow-hidden">
                 <span className="text-xs font-extrabold text-slate-800 tracking-wide font-sans leading-tight uppercase truncate w-full" style={{ color: company?.primaryColor || '#1E293B' }}>
                   {company?.name || "MIRA SUITE"}
                 </span>
-                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">STAFF ACCESS</span>
+                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">
+                  {currentUser?.role ? currentUser.role.replace('_', ' ') : 'STAFF ACCESS'}
+                </span>
               </div>
 
               {/* Notification Icon */}
@@ -1125,6 +1171,27 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             </div>
 
           <div className="flex items-center gap-2.5">
+            {/* Quick Switch Button on Mobile */}
+            {activeTab === "business_admin" ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab("dashboard")}
+                className="px-2.5 py-1 bg-blue-600 text-white text-[10px] font-black rounded-lg transition flex items-center gap-1 cursor-pointer uppercase"
+              >
+                <LayoutDashboard className="h-3 w-3" />
+                <span>Hub</span>
+              </button>
+            ) : isBusinessAdmin ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab("business_admin")}
+                className="px-2.5 py-1 bg-slate-900 text-white text-[10px] font-black rounded-lg transition flex items-center gap-1 cursor-pointer uppercase"
+              >
+                <Building2 className="h-3 w-3 text-indigo-400" />
+                <span>Admin</span>
+              </button>
+            ) : null}
+
             {/* Mobile Notification Bell */}
             <div className="relative" ref={mobileBellRef}>
               <button 
@@ -1208,6 +1275,13 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
               <div className={company?.lockedFeatures?.includes(activeTab) && !isMasterAdmin ? "blur-md pointer-events-none select-none transition-all duration-300" : ""}>
                 {/* Render Active View Tab */}
+                {activeTab === "business_admin" && (
+                  <BusinessAdminDashboard
+                    onNavigateToCompanyDashboard={() => setActiveTab("dashboard")}
+                    onNavigateTab={(tabId) => setActiveTab(tabId)}
+                  />
+                )}
+
                 {activeTab === "dashboard" && (
                   <DepartmentsHub
                     company={company}
