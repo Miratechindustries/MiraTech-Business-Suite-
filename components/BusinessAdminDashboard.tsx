@@ -72,11 +72,15 @@ import Image from "next/image";
 import CompanyProfile from "./CompanyProfile";
 import SubscriptionsView from "./SubscriptionsView";
 import DepartmentManager from "./DepartmentManager";
+import EnterpriseSecurityPanel from "./governance/EnterpriseSecurityPanel";
+import DataPrivacyVault from "./governance/DataPrivacyVault";
+import ApiWebhookHub from "./governance/ApiWebhookHub";
+import DepartmentBudgetHub from "./governance/DepartmentBudgetHub";
 
 interface BusinessAdminDashboardProps {
   onNavigateToCompanyDashboard: () => void;
   onNavigateTab?: (tabId: string) => void;
-  initialSubTab?: "overview" | "settings" | "employees" | "billing" | "hierarchy";
+  initialSubTab?: "overview" | "settings" | "employees" | "billing" | "hierarchy" | "security" | "compliance" | "integrations" | "budgets";
 }
 
 interface EmployeeRecord {
@@ -99,7 +103,7 @@ export default function BusinessAdminDashboard({
   initialSubTab = "overview"
 }: BusinessAdminDashboardProps) {
   const { currentUser } = useUserStore();
-  const [activeSubTab, setActiveSubTab] = useState<"overview" | "settings" | "employees" | "billing" | "hierarchy">(initialSubTab);
+  const [activeSubTab, setActiveSubTab] = useState<"overview" | "settings" | "employees" | "billing" | "hierarchy" | "security" | "compliance" | "integrations" | "budgets">(initialSubTab);
   
   const [company, setCompany] = useState<any | null>(null);
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
@@ -653,7 +657,79 @@ export default function BusinessAdminDashboard({
           <Network className="w-3.5 h-3.5" />
           <span>Department Matrix</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("security")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black tracking-wide transition cursor-pointer shrink-0 ${
+            activeSubTab === "security"
+              ? "bg-slate-900 text-white shadow-xs"
+              : "bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200"
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
+          <span>Zero-Trust Security</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("compliance")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black tracking-wide transition cursor-pointer shrink-0 ${
+            activeSubTab === "compliance"
+              ? "bg-slate-900 text-white shadow-xs"
+              : "bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200"
+          }`}
+        >
+          <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
+          <span>GDPR / POPIA Vault</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("integrations")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black tracking-wide transition cursor-pointer shrink-0 ${
+            activeSubTab === "integrations"
+              ? "bg-slate-900 text-white shadow-xs"
+              : "bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200"
+          }`}
+        >
+          <Webhook className="w-3.5 h-3.5 text-blue-500" />
+          <span>API & ERP Webhooks</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("budgets")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black tracking-wide transition cursor-pointer shrink-0 ${
+            activeSubTab === "budgets"
+              ? "bg-slate-900 text-white shadow-xs"
+              : "bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200"
+          }`}
+        >
+          <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
+          <span>Budget Circuit Breakers</span>
+        </button>
       </div>
+
+      {/* TAB CONTENT: SECURITY */}
+      {activeSubTab === "security" && (
+        <EnterpriseSecurityPanel companyId={companyId} currentUser={currentUser} />
+      )}
+
+      {/* TAB CONTENT: COMPLIANCE */}
+      {activeSubTab === "compliance" && (
+        <DataPrivacyVault companyId={companyId} currentUser={currentUser} />
+      )}
+
+      {/* TAB CONTENT: INTEGRATIONS */}
+      {activeSubTab === "integrations" && (
+        <ApiWebhookHub companyId={companyId} currentUser={currentUser} />
+      )}
+
+      {/* TAB CONTENT: BUDGETS */}
+      {activeSubTab === "budgets" && (
+        <DepartmentBudgetHub companyId={companyId} currentUser={currentUser} />
+      )}
 
       {/* TAB CONTENT 1: GOVERNANCE & OVERVIEW */}
       {activeSubTab === "overview" && (
