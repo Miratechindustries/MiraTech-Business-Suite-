@@ -17,9 +17,11 @@ import {
   ArrowRight,
   Sparkles,
   Building2,
-  TrendingUp
+  TrendingUp,
+  Lock
 } from "lucide-react";
 import { SUBSCRIPTION_PLANS } from "../lib/subscriptions";
+import { checkCompanyPlanAccess } from "../lib/planAccess";
 
 interface DepartmentConfig {
   id: string;
@@ -58,25 +60,7 @@ export default function DepartmentsHub({ company, onSelectTab }: DepartmentsHubP
     "sales", "finance", "hr", "inventory", "projects", "reports", "support", "procurement", "pos", "marketing", "audit", "executive"
   ];
 
-  const plan = SUBSCRIPTION_PLANS.find(p => p.id === company?.subscriptionPlanId) || SUBSCRIPTION_PLANS[0];
-  const allowedFeatures = plan.features;
-
-  const DEPT_FEATURE_MAP: Record<string, string> = {
-    'sales': 'quotations',
-    'finance': 'transactions',
-    'hr': 'payroll',
-    'inventory': 'inventory',
-    'reports': 'reports',
-    'audit': 'audit'
-  };
-
-  const activeDeps = DEPARTMENTS.filter(dep => {
-    const isEnabled = enabledModules.includes(dep.id);
-    const feature = DEPT_FEATURE_MAP[dep.id];
-    // If feature exists, it must be in plan.features. If not, allowed by default for this basic mapping.
-    const featureAllowed = feature ? allowedFeatures.includes(feature) : true;
-    return isEnabled && featureAllowed;
-  });
+  const visibleDeps = DEPARTMENTS.filter(dep => enabledModules.includes(dep.id));
 
   // Determine user-specific default department greeting
   const getUserGreeting = () => {
@@ -117,7 +101,7 @@ export default function DepartmentsHub({ company, onSelectTab }: DepartmentsHubP
         <div className="flex items-center gap-3 self-start md:self-center shrink-0">
           <div className="bg-slate-50 border border-slate-200 p-2.5 px-3.5 rounded-xl text-center shadow-3xs">
             <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-0.5">Active Portals</span>
-            <span className="font-mono text-xl font-extrabold text-blue-600 tracking-tight">{activeDeps.length} Nodes</span>
+            <span className="font-mono text-xl font-extrabold text-blue-600 tracking-tight">{visibleDeps.length} Nodes</span>
           </div>
         </div>
       </motion.div>
@@ -129,8 +113,11 @@ export default function DepartmentsHub({ company, onSelectTab }: DepartmentsHubP
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {activeDeps.map((dep, index) => {
+          {visibleDeps.map((dep, index) => {
             const IconComponent = dep.icon;
+            const planCheck = checkCompanyPlanAccess(company, dep.id);
+            const isLocked = !planCheck.allowed && currentUser?.role !== "MASTER_ADMIN";
+
             return (
               <motion.div
                 key={dep.id}
@@ -139,7 +126,11 @@ export default function DepartmentsHub({ company, onSelectTab }: DepartmentsHubP
                 transition={{ delay: index * 0.04, duration: 0.4 }}
                 whileHover={{ y: -4, transition: { duration: 0.2 } }}
                 onClick={() => onSelectTab(dep.tabId)}
-                className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-col justify-between min-h-[175px] shadow-3xs hover:shadow-md hover:border-slate-300 transition group cursor-pointer"
+                className={`bg-white border p-5 rounded-2xl flex flex-col justify-between min-h-[175px] shadow-3xs transition group cursor-pointer ${
+                  isLocked 
+                    ? "border-slate-200 hover:border-indigo-300 hover:shadow-md" 
+                    : "border-slate-200 hover:shadow-md hover:border-slate-300"
+                }`}
               >
                 {/* Upper section */}
                 <div className="space-y-3">
@@ -150,13 +141,19 @@ export default function DepartmentsHub({ company, onSelectTab }: DepartmentsHubP
                     >
                       <IconComponent className="w-4 h-4" />
                     </span>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
-                      {dep.subtitle}
-                    </span>
+                    {isLocked ? (
+                      <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-indigo-700 uppercase tracking-wider bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded-md">
+                        <Lock className="w-2.5 h-2.5" /> {planCheck.requiredPlanName}
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md">
+                        {dep.subtitle}
+                      </span>
+                    )}
                   </div>
 
                   <div className="space-y-1">
-                    <h4 className="font-extrabold text-sm text-slate-905 tracking-tight group-hover:text-blue-600 transition">
+                    <h4 className="font-extrabold text-sm text-slate-905 tracking-tight group-hover:text-blue-600 transition flex items-center gap-1.5">
                       {dep.name}
                     </h4>
                     <p className="text-[11px] text-slate-500 font-semibold leading-relaxed line-clamp-2">
@@ -167,7 +164,9 @@ export default function DepartmentsHub({ company, onSelectTab }: DepartmentsHubP
 
                 {/* Bottom Trigger action */}
                 <div className="flex items-center justify-between pt-3 border-t border-slate-100/50 mt-4 text-[10px] font-extrabold text-blue-600 group-hover:translate-x-0.5 transition duration-150">
-                  <span className="uppercase tracking-wider">Access Corporate Node</span>
+                  <span className="uppercase tracking-wider">
+                    {isLocked ? `Unlock with ${planCheck.requiredPlanName}` : "Access Corporate Node"}
+                  </span>
                   <ArrowRight className="w-3.5 h-3.5" style={{ color: dep.color }} />
                 </div>
               </motion.div>

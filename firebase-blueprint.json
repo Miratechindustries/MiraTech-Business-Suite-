@@ -20,7 +20,14 @@
         "themeMode": { "type": "string", "description": "Theme canvas mode: light, warm, dim, dark." },
         "fontFamily": { "type": "string", "description": "Selected Google font family pairing." },
         "cardRadius": { "type": "string", "description": "Theme card border radius: none, md, lg, xl, full." },
-        "sidebarStyle": { "type": "string", "description": "Navigation bar visual theme: flat, colored, gradient, bordered." }
+        "sidebarStyle": { "type": "string", "description": "Navigation bar visual theme: flat, colored, gradient, bordered." },
+        "isVerified": { "type": "boolean", "description": "Verification status of the company (defaults to false until verified by 6-digit corporate OTP)." },
+        "isEmailVerified": { "type": "boolean", "description": "Whether the primary administrator corporate email has been validated." },
+        "verifiedEmail": { "type": "string", "description": "The exact verified corporate email address." },
+        "emailVerifiedAt": { "type": "string", "description": "ISO timestamp of when the corporate email was verified." },
+        "subscriptionPlanId": { "type": "string", "description": "Active subscription tier identifier (starter, growth, professional, elite, enterprise)." },
+        "subscriptionPlan": { "type": "string", "description": "Human-readable active subscription plan name." },
+        "subscriptionStatus": { "type": "string", "description": "Status of the subscription (e.g. active, trialing, expired)." }
       },
       "required": ["ownerId", "name"]
     },

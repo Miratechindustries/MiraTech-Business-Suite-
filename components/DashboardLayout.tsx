@@ -65,34 +65,67 @@ import PayrollAndHR from "./PayrollAndHR";
 import SubscriptionsView from "./SubscriptionsView";
 import DepartmentDashboard from "./DepartmentDashboard";
 import { withDepartmentAccess } from "./withDepartmentAccess";
+import { withPlanAccess } from "./withPlanAccess";
 import DepartmentsHub from "./DepartmentsHub";
 import POSHub from "./POSHub";
 import CompanyCreation from "./CompanyCreation";
 
-// Wrapped dynamic department dashboards
-
-// Wrapped dynamic department dashboards
-const ProtectedSales = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="sales" onBack={onBack} />, "sales");
-const ProtectedFinance = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="finance" onBack={onBack} />, "finance");
-const ProtectedHR = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="hr" onBack={onBack} />, "hr");
-const ProtectedInventoryDept = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="inventory" onBack={onBack} />, "inventory");
-const ProtectedProjects = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="projects" onBack={onBack} />, "projects");
-const ProtectedReports = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="reports" onBack={onBack} />, "reports");
-const ProtectedSupport = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="support" onBack={onBack} />, "support");
-const ProtectedProcurement = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="procurement" onBack={onBack} />, "procurement");
-const ProtectedMarketing = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="marketing" onBack={onBack} />, "marketing");
-const ProtectedAudit = withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="audit" onBack={onBack} />, "audit");
-const ProtectedExecutive = withDepartmentAccess(({ onBack }: { onBack: () => void }) => (
-  <div className="space-y-4">
-    <button
-      onClick={onBack}
-      className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition cursor-pointer mb-2 self-start uppercase tracking-wider font-sans shadow-4xs"
-    >
-      <ArrowLeft className="h-3 w-3" /> Back to Departments Hub
-    </button>
-    <Dashboard />
-  </div>
-), "executive");
+// Wrapped dynamic department dashboards with both Plan-level Gating & RBAC Department Security
+const ProtectedSales = withPlanAccess(
+  withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="sales" onBack={onBack} />, "sales"),
+  "sales"
+);
+const ProtectedFinance = withPlanAccess(
+  withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="finance" onBack={onBack} />, "finance"),
+  "finance"
+);
+const ProtectedHR = withPlanAccess(
+  withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="hr" onBack={onBack} />, "hr"),
+  "hr"
+);
+const ProtectedInventoryDept = withPlanAccess(
+  withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="inventory" onBack={onBack} />, "inventory"),
+  "inventory"
+);
+const ProtectedProjects = withPlanAccess(
+  withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="projects" onBack={onBack} />, "projects"),
+  "projects"
+);
+const ProtectedReports = withPlanAccess(
+  withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="reports" onBack={onBack} />, "reports"),
+  "reports"
+);
+const ProtectedSupport = withPlanAccess(
+  withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="support" onBack={onBack} />, "support"),
+  "support"
+);
+const ProtectedProcurement = withPlanAccess(
+  withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="procurement" onBack={onBack} />, "procurement"),
+  "procurement"
+);
+const ProtectedMarketing = withPlanAccess(
+  withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="marketing" onBack={onBack} />, "marketing"),
+  "marketing"
+);
+const ProtectedAudit = withPlanAccess(
+  withDepartmentAccess(({ onBack }: { onBack: () => void }) => <DepartmentDashboard departmentType="audit" onBack={onBack} />, "audit"),
+  "audit"
+);
+const ProtectedPOS = withPlanAccess(POSHub, "pos");
+const ProtectedExecutive = withPlanAccess(
+  withDepartmentAccess(({ onBack }: { onBack: () => void }) => (
+    <div className="space-y-4">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition cursor-pointer mb-2 self-start uppercase tracking-wider font-sans shadow-4xs"
+      >
+        <ArrowLeft className="h-3 w-3" /> Back to Departments Hub
+      </button>
+      <Dashboard />
+    </div>
+  ), "executive"),
+  "executive"
+);
 
 const tabModules: Record<string, string> = {
   inventory: "inventory",
@@ -1182,19 +1215,19 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                   />
                 )}
 
-                {/* Unified Department Workspaces */}
-                {activeTab === "sales" && <ProtectedSales onBack={() => setActiveTab("dashboard")} />}
-                {activeTab === "finance" && <ProtectedFinance onBack={() => setActiveTab("dashboard")} />}
-                {activeTab === "hr" && <ProtectedHR onBack={() => setActiveTab("dashboard")} />}
-                {activeTab === "inventory" && <ProtectedInventoryDept onBack={() => setActiveTab("dashboard")} />}
-                {activeTab === "projects" && <ProtectedProjects onBack={() => setActiveTab("dashboard")} />}
-                {activeTab === "reports" && <ProtectedReports onBack={() => setActiveTab("dashboard")} />}
-                {activeTab === "support" && <ProtectedSupport onBack={() => setActiveTab("dashboard")} />}
-                {activeTab === "procurement" && <ProtectedProcurement onBack={() => setActiveTab("dashboard")} />}
-                {activeTab === "pos" && <POSHub companyId={company?.ownerId || user.uid} />}
-                {activeTab === "marketing" && <ProtectedMarketing onBack={() => setActiveTab("dashboard")} />}
-                {activeTab === "audit" && <ProtectedAudit onBack={() => setActiveTab("dashboard")} />}
-                {activeTab === "executive" && <ProtectedExecutive onBack={() => setActiveTab("dashboard")} />}
+                {/* Unified Department Workspaces with Plan Gating */}
+                {activeTab === "sales" && <ProtectedSales onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "finance" && <ProtectedFinance onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "hr" && <ProtectedHR onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "inventory" && <ProtectedInventoryDept onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "projects" && <ProtectedProjects onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "reports" && <ProtectedReports onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "support" && <ProtectedSupport onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "procurement" && <ProtectedProcurement onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "pos" && <ProtectedPOS companyId={company?.ownerId || user.uid} onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "marketing" && <ProtectedMarketing onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "audit" && <ProtectedAudit onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "executive" && <ProtectedExecutive onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
 
                 {activeTab === "admin" && <MasterAdminDashboard />}
 

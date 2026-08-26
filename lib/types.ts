@@ -21,11 +21,64 @@ export interface User {
   businessId: string;
   displayName?: string;
   photoURL?: string;
+  isVerified?: boolean;
+  isEmailVerified?: boolean;
+  emailVerified?: boolean;
 }
 
 export interface Business {
   id: string;
   name: string;
+  createdAt: string;
+  isVerified?: boolean;
+  isEmailVerified?: boolean;
+  emailVerified?: boolean;
+  officialEmail?: string;
+  verifiedEmail?: string;
+  emailVerifiedAt?: string;
+  subscriptionPlanId?: string;
+  subscriptionPlan?: string;
+  subscriptionStatus?: string;
+}
+
+export interface Company {
+  id: string;
+  ownerId: string;
+  name: string;
+  legalName?: string;
+  email: string;
+  officialEmail?: string;
+  phone?: string;
+  officialPhone?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  website?: string;
+  industry?: string;
+  businessType?: string;
+  currency?: string;
+  employeeRange?: string;
+  branchCount?: number;
+  logo?: string;
+  letterheadLogo?: string;
+  favicon?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  useCompanyLetterhead?: boolean;
+  themePreset?: string;
+  themeMode?: string;
+  fontFamily?: string;
+  cardRadius?: string;
+  sidebarStyle?: string;
+  isVerified: boolean;
+  isEmailVerified?: boolean;
+  emailVerified?: boolean;
+  verifiedEmail?: string;
+  emailVerifiedAt?: string;
+  subscriptionPlanId?: string;
+  subscriptionPlan?: string;
+  subscriptionStatus?: string;
+  lockedFeatures?: string[];
   createdAt: string;
 }
 

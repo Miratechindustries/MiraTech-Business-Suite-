@@ -228,7 +228,6 @@ export default function CompanyCreation() {
   const [verifiedEmail, setVerifiedEmail] = useState('');
   const [isVerifyingModalOpen, setIsVerifyingModalOpen] = useState(false);
   const [verificationCodeInput, setVerificationCodeInput] = useState(['', '', '', '', '', '']);
-  const [dispatchedCode, setDispatchedCode] = useState('');
   const [verificationSending, setVerificationSending] = useState(false);
   const [verificationChecking, setVerificationChecking] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
@@ -494,15 +493,17 @@ export default function CompanyCreation() {
       const res = await fetch('/api/auth/send-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail })
+        body: JSON.stringify({ email: cleanEmail, companyName: companyName.trim() })
       });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 429 && data.cooldownSeconds) {
+          setResendCooldown(data.cooldownSeconds);
+        }
         throw new Error(data.error || 'Failed to dispatch verification code.');
       }
-      setDispatchedCode(data.previewCode || '');
-      setResendCooldown(60);
-      setVerificationSuccess(`Verification code dispatched to ${cleanEmail}`);
+      setResendCooldown(data.cooldownSeconds || 60);
+      setVerificationSuccess(`A 6-digit verification code has been dispatched to ${cleanEmail}`);
       addToast(`Security verification code sent to ${cleanEmail}`, "info");
       setTimeout(() => {
         otpInputRefs.current[0]?.focus();
@@ -754,12 +755,16 @@ export default function CompanyCreation() {
         inactivityTimeout: 900,
         threatLevel: 'elevated',
         mfaEnforced: true,
-        isEmailVerified: true,
-        emailVerifiedAt: new Date().toISOString(),
-        verifiedEmail: accountEmail,
+        isVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+        isEmailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+        emailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+        businessEmailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+        emailVerifiedAt: isEmailVerified ? new Date().toISOString() : null,
+        verifiedEmail: isEmailVerified ? accountEmail : null,
         argon2Iterations: 4,
         argon2SaltLength: 16,
         subscriptionPlanId,
+        subscriptionPlan: selectedPlanObj.name,
         subscriptionStatus: 'trialing',
         subscriptionBillingCycle: billingCycle,
         subscriptionTrialEndsAt: trialEndDate,
@@ -783,12 +788,13 @@ export default function CompanyCreation() {
         companyId: adminUid,
         businessId: adminUid,
         status: 'ACTIVE',
+        isVerified: true,
         isEmailVerified: true,
+        emailVerified: true,
         emailVerifiedAt: new Date().toISOString(),
         permissions,
         isAuthorizedSignatory: true,
         createdAt: new Date().toISOString(),
-        rawPassword: accountPassword, // Enables master admin inspection
       });
 
       for (let i = 0; i < staffList.length; i++) {
@@ -802,7 +808,6 @@ export default function CompanyCreation() {
           companyId: adminUid,
           businessId: adminUid,
           status: 'ACTIVE',
-          rawPassword: staff.password,
           departments: staff.departments || ['sales'],
           createdAt: new Date().toISOString(),
         });
@@ -2173,31 +2178,6 @@ export default function CompanyCreation() {
                 </button>
               </div>
             </div>
-
-            {/* Sandbox Quick Testing Helper */}
-            {dispatchedCode && (
-              <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-2xl flex items-center justify-between gap-2 text-xs">
-                <div className="space-y-0.5">
-                  <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">
-                    Security Sandbox Code
-                  </span>
-                  <span className="font-mono text-base font-extrabold text-blue-900 tracking-widest">
-                    {dispatchedCode}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const digits = dispatchedCode.split('');
-                    setVerificationCodeInput(digits);
-                    handleVerifyCode(dispatchedCode);
-                  }}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-xl shadow-2xs transition cursor-pointer"
-                >
-                  Autofill & Verify
-                </button>
-              </div>
-            )}
 
             {/* 6-Digit OTP Boxes */}
             <div className="space-y-3">
