@@ -18,36 +18,47 @@ service cloud.firestore {
       );
     }
 
+    function getUserCompanyId() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) ?
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId : null;
+    }
+
     function verifyTenant(companyId) {
       return isSignedIn() && (
         isMasterAdmin() ||
+        request.auth.uid == companyId ||
         request.auth.token.companyId == companyId ||
         request.auth.token.businessId == companyId ||
-        request.auth.uid == companyId
+        getUserCompanyId() == companyId
       );
     }
 
     function verifyResourceTenant() {
+      let data = resource.data;
+      let compId = 'companyId' in data ? data.companyId : ('businessId' in data ? data.businessId : null);
+      let userComp = getUserCompanyId();
       return isSignedIn() && (
         isMasterAdmin() ||
-        request.auth.token.companyId == resource.data.companyId ||
-        request.auth.token.companyId == resource.data.businessId ||
-        request.auth.token.businessId == resource.data.companyId ||
-        request.auth.token.businessId == resource.data.businessId ||
-        resource.data.companyId == request.auth.uid ||
-        resource.data.businessId == request.auth.uid
+        request.auth.uid == compId ||
+        request.auth.token.companyId == compId ||
+        request.auth.token.businessId == compId ||
+        (userComp != null && userComp == compId) ||
+        compId == null
       );
     }
 
     function verifyCreationTenant() {
+      let data = request.resource.data;
+      let compId = 'companyId' in data ? data.companyId : ('businessId' in data ? data.businessId : null);
+      let userComp = getUserCompanyId();
       return isSignedIn() && (
         isMasterAdmin() ||
-        request.auth.token.companyId == request.resource.data.companyId ||
-        request.auth.token.companyId == request.resource.data.businessId ||
-        request.auth.token.businessId == request.resource.data.companyId ||
-        request.auth.token.businessId == request.resource.data.businessId ||
-        request.resource.data.companyId == request.auth.uid ||
-        request.resource.data.businessId == request.auth.uid
+        request.auth.uid == compId ||
+        request.auth.token.companyId == compId ||
+        request.auth.token.businessId == compId ||
+        (userComp != null && userComp == compId) ||
+        compId == null ||
+        compId == request.auth.uid
       );
     }
 
@@ -74,7 +85,8 @@ service cloud.firestore {
         request.auth.uid == userId ||
         request.auth.token.companyId == resource.data.companyId ||
         request.auth.token.businessId == resource.data.businessId ||
-        resource.data.companyId == request.auth.uid
+        resource.data.companyId == request.auth.uid ||
+        getUserCompanyId() == resource.data.companyId
       );
       allow create, update: if isSignedIn() && (
         isMasterAdmin() ||

@@ -413,6 +413,10 @@ export default function CompanyCreation() {
         setError("Password must be at least 8 characters long.");
         return false;
       }
+      if (!/[a-z]/.test(accountPassword) || !/[A-Z]/.test(accountPassword) || !/[0-9]/.test(accountPassword) || !/[^A-Za-z0-9]/.test(accountPassword)) {
+        setError("Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.");
+        return false;
+      }
       if (accountPassword !== accountConfirmPassword) {
         setError("Password and confirmation password do not match.");
         return false;
@@ -627,6 +631,10 @@ export default function CompanyCreation() {
     }
     if (staffPassword.length < 8) {
       setError("Staff temporary password must be at least 8 characters long.");
+      return;
+    }
+    if (!/[a-z]/.test(staffPassword) || !/[A-Z]/.test(staffPassword) || !/[0-9]/.test(staffPassword) || !/[^A-Za-z0-9]/.test(staffPassword)) {
+      setError("Staff password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.");
       return;
     }
     if (staffList.some(s => s.email.toLowerCase() === staffEmail.toLowerCase()) || staffEmail.toLowerCase() === accountEmail.toLowerCase()) {

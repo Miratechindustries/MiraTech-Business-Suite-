@@ -1,0 +1,64 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isMasterAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'miratechindustries@gmail.com' ||
+        request.auth.token.role == 'MASTER_ADMIN'
+      );
+    }
+
+    function isValidFile() {
+      return request.resource.size < 10 * 1024 * 1024 &&
+        (
+          request.resource.contentType.matches('image/.*') ||
+          request.resource.contentType == 'application/pdf' ||
+          request.resource.contentType == 'application/msword' ||
+          request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+          request.resource.contentType == 'application/vnd.ms-excel' ||
+          request.resource.contentType == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+          request.resource.contentType == 'text/csv' ||
+          request.resource.contentType == 'text/plain'
+        );
+    }
+
+    match /companies/{companyId}/{allPaths=**} {
+      allow read: if isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == companyId ||
+        request.auth.token.companyId == companyId ||
+        request.auth.token.businessId == companyId
+      );
+      allow write: if isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == companyId ||
+        request.auth.token.companyId == companyId ||
+        request.auth.token.businessId == companyId
+      ) && isValidFile();
+    }
+
+    match /businesses/{businessId}/{allPaths=**} {
+      allow read: if isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == businessId ||
+        request.auth.token.companyId == businessId ||
+        request.auth.token.businessId == businessId
+      );
+      allow write: if isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == businessId ||
+        request.auth.token.companyId == businessId ||
+        request.auth.token.businessId == businessId
+      ) && isValidFile();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

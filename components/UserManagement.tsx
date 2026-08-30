@@ -184,6 +184,10 @@ export default function UserManagement() {
       setError('Password must be at least 8 characters long');
       return;
     }
+    if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+      setError('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.');
+      return;
+    }
     setError(null);
     setSuccess(null);
     setLoading(true);
