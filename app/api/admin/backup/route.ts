@@ -9,7 +9,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { includeCollections = ["companies", "users", "audit_logs", "invoices", "customers", "employees", "expenses"] } = await req.json().catch(() => ({}));
+    const { 
+      includeCollections = ["companies", "users", "audit_logs", "invoices", "customers", "employees", "expenses"],
+      backupType = "manual",
+      driveFileId = null,
+      driveUrl = null,
+      status = "success",
+      errorMessage = null
+    } = await req.json().catch(() => ({}));
+
+    // If client is just logging a backup attempt result
+    if (req.headers.get("x-action") === "log-history") {
+      await adminDb.collection("backup_history").add({
+        backupType,
+        status,
+        driveFileId,
+        driveUrl,
+        errorMessage,
+        timestamp: new Date()
+      });
+      return NextResponse.json({ success: true });
+    }
 
     const backupData: Record<string, any[]> = {};
 
@@ -27,9 +47,17 @@ export async function POST(req: NextRequest) {
       data: backupData
     };
 
+    await adminDb.collection("backup_history").add({
+      backupType,
+      status: "success",
+      driveFileId,
+      driveUrl,
+      timestamp: new Date()
+    });
+
     await logServerAction({
       action: "DATA_BACKUP_EXPORT",
-      detail: `Exported system backup containing collections: ${includeCollections.join(", ")}`,
+      detail: `Exported system backup (${backupType}) containing collections: ${includeCollections.join(", ")}`,
       businessId: "system",
       userId: "master_admin",
       userEmail: "miratechindustries@gmail.com",
@@ -44,6 +72,13 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("Backup export error:", error);
+    await adminDb.collection("backup_history").add({
+      backupType: "manual",
+      status: "failure",
+      errorMessage: error?.message || "Unknown error",
+      timestamp: new Date()
+    }).catch(() => {});
     return NextResponse.json({ error: error?.message || "Internal server error" }, { status: 500 });
   }
 }
+

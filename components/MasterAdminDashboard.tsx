@@ -15,9 +15,10 @@ export default function MasterAdminDashboard() {
   const { currentUser } = useUserStore();
   const [counts, setCounts] = useState({ companies: 0, users: 0, alerts: 0, errors: 0 });
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<'overview' | 'errors' | 'apm' | 'backup'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'health' | 'errors' | 'apm' | 'audit' | 'backup'>('overview');
   const [errorLogs, setErrorLogs] = useState<any[]>([]);
   const [apmMetrics, setApmMetrics] = useState<any[]>([]);
+  const [backupHistory, setBackupHistory] = useState<any[]>([]);
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
   const [isBackingUp, setIsBackingUp] = useState(false);
 
@@ -43,6 +44,10 @@ export default function MasterAdminDashboard() {
             const apmQuery = query(collection(db, 'apm_metrics'), orderBy('timestamp', 'desc'), limit(50));
             const apmSnap = await getDocs(apmQuery);
             setApmMetrics(apmSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+            const backupQuery = query(collection(db, 'backup_history'), orderBy('timestamp', 'desc'), limit(20));
+            const backupSnap = await getDocs(backupQuery);
+            setBackupHistory(backupSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         } catch (e) {
             console.error(e);
         } finally {
@@ -71,7 +76,8 @@ export default function MasterAdminDashboard() {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ backupType: 'manual' })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Backup generation failed');
@@ -87,6 +93,8 @@ export default function MasterAdminDashboard() {
       URL.revokeObjectURL(url);
 
       setBackupStatus("Local JSON backup successfully downloaded!");
+      const backupSnap = await getDocs(query(collection(db, 'backup_history'), orderBy('timestamp', 'desc'), limit(20)));
+      setBackupHistory(backupSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err: any) {
       setBackupStatus(`Backup error: ${err.message}`);
     } finally {
@@ -104,7 +112,8 @@ export default function MasterAdminDashboard() {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ backupType: 'automated-drive' })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Backup generation failed');
@@ -112,8 +121,26 @@ export default function MasterAdminDashboard() {
       const fileName = `miratech-backup-${new Date().toISOString().replace(/:/g, '-')}.json`;
       const driveToken = await getAccessToken();
       const fileId = await uploadBackupToGoogleDrive(data.backup, fileName, driveToken || undefined);
+      const driveUrl = `https://drive.google.com/file/d/${fileId}/view`;
+
+      await fetch('/api/admin/backup', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'x-action': 'log-history'
+        },
+        body: JSON.stringify({
+          backupType: 'automated-drive',
+          status: 'success',
+          driveFileId: fileId,
+          driveUrl
+        })
+      });
 
       setBackupStatus(`Successfully uploaded backup to Google Drive under MiraTechBusinessSuite/backup/ (File ID: ${fileId})`);
+      const backupSnap = await getDocs(query(collection(db, 'backup_history'), orderBy('timestamp', 'desc'), limit(20)));
+      setBackupHistory(backupSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err: any) {
       setBackupStatus(`Google Drive backup error: ${err.message}`);
     } finally {
@@ -152,35 +179,53 @@ export default function MasterAdminDashboard() {
       <motion.div className="flex items-center justify-between" variants={itemVariants}>
         <div className="flex items-center gap-4">
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">
-                {activeView === 'overview' ? 'System Overview' : activeView === 'errors' ? 'Error Tracking & Observability' : activeView === 'apm' ? 'APM Performance & Uptime' : 'Disaster Recovery & Backups'}
+                {activeView === 'overview' ? 'System Overview' : 
+                 activeView === 'health' ? 'System Health & Request Rate' :
+                 activeView === 'errors' ? 'Error Tracking & Observability' : 
+                 activeView === 'apm' ? 'APM Performance & Uptime' : 
+                 activeView === 'audit' ? 'Security Audit Log' : 'Data & Recovery'}
             </h1>
-            <div className="flex bg-slate-100 p-1 rounded-xl">
+            <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl gap-1">
                 <button 
                     onClick={() => setActiveView('overview')}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition ${activeView === 'overview' ? 'bg-white shadow-sm text-slate-950' : 'text-slate-600 hover:text-slate-900'}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${activeView === 'overview' ? 'bg-white shadow-sm text-slate-950' : 'text-slate-600 hover:text-slate-900'}`}
                 >
                     Overview
                 </button>
                 <button 
-                    onClick={() => setActiveView('errors')}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${activeView === 'errors' ? 'bg-white shadow-sm text-slate-950' : 'text-slate-600 hover:text-slate-900'}`}
+                    onClick={() => setActiveView('health')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${activeView === 'health' ? 'bg-white shadow-sm text-slate-950' : 'text-slate-600 hover:text-slate-900'}`}
                 >
-                    <AlertTriangle className="w-4 h-4 text-red-500" />
+                    <Activity className="w-3.5 h-3.5 text-emerald-500" />
+                    Health
+                </button>
+                <button 
+                    onClick={() => setActiveView('errors')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${activeView === 'errors' ? 'bg-white shadow-sm text-slate-950' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
                     Errors ({counts.errors})
                 </button>
                 <button 
                     onClick={() => setActiveView('apm')}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${activeView === 'apm' ? 'bg-white shadow-sm text-slate-950' : 'text-slate-600 hover:text-slate-900'}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${activeView === 'apm' ? 'bg-white shadow-sm text-slate-950' : 'text-slate-600 hover:text-slate-900'}`}
                 >
-                    <Activity className="w-4 h-4 text-emerald-500" />
-                    APM & Uptime
+                    <Server className="w-3.5 h-3.5 text-blue-500" />
+                    APM
+                </button>
+                <button 
+                    onClick={() => setActiveView('audit')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${activeView === 'audit' ? 'bg-white shadow-sm text-slate-950' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                    <ShieldAlert className="w-3.5 h-3.5 text-indigo-500" />
+                    Security Audit
                 </button>
                 <button 
                     onClick={() => setActiveView('backup')}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${activeView === 'backup' ? 'bg-white shadow-sm text-slate-950' : 'text-slate-600 hover:text-slate-900'}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${activeView === 'backup' ? 'bg-white shadow-sm text-slate-950' : 'text-slate-600 hover:text-slate-900'}`}
                 >
-                    <HardDrive className="w-4 h-4 text-blue-500" />
-                    Backups
+                    <HardDrive className="w-3.5 h-3.5 text-blue-600" />
+                    Data & Recovery
                 </button>
             </div>
         </div>
