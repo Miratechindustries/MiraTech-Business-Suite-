@@ -45,15 +45,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="antialiased bg-slate-50 text-slate-900 min-h-screen"vercel/install-vercel-speed-insights-8vdile
-        {children}
-        <SpeedInsight
+      <body className="antialiased bg-slate-50 text-slate-900 min-h-screen">
         <ErrorBoundary>
           {children}
         </ErrorBoundary>
+        <SpeedInsights />
         <InstallClientWrapper />
         <LegalCompliance />
-main
       </body>
     </html>
   );
