@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Plus, Filter, AlertTriangle, ArrowUpDown, ChevronDown, Trash2, Edit, Save, X, Layers, Box, TrendingUp, CheckCircle2 } from "lucide-react";
-import { auth } from "../lib/firebase";
+import { Search, Plus, Filter, AlertTriangle, ArrowUpDown, ChevronDown, Trash2, Edit, Save, X, Layers, Box, Zap, Settings, Network, Server, Cable, CheckCircle2 } from "lucide-react";
+import { auth, db, handleFirestoreError, OperationType } from "../lib/firebase";
+import { useToastStore, useUserStore } from "../lib/store";
+import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc } from "firebase/firestore";
+import { logAction } from "../lib/audit";
 
 interface InventoryItem {
   id: string;
@@ -35,7 +38,28 @@ const IconRenderer = ({ name, className }: { name: string; className?: string })
   return <Icon className={className} />;
 };
 
+// Automatic SKU generation suggestion helper from item/description name
+const suggestSku = (itemName: string): string => {
+  if (!itemName) return "";
+  const words = itemName
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s-]/g, "")
+    .split(/[\s-]+/)
+    .filter(Boolean);
+
+  if (words.length === 0) return "";
+  if (words.length === 1) {
+    return words[0].substring(0, 6);
+  }
+  return words
+    .slice(0, 3)
+    .map((w) => w.substring(0, 3))
+    .join("-");
+};
+
 export default function Inventory() {
+  const addToast = useToastStore((state) => state.addToast);
+  const { currentUser } = useUserStore();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [categoryConfigs, setCategoryConfigs] = useState<CategoryConfig[]>(DEFAULT_CATEGORIES);
   const [search, setSearch] = useState("");
@@ -77,32 +101,48 @@ export default function Inventory() {
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [sku, setSku] = useState("");
+  const [skuManuallyEdited, setSkuManuallyEdited] = useState(false);
   const [category, setCategory] = useState("Networking");
   const [price, setPrice] = useState(0);
   const [stock, setStock] = useState(0);
   const [minStock, setMinStock] = useState(5);
 
-  useEffect(() => {
-    const user = auth.currentUser;
-    const cacheKey = user ? `miratech_inventory_${user.uid}` : "miratech_inventory_guest";
-    const cached = localStorage.getItem(cacheKey);
-    
-    // Also load/save category configs... (will do later)
+  const [businessId, setBusinessId] = useState<string | null>(null);
 
-    if (cached) {
-      setItems(JSON.parse(cached));
-    } else {
-      const initial: InventoryItem[] = [
-        { id: "INV-001", name: "Core Switch 24-Port", sku: "NET-SW-24", category: "Networking", price: 350.00, stock: 15, minStock: 5 },
-        { id: "INV-002", name: "SFP+ Fiber Module 10G", sku: "NET-SFP-10G", category: "Networking", price: 45.00, stock: 42, minStock: 10 },
-        { id: "INV-003", name: "Cat6A Shielded Cable (305m)", sku: "CAB-C6A-S", category: "Cabling", price: 180.00, stock: 4, minStock: 5 },
-        { id: "INV-004", name: "Pro Rack Server 1U", sku: "SRV-1U-SYS", category: "Servers", price: 1250.00, stock: 3, minStock: 2 },
-        { id: "INV-005", name: "Smart UPS 1500VA", sku: "PWR-UPS-1500", category: "Power Supply", price: 290.00, stock: 0, minStock: 3 },
-      ];
-      setItems(initial);
-      localStorage.setItem(cacheKey, JSON.stringify(initial));
+  useEffect(() => {
+    async function loadBusiness() {
+        if (!auth.currentUser) return;
+        const cached = currentUser?.companyId || currentUser?.businessId;
+        if (cached) {
+          setBusinessId(cached);
+        } else {
+          try {
+            const userSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
+            if (userSnap.exists()) {
+              setBusinessId(userSnap.data()?.businessId || userSnap.data()?.companyId || auth.currentUser.uid);
+            } else {
+              setBusinessId(auth.currentUser.uid);
+            }
+          } catch (e) {
+            handleFirestoreError(e, OperationType.GET, `users/${auth.currentUser.uid}`);
+            setBusinessId(auth.currentUser.uid);
+          }
+        }
     }
-  }, []);
+    loadBusiness();
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    
+    async function fetchInventory() {
+        const q = query(collection(db, "products"), where("businessId", "==", businessId));
+        const snapshot = await getDocs(q);
+        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as InventoryItem));
+        setItems(data);
+    }
+    fetchInventory();
+  }, [businessId]);
 
   const saveToLocal = (updatedList: InventoryItem[]) => {
     setItems(updatedList);
@@ -123,23 +163,38 @@ export default function Inventory() {
     localStorage.setItem(auditKey, JSON.stringify([newLog, ...oldLogs]));
   };
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !sku) return alert("Please fill details");
+    if (!name || !businessId) return;
 
-    const newItemId = id || `INV-${String(items.length + 101)}`;
-    const newItem: InventoryItem = {
-      id: newItemId,
+    const finalSku = (sku.trim() ? sku.trim() : suggestSku(name)).toUpperCase();
+    if (!finalSku) {
+      alert("Please specify a SKU Unique Code.");
+      return;
+    }
+
+    const newItem = {
+      businessId,
       name,
-      sku: sku.toUpperCase(),
+      sku: finalSku,
       category,
       price: Number(price),
       stock: Number(stock),
       minStock: Number(minStock),
     };
 
-    const updated = [...items, newItem];
-    saveToLocal(updated);
+    const docRef = await addDoc(collection(db, "products"), newItem);
+
+    // Log database audit trail
+    await logAction(
+      "Inventory Item Logged",
+      `Created stock ledger entry for product '${name}' [SKU: ${finalSku}]`,
+      businessId,
+      Number(price) * Number(stock)
+    );
+
+    setItems([...items, { id: docRef.id, ...newItem }]);
+    addToast(`Product '${name}' saved successfully`, "success");
     resetForm();
     setIsOpen(false);
   };
@@ -148,6 +203,7 @@ export default function Inventory() {
     setId("");
     setName("");
     setSku("");
+    setSkuManuallyEdited(false);
     setCategory("Networking");
     setPrice(0);
     setStock(0);
@@ -160,6 +216,7 @@ export default function Inventory() {
     setId(item.id);
     setName(item.name);
     setSku(item.sku);
+    setSkuManuallyEdited(true);
     setCategory(item.category);
     setPrice(item.price);
     setStock(item.stock);
@@ -167,32 +224,57 @@ export default function Inventory() {
     setIsOpen(true);
   };
 
-  const handleUpdate = (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name) return;
+    if (!editingItem || !businessId) return;
 
-    const updated = items.map((it) =>
-      it.id === id
-        ? {
-            ...it,
-            name,
-            sku: sku.toUpperCase(),
-            category,
-            price: Number(price),
-            stock: Number(stock),
-            minStock: Number(minStock),
-          }
-        : it
+    const finalSku = (sku.trim() ? sku.trim() : suggestSku(name)).toUpperCase();
+    if (!finalSku) {
+      alert("Please specify a SKU Unique Code.");
+      return;
+    }
+
+    const updatedItem = {
+      ...editingItem,
+      name,
+      sku: finalSku,
+      category,
+      price: Number(price),
+      stock: Number(stock),
+      minStock: Number(minStock),
+    };
+    
+    await updateDoc(doc(db, "products", editingItem.id), updatedItem);
+
+    // Log database audit trail
+    await logAction(
+      "Inventory Item Updated",
+      `Updated product details of '${name}' [SKU: ${finalSku}]. Stock: ${stock}`,
+      businessId,
+      Number(price) * Number(stock)
     );
-    saveToLocal(updated);
+
+    setItems(items.map((it) => it.id === editingItem.id ? updatedItem : it));
+    addToast(`Product '${name}' updated successfully`, "success");
     resetForm();
     setIsOpen(false);
   };
 
-  const handleDelete = (itemId: string) => {
+  const handleDelete = async (itemId: string) => {
     if (confirm("Are you sure you want to delete this core stock item?")) {
-      const updated = items.filter((it) => it.id !== itemId);
-      saveToLocal(updated);
+      await deleteDoc(doc(db, "products", itemId));
+
+      // Log database audit trail
+      if (businessId) {
+        await logAction(
+          "Inventory Item Extinguished",
+          `Permanently deleted product log ID: ${itemId}`,
+          businessId
+        );
+      }
+
+      setItems(items.filter((it) => it.id !== itemId));
+      addToast("Product deleted successfully", "warning");
     }
   };
 
@@ -249,7 +331,7 @@ export default function Inventory() {
         </div>
         <div className="bg-white border border-slate-200/80 p-3.5 rounded-lg shadow-3xs">
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Portfolio Net Asset</p>
-          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">${portfolioValue.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">E{portfolioValue.toLocaleString()}</h3>
           <p className="text-[8px] text-blue-500 font-medium">Evaluated at sales tier price</p>
         </div>
       </div>
@@ -347,7 +429,7 @@ export default function Inventory() {
                         );
                       })()}
                     </td>
-                    <td className="font-mono font-bold">${it.price.toFixed(2)}</td>
+                    <td className="font-mono font-bold">E{it.price.toFixed(2)}</td>
                     <td>{statusBadge}</td>
                     <td className="text-right space-x-1.5 py-1">
                       <button
@@ -401,10 +483,17 @@ export default function Inventory() {
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">SKU Unique Code</label>
                   <input
                     type="text"
-                    required
-                    placeholder="NET-SW-24"
+                    placeholder="e.g. NET-SW-24 (suggested)"
                     value={sku}
-                    onChange={(e) => setSku(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSku(val);
+                      if (val.trim() === "") {
+                        setSkuManuallyEdited(false);
+                      } else {
+                        setSkuManuallyEdited(true);
+                      }
+                    }}
                     className="w-full"
                   />
                 </div>
@@ -417,7 +506,13 @@ export default function Inventory() {
                   required
                   placeholder="e.g. Server Switch 48-port POE"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setName(val);
+                    if (!skuManuallyEdited || !sku) {
+                      setSku(suggestSku(val));
+                    }
+                  }}
                   className="w-full"
                 />
               </div>
@@ -438,7 +533,7 @@ export default function Inventory() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sales Unit Price ($)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sales Unit Price (E)</label>
                   <input
                     type="number"
                     step="0.01"

@@ -7,7 +7,7 @@
 
 @layer base {
   body {
-    @apply bg-slate-50/60 text-slate-800 min-h-screen font-sans antialiased text-xs;
+    @apply bg-slate-50 text-slate-800 min-h-screen font-sans antialiased text-xs;
   }
 
   /* Compact Input, Select, Textarea default styling for High-Density */
@@ -39,5 +39,13 @@
   }
   ::-webkit-scrollbar-thumb {
     @apply bg-blue-200 rounded-full hover:bg-blue-300;
+  }
+
+  /* GPU Hardware Acceleration for smoother rendering & transitions */
+  .animate-in, .animate-out, .transition, .transition-all {
+    transform: translate3d(0, 0, 0);
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    perspective: 1000px;
   }
 }

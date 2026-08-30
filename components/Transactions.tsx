@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Search, Plus, Trash2, Edit, X, ArrowUpRight, ArrowDownLeft, FileSpreadsheet, Download, Calendar, Settings, DollarSign, Wallet2, CheckCircle, AlertCircle } from "lucide-react";
-import { auth } from "../lib/firebase";
+import { auth, db, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { collection, doc, addDoc, getDocs, deleteDoc, getDoc, query, setDoc } from "firebase/firestore";
+import { useUserStore, useToastStore } from "../lib/store";
+import { logAction } from "../lib/audit";
 
 interface Transaction {
   id: string;
@@ -16,10 +19,15 @@ interface Transaction {
 }
 
 export default function Transactions() {
+  const { currentUser } = useUserStore();
+  const addToast = useToastStore((state) => state.addToast);
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [businessId, setBusinessId] = useState<string | null>(null);
+  const [errorSignal, setErrorSignal] = useState<string | null>(null);
 
   // Form Fields
   const [id, setId] = useState("");
@@ -32,47 +40,118 @@ export default function Transactions() {
   const [status, setStatus] = useState<"Settled" | "Pending">("Settled");
 
   useEffect(() => {
-    const user = auth.currentUser;
-    const cacheKey = user ? `miratech_transactions_${user.uid}` : "miratech_transactions_guest";
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      setTxns(JSON.parse(cached));
-    } else {
-      const initial: Transaction[] = [
-        { id: "TXN-101", date: "2026-05-18", description: "Invoice Settlement Apex Systems", type: "Inflow", reference: "INV-0128", method: "Bank Transfer", amount: 4750.00, status: "Settled" },
-        { id: "TXN-102", date: "2026-05-19", description: "Office Space Outlay & Sublets", type: "Outflow", reference: "EXP-9501", method: "ACH Direct Debit", amount: 1500.00, status: "Settled" },
-        { id: "TXN-103", date: "2026-05-20", description: "Deposit Core Hardware Sales Innovate", type: "Inflow", reference: "INV-0129", method: "Credit Card", amount: 8500.00, status: "Settled" },
-        { id: "TXN-104", date: "2026-05-20", description: "Broadband Optical Subscriptions", type: "Outflow", reference: "EXP-9502", method: "Credit Card", amount: 115.00, status: "Settled" },
-        { id: "TXN-105", date: "2026-05-21", description: "Deposit NextGen Quotation Escrow", type: "Inflow", reference: "QTY-5082", method: "Bank Transfer", amount: 350.00, status: "Pending" },
-      ];
-      setTxns(initial);
-      localStorage.setItem(cacheKey, JSON.stringify(initial));
+    async function loadBusiness() {
+      const user = auth.currentUser;
+      if (!user) return;
+      try {
+        const cached = currentUser?.companyId || currentUser?.businessId;
+        if (cached) {
+          setBusinessId(cached);
+        } else {
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          setBusinessId(userDoc.data()?.businessId || userDoc.data()?.companyId || user.uid);
+        }
+      } catch (err) {
+        console.error("Failed to load business configuration for transactions active scope.", err);
+        const fallbackId = user.uid;
+        setBusinessId(fallbackId);
+        
+        // Log to compliance audit logs
+        try {
+          await logAction(
+            "System Identity Load Error",
+            `Failed to load business profile for user ${user.uid}. Reason: ${err instanceof Error ? err.message : String(err)}`,
+            fallbackId
+          );
+        } catch (auditErr) {
+          console.error("Critical failure writing identity error log.", auditErr);
+        }
+        setErrorSignal("Failed to authorize corporate business context. Defaulted to fallback user identity space.");
+      }
     }
-  }, []);
+    loadBusiness();
+  }, [currentUser]);
 
-  const saveToLocal = (updatedList: Transaction[]) => {
-    setTxns(updatedList);
-    const user = auth.currentUser;
-    const cacheKey = user ? `miratech_transactions_${user.uid}` : "miratech_transactions_guest";
-    localStorage.setItem(cacheKey, JSON.stringify(updatedList));
+  const loadTransactions = useCallback(async () => {
+    if (!businessId) return;
+    setLoading(true);
+    setErrorSignal(null);
+    const colRef = collection(db, "companies", businessId, "transactions");
+    try {
+      const snapshot = await getDocs(colRef);
+      let data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+      
+      if (data.length === 0) {
+        // Seed initial transactions in FireStore database so it does not start blank
+        const initial: Transaction[] = [
+          { id: "TXN-101", date: "2026-05-18", description: "Invoice Settlement Apex Systems", type: "Inflow", reference: "INV-0128", method: "Bank Transfer", amount: 4750.00, status: "Settled" },
+          { id: "TXN-102", date: "2026-05-19", description: "Office Space Outlay & Sublets", type: "Outflow", reference: "EXP-9501", method: "ACH Direct Debit", amount: 1500.00, status: "Settled" },
+          { id: "TXN-103", date: "2026-05-20", description: "Deposit Core Hardware Sales Innovate", type: "Inflow", reference: "INV-0129", method: "Credit Card", amount: 8500.00, status: "Settled" },
+          { id: "TXN-104", date: "2026-05-20", description: "Broadband Optical Subscriptions", type: "Outflow", reference: "EXP-9502", method: "Credit Card", amount: 115.00, status: "Settled" },
+          { id: "TXN-105", date: "2026-05-21", description: "Deposit NextGen Quotation Escrow", type: "Inflow", reference: "QTY-5082", method: "Bank Transfer", amount: 350.00, status: "Pending" },
+        ];
+        
+        for (const tx of initial) {
+          try {
+            await setDoc(doc(db, "companies", businessId, "transactions", tx.id), tx);
+          } catch (seedErr) {
+            console.error(`Failed to seed transaction ${tx.id}`, seedErr);
+          }
+        }
+        data = initial;
+      }
 
-    // Audit log update
-    const auditKey = user ? `miratech_audit_logs_${user.uid}` : "miratech_audit_logs_guest";
-    const oldLogs = JSON.parse(localStorage.getItem(auditKey) || "[]");
-    localStorage.setItem(auditKey, JSON.stringify([{
-      action: "Ledger Synced",
-      detail: `Ledger transaction registry reconciled. Value assets: $${updatedList.length}`,
-      timestamp: new Date().toISOString(),
-      user: user?.email || "Manager",
-      ip: "127.0.0.1"
-    }, ...oldLogs]));
-  };
+      setTxns(data);
+      localStorage.setItem(`miratech_transactions_${businessId}`, JSON.stringify(data));
+    } catch (err) {
+      if (isOfflineError(err)) {
+        console.warn("[Transactions Workspace Cache Mode] Error loading, loading from local cache fallback.");
+        const cached = localStorage.getItem(`miratech_transactions_${businessId}`);
+        if (cached) {
+          try {
+            setTxns(JSON.parse(cached));
+          } catch {}
+        }
+      } else {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        setErrorSignal(`Audit system failed to fetch transaction logs: ${errMsg}. Relational incident was dispatched to compatibility registry.`);
+        
+        // Log to compliance audit logs
+        try {
+          await logAction(
+            "Transaction Query Failure",
+            `System failed to query transactions ledger. Reason: ${errMsg}`,
+            businessId
+          );
+        } catch (auditErr) {
+          console.error("Critical failure writing load transactions error to audit logs.", auditErr);
+        }
 
-  const handleCreate = (e: React.FormEvent) => {
+        // Fallback to cache
+        const cached = localStorage.getItem(`miratech_transactions_${businessId}`);
+        if (cached) {
+          try {
+            setTxns(JSON.parse(cached));
+          } catch {}
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [businessId]);
+
+  useEffect(() => {
+    if (businessId) {
+      loadTransactions();
+    }
+  }, [loadTransactions, businessId]);
+
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description || amount <= 0) return alert("Please specify description and positive amount.");
+    if (!businessId) return;
 
-    const newTxKey = id || `TXN-${String(txns.length + 101)}`;
+    const newTxKey = id || `TXN-${String(Date.now()).substring(7)}`;
     const newTx: Transaction = {
       id: newTxKey,
       date: date || new Date().toISOString().split("T")[0],
@@ -84,9 +163,38 @@ export default function Transactions() {
       status,
     };
 
-    saveToLocal([newTx, ...txns]);
-    resetForm();
-    setIsOpen(false);
+    try {
+      // 1. Save to Firestore
+      await setDoc(doc(db, "companies", businessId, "transactions", newTxKey), newTx);
+
+      // 2. Audit Trail logging
+      await logAction(
+        "Ledger Transaction Logged",
+        `Created transaction ${newTxKey} of type ${type} with value E${amount}. Ref: ${reference || "N/A"}.`,
+        businessId,
+        amount
+      );
+
+      resetForm();
+      setIsOpen(false);
+      await loadTransactions();
+      addToast(`Transaction ${newTxKey} saved successfully`, "success");
+    } catch (err) {
+      addToast(`System Warning / Error: Entry denied. ${err instanceof Error ? err.message : String(err)}`, "error");
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setErrorSignal(`Transaction authentication denied: ${errMsg}. Incident recorded on server.`);
+      
+      // Post details in audit log!
+      try {
+        await logAction(
+          "Transaction Entry Denied",
+          `Authentication failed or database rejected payment ledger line ${newTxKey} (Amnt: E${amount}, Type: ${type}, Ref: ${reference || "N/A"}). Result: ${errMsg}`,
+          businessId
+        );
+      } catch (auditErr) {
+        console.error("Failed to write payment creation failure to audit ledger.", auditErr);
+      }
+    }
   };
 
   const resetForm = () => {
@@ -100,10 +208,36 @@ export default function Transactions() {
     setStatus("Settled");
   };
 
-  const handleDelete = (txid: string) => {
-    if (confirm("Remove this transaction row from secure local audits?")) {
-      const updated = txns.filter((t) => t.id !== txid);
-      saveToLocal(updated);
+  const handleDelete = async (txid: string) => {
+    if (!businessId) return;
+    if (confirm("Remove this transaction row from secure database audits?")) {
+      try {
+        await deleteDoc(doc(db, "companies", businessId, "transactions", txid));
+        
+        // Audit log
+        await logAction(
+          "Ledger Transaction Extinguished",
+          `Removed transaction record ID ${txid}.`,
+          businessId
+        );
+
+        await loadTransactions();
+        addToast(`Transaction record ${txid} deleted successfully`, "warning");
+      } catch (err) {
+        addToast(`System Warning / Error: Deletion refused. ${err instanceof Error ? err.message : String(err)}`, "error");
+        const errMsg = err instanceof Error ? err.message : String(err);
+        setErrorSignal(`Deletion access authorization denied: ${errMsg}. Operations logged.`);
+        
+        try {
+          await logAction(
+            "Transaction Deletion Refused",
+            `Secure deletion of invoice/payment row '${txid}' was refused. Reason: ${errMsg}`,
+            businessId
+          );
+        } catch (auditErr) {
+          console.error("Failed to write payment extinction decline to audit log.", auditErr);
+        }
+      }
     }
   };
 
@@ -119,6 +253,7 @@ export default function Transactions() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    addToast("Export Complete: Ledger Transactions CSV downloaded", "success");
   };
 
   const filteredTxns = txns.filter((t) => {
@@ -137,6 +272,20 @@ export default function Transactions() {
 
   return (
     <div className="space-y-4">
+      {/* Dynamic Error Warning Alerts */}
+      {errorSignal && (
+        <div className="p-3 border border-red-200 bg-red-50/70 rounded-lg flex items-start gap-2.5 text-xs text-red-800 font-medium animate-fade-in shadow-2xs">
+          <AlertCircle className="h-4 w-4 text-red-650 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <span className="font-extrabold block text-red-900 uppercase tracking-widest text-[9px] mb-0.5">Secure Transaction Engine Warning</span>
+            {errorSignal}
+          </div>
+          <button onClick={() => setErrorSignal(null)} className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer transition">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Upper Status Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
@@ -166,17 +315,17 @@ export default function Transactions() {
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white border border-slate-200/80 p-3.5 rounded-lg shadow-3xs">
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Gross Inflow Cleared</p>
-          <h3 className="text-base font-extrabold text-green-700 mt-1 font-mono">${grossInflow.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold text-green-700 mt-1 font-mono">E{grossInflow.toLocaleString()}</h3>
           <p className="text-[8px] text-green-500 font-semibold font-mono">Real-time revenue settlement</p>
         </div>
         <div className="bg-white border border-slate-200/80 p-3.5 rounded-lg shadow-3xs">
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Gross Outflow / Expenses</p>
-          <h3 className="text-base font-extrabold text-red-600 mt-1 font-mono">-${grossOutflow.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold text-red-600 mt-1 font-mono">-E{grossOutflow.toLocaleString()}</h3>
           <p className="text-[8px] text-red-500 font-semibold font-mono">Operational outlays settled</p>
         </div>
         <div className="bg-white border border-slate-200/80 p-3.5 rounded-lg shadow-3xs">
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Net Position Capital</p>
-          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">${netCash.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">E{netCash.toLocaleString()}</h3>
           <p className="text-[8px] text-blue-550 font-semibold font-mono">Consolidated liquid balance</p>
         </div>
       </div>
@@ -269,7 +418,7 @@ export default function Transactions() {
                       )}
                     </td>
                     <td className={`font-mono font-extrabold text-right ${isIn ? "text-green-700" : "text-red-600"}`}>
-                      {isIn ? "+" : "-"}${t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {isIn ? "+" : "-"}E{t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="text-right py-1">
                       <button
@@ -349,7 +498,7 @@ export default function Transactions() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount ($)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount (E)</label>
                   <input
                     type="number"
                     step="0.01"

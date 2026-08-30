@@ -10,60 +10,185 @@
         "email": { "type": "string", "description": "Company email address." },
         "phone": { "type": "string", "description": "Company contact number." },
         "address": { "type": "string", "description": "Physical company address." },
-        "letterheadLogo": { "type": "string", "description": "Base64 or URL data of the company logo." }
+        "letterheadLogo": { "type": "string", "description": "Base64 or URL data of the company logo." },
+        "logo": { "type": "string", "description": "Base64 or URL data of the company logo." },
+        "favicon": { "type": "string", "description": "Base64 or URL data of the favicon / icon." },
+        "primaryColor": { "type": "string", "description": "Primary color code (HEX)." },
+        "secondaryColor": { "type": "string", "description": "Secondary color code (HEX)." },
+        "useCompanyLetterhead": { "type": "boolean", "description": "Whether to use company letterhead spanning the full top of invoice or quotation." },
+        "themePreset": { "type": "string", "description": "Preset theme key (e.g. default, emerald, violet, crimson, etc.)." },
+        "themeMode": { "type": "string", "description": "Theme canvas mode: light, warm, dim, dark." },
+        "fontFamily": { "type": "string", "description": "Selected Google font family pairing." },
+        "cardRadius": { "type": "string", "description": "Theme card border radius: none, md, lg, xl, full." },
+        "sidebarStyle": { "type": "string", "description": "Navigation bar visual theme: flat, colored, gradient, bordered." },
+        "isVerified": { "type": "boolean", "description": "Verification status of the company (defaults to false until verified by 6-digit corporate OTP)." },
+        "isEmailVerified": { "type": "boolean", "description": "Whether the primary administrator corporate email has been validated." },
+        "verifiedEmail": { "type": "string", "description": "The exact verified corporate email address." },
+        "emailVerifiedAt": { "type": "string", "description": "ISO timestamp of when the corporate email was verified." },
+        "subscriptionPlanId": { "type": "string", "description": "Active subscription tier identifier (starter, growth, professional, elite, enterprise)." },
+        "subscriptionPlan": { "type": "string", "description": "Human-readable active subscription plan name." },
+        "subscriptionStatus": { "type": "string", "description": "Status of the subscription (e.g. active, trialing, expired)." }
       },
       "required": ["ownerId", "name"]
     },
-    "Quotation": {
-      "title": "Quotation",
-      "description": "Quotation details containing items and client address.",
+    "PurchaseRequest": {
+      "title": "Purchase Request",
+      "description": "Internal request for procurement.",
       "type": "object",
       "properties": {
         "ownerId": { "type": "string" },
-        "number": { "type": "string" },
-        "clientName": { "type": "string" },
-        "clientEmail": { "type": "string" },
-        "clientAddress": { "type": "string" },
-        "date": { "type": "string" },
-        "validUntil": { "type": "string" },
-        "total": { "type": "number" },
-        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] }
+        "prNumber": { "type": "string" },
+        "requestedBy": { "type": "string" },
+        "items": { "type": "array" },
+        "status": { "type": "string", "enum": ["Draft", "Pending", "Approved", "Rejected"] },
+        "createdAt": { "type": "string" }
       },
-      "required": ["ownerId", "number", "clientName", "total", "status"]
+      "required": ["ownerId", "prNumber", "requestedBy", "items", "status", "createdAt"]
+    },
+    "RFQ": {
+      "title": "Request for Quotation",
+      "description": "RFQ sent to suppliers.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "rfqNumber": { "type": "string" },
+        "supplierIds": { "type": "array" },
+        "items": { "type": "array" },
+        "status": { "type": "string", "enum": ["Open", "Closed"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["ownerId", "rfqNumber", "supplierIds", "items", "status", "createdAt"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Vendor contact details, credit terms, and lead times.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "creditTerms": { "type": "string" },
+        "leadTime": { "type": "number" }
+      },
+      "required": ["ownerId", "name"]
+    },
+    "PurchaseOrder": {
+      "title": "Purchase Order",
+      "description": "Incoming request for goods or services.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "poNumber": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Draft", "Pending", "Approved", "Sent"] },
+        "deliveryDate": { "type": "string" }
+      },
+      "required": ["ownerId", "poNumber", "supplierId", "totalAmount", "status"]
     },
     "Invoice": {
       "title": "Invoice",
-      "description": "Corporate invoice representing billable items.",
+      "description": "Supplier invoice for goods or services.",
       "type": "object",
       "properties": {
         "ownerId": { "type": "string" },
-        "number": { "type": "string" },
-        "clientName": { "type": "string" },
-        "clientEmail": { "type": "string" },
-        "clientAddress": { "type": "string" },
-        "date": { "type": "string" },
-        "dueDate": { "type": "string" },
-        "total": { "type": "number" },
-        "status": { "type": "string", "enum": ["unpaid", "paid", "overdue"] }
+        "poNumber": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Unpaid", "Paid"] }
       },
-      "required": ["ownerId", "number", "clientName", "total", "status"]
+      "required": ["ownerId", "poNumber", "supplierId", "totalAmount", "status"]
     },
-    "Receipt": {
-      "title": "Receipt",
-      "description": "Payment receipt proving invoices were settled.",
+    "GoodsReceived": {
+      "title": "Goods Received",
+      "description": "Goods received record from a supplier.",
       "type": "object",
       "properties": {
         "ownerId": { "type": "string" },
-        "number": { "type": "string" },
-        "invoiceNumber": { "type": "string" },
-        "clientName": { "type": "string" },
-        "clientEmail": { "type": "string" },
-        "paymentMethod": { "type": "string" },
-        "date": { "type": "string" },
-        "amount": { "type": "number" },
-        "status": { "type": "string", "enum": ["completed", "refunded"] }
+        "poNumber": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "items": { "type": "array" },
+        "receivedDate": { "type": "string" }
       },
-      "required": ["ownerId", "number", "clientName", "amount", "status"]
+      "required": ["ownerId", "poNumber", "supplierId", "receivedDate"]
+    },
+    "POSSale": {
+      "title": "POS Sale",
+      "description": "Walk-in customer sale record.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["ownerId", "items", "totalAmount", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A notification dispatch for a business tenant.",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "error"] }
+      },
+      "required": ["businessId", "title", "message", "read"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A project task.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["todo", "in-progress", "done"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["ownerId", "title", "status", "priority", "createdAt"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A business project.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["planning", "in-progress", "completed", "on-hold"] },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "clientId": { "type": "string" },
+        "budget": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["ownerId", "name", "status", "startDate", "budget", "createdAt"]
+    },
+    "SupportTicket": {
+      "title": "Support Ticket",
+      "description": "A customer support ticket.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "in-progress", "resolved", "closed"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "createdAt": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerEmail": { "type": "string" }
+      },
+      "required": ["ownerId", "title", "status", "priority", "createdAt"]
     }
   },
   "firestore": {
@@ -71,17 +196,49 @@
       "schema": "Company",
       "description": "Company registration directory."
     },
-    "/companies/{companyId}/quotations/{quotationId}": {
-      "schema": "Quotation",
-      "description": "Quotations sub-directory."
+    "/companies/{companyId}/purchase_requests/{prId}": {
+      "schema": "PurchaseRequest",
+      "description": "Purchase requests sub-directory."
+    },
+    "/companies/{companyId}/rfqs/{rfqId}": {
+      "schema": "RFQ",
+      "description": "RFQs sub-directory."
+    },
+    "/companies/{companyId}/suppliers/{supplierId}": {
+      "schema": "Supplier",
+      "description": "Suppliers sub-directory."
+    },
+    "/companies/{companyId}/purchase_orders/{poId}": {
+      "schema": "PurchaseOrder",
+      "description": "Purchase Orders sub-directory."
     },
     "/companies/{companyId}/invoices/{invoiceId}": {
       "schema": "Invoice",
       "description": "Invoices sub-directory."
     },
-    "/companies/{companyId}/receipts/{receiptId}": {
-      "schema": "Receipt",
-      "description": "Receipts sub-directory."
+    "/companies/{companyId}/goods_received/{grnId}": {
+      "schema": "GoodsReceived",
+      "description": "Goods Received sub-directory."
+    },
+    "/companies/{companyId}/pos_sales/{saleId}": {
+      "schema": "POSSale",
+      "description": "POS sales sub-directory."
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "System or tenant event notifications."
+    },
+    "/companies/{companyId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Project tasks sub-directory."
+    },
+    "/companies/{companyId}/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Project management directory."
+    },
+    "/companies/{companyId}/support_tickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "Support tickets sub-directory."
     }
   }
 }

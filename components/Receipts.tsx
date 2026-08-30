@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import { collection, doc, getDocs, updateDoc, deleteDoc, query, orderBy, getDoc } from "firebase/firestore";
-import { db, auth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
+import { useUserStore, useToastStore } from "../lib/store";
+import { logAction } from "../lib/audit";
 import { uploadToDrive } from "../lib/drive";
 import { FileCheck, Search, Trash, Download, Loader2, Eye, X } from "lucide-react";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import safeHtml2Canvas from "../lib/safeHtml2canvas";
 
 interface Receipt {
   id?: string;
@@ -20,6 +22,7 @@ interface Receipt {
   amount: number;
   status: "completed" | "refunded";
   driveFileId?: string;
+  department?: string;
 }
 
 interface CompanyDetails {
@@ -30,7 +33,26 @@ interface CompanyDetails {
   letterheadLogo: string;
 }
 
-export default function Receipts() {
+export default function Receipts({ departmentId }: { departmentId?: string }) {
+  const { currentUser } = useUserStore();
+  const addToast = useToastStore((state) => state.addToast);
+
+  // Local auth shadowing to redirect all queries to the correct shared company workspace
+  const auth = {
+    ...importAuth,
+    get currentUser() {
+      const liveUser = importAuth.currentUser;
+      if (!liveUser) return null;
+      const companyId = currentUser?.companyId || currentUser?.businessId || liveUser.uid;
+      return {
+        ...liveUser,
+        uid: companyId,
+        getIdToken: (forceRefresh?: boolean) => liveUser.getIdToken(forceRefresh),
+        getIdTokenResult: (forceRefresh?: boolean) => liveUser.getIdTokenResult(forceRefresh),
+      } as any;
+    }
+  };
+
   const [loading, setLoading] = useState(true);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [company, setCompany] = useState<CompanyDetails | null>(null);
@@ -42,7 +64,7 @@ export default function Receipts() {
 
   const fetchReceiptsAndCompany = async () => {
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user || !currentUser) return;
 
     setLoading(true);
     const receiptsPath = `companies/${user.uid}/receipts`;
@@ -65,7 +87,8 @@ export default function Receipts() {
       querySnap.forEach((docSnap) => {
         itemsList.push({ id: docSnap.id, ...docSnap.data() } as Receipt);
       });
-      setReceipts(itemsList);
+      const finalRecs = departmentId ? itemsList.filter(rec => rec.department === departmentId) : itemsList;
+      setReceipts(finalRecs);
       localStorage.setItem(`miratech_offline_receipts_${user.uid}`, JSON.stringify(itemsList));
     } catch (err) {
       if (isOfflineError(err)) {
@@ -74,7 +97,8 @@ export default function Receipts() {
         if (cachedCompany) setCompany(JSON.parse(cachedCompany));
         const cachedRecs = localStorage.getItem(`miratech_offline_receipts_${user.uid}`);
         if (cachedRecs) {
-          setReceipts(JSON.parse(cachedRecs));
+          const rawList = JSON.parse(cachedRecs) as Receipt[];
+          setReceipts(departmentId ? rawList.filter(rec => rec.department === departmentId) : rawList);
         } else {
           setReceipts([]);
         }
@@ -88,7 +112,7 @@ export default function Receipts() {
 
   useEffect(() => {
     fetchReceiptsAndCompany();
-  }, []);
+  }, [currentUser]);
 
   const handleDelete = async (id: string) => {
     const user = auth.currentUser;
@@ -98,6 +122,13 @@ export default function Receipts() {
     let isOffline = false;
     try {
       await deleteDoc(doc(db, "companies", user.uid, "receipts", id));
+
+      // Log database audit trail
+      await logAction(
+        "Receipt Extinguished",
+        `Permanently deleted receipt ID: ${id}`,
+        user.uid
+      );
     } catch (err) {
       if (!isOfflineError(err)) {
         handleFirestoreError(err, OperationType.DELETE, receiptPath);
@@ -118,6 +149,7 @@ export default function Receipts() {
       }
     }
 
+    addToast("Receipt deleted successfully closeout", "warning");
     if (!isOffline) {
       fetchReceiptsAndCompany();
     }
@@ -128,35 +160,43 @@ export default function Receipts() {
 
     try {
       const element = pdfAreaRef.current;
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-      const imgData = canvas.toDataURL("image/png");
+      const canvas = await safeHtml2Canvas(element, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+      pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, imgHeight);
       
       const pdfBlob = pdf.output('blob');
       const fileName = `Receipt_${previewReceipt.number}.pdf`;
-      const fileId = await uploadToDrive(pdfBlob, fileName);
       
-      const user = auth.currentUser;
-      if (user && previewReceipt.id) {
+      // Save PDF locally first to ensure of physical download success
+      pdf.save(fileName);
+      addToast(`Export Complete: Saved PDF ${fileName}`, "success");
+
+      // Attempt background Google Drive backup gracefully
+      try {
+        const fileId = await uploadToDrive(pdfBlob, fileName);
+        const user = auth.currentUser;
+        if (user && previewReceipt.id) {
           await updateDoc(doc(db, "companies", user.uid, "receipts", previewReceipt.id), {
-              driveFileId: fileId
+            driveFileId: fileId
           });
           fetchReceiptsAndCompany();
-          alert("Receipt backed up to Google Drive successfully!");
+          addToast("Receipt backed up to Google Drive successfully!", "info");
+        }
+      } catch (driveErr: any) {
+        console.warn("Google Drive skip/backup failed:", driveErr.message);
       }
-
-      pdf.save(fileName);
     } catch (err) {
-      console.error("PDF printing/upload failed:", err);
-      alert("PDF generation or upload failed.");
+      console.error("PDF printing failed:", err);
+      addToast(`System Error: PDF generation failed. Reason: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
   };
 
   const filteredReceipts = receipts.filter((rec) => {
+    if (departmentId && rec.department !== departmentId) return false;
     return (
       rec.clientName.toLowerCase().includes(search.toLowerCase()) ||
       rec.number.toLowerCase().includes(search.toLowerCase()) ||
@@ -224,7 +264,7 @@ export default function Receipts() {
                   </td>
                   <td className="py-3.5 px-4">{rec.date}</td>
                   <td className="py-3.5 px-4 text-slate-500">{rec.paymentMethod}</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-800">${rec.amount.toLocaleString()}</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-800">E{rec.amount.toLocaleString()}</td>
                   <td className="py-3.5 px-4 text-right space-x-1">
                     <button
                       onClick={() => setPreviewReceipt(rec)}
@@ -306,7 +346,7 @@ export default function Receipts() {
                 <div className="border border-slate-200 rounded-xl p-6 bg-slate-50/50 space-y-4 text-xs my-8 max-w-xl mx-auto">
                   <div className="text-center border-b border-slate-100 pb-3">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Value Cleared</span>
-                    <h2 className="text-3xl font-black text-slate-900 mt-1">${previewReceipt.amount.toLocaleString()}</h2>
+                    <h2 className="text-3xl font-black text-slate-900 mt-1">E{previewReceipt.amount.toLocaleString()}</h2>
                   </div>
 
                   <div className="grid grid-cols-2 gap-y-3 gap-x-6">

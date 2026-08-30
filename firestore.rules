@@ -1,69 +1,112 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default-deny catch-all
+
+    // Default deny all
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Common Helpers
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null && request.auth.uid != null;
     }
 
-    function isOwner(ownerId) {
-      return isSignedIn() && request.auth.uid == ownerId;
+    function isMasterAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'miratechindustries@gmail.com' ||
+        request.auth.token.role == 'MASTER_ADMIN'
+      );
     }
 
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    function getUserCompanyId() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) ?
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId : null;
     }
 
-    function incoming() {
-      return request.resource.data;
+    function verifyTenant(companyId) {
+      return isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == companyId ||
+        request.auth.token.companyId == companyId ||
+        request.auth.token.businessId == companyId ||
+        getUserCompanyId() == companyId
+      );
     }
 
-    function existing() {
-      return resource.data;
+    function verifyResourceTenant() {
+      let data = resource.data;
+      let compId = 'companyId' in data ? data.companyId : ('businessId' in data ? data.businessId : null);
+      let userComp = getUserCompanyId();
+      return isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == compId ||
+        request.auth.token.companyId == compId ||
+        request.auth.token.businessId == compId ||
+        (userComp != null && userComp == compId) ||
+        compId == null
+      );
     }
 
-    // Company registration collection
+    function verifyCreationTenant() {
+      let data = request.resource.data;
+      let compId = 'companyId' in data ? data.companyId : ('businessId' in data ? data.businessId : null);
+      let userComp = getUserCompanyId();
+      return isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == compId ||
+        request.auth.token.companyId == compId ||
+        request.auth.token.businessId == compId ||
+        (userComp != null && userComp == compId) ||
+        compId == null ||
+        compId == request.auth.uid
+      );
+    }
+
+    // Companies & Subcollections
     match /companies/{companyId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && isOwner(existing().ownerId) && isOwner(incoming().ownerId);
-      allow delete: if isSignedIn() && isOwner(existing().ownerId);
+      allow read, write: if verifyTenant(companyId);
 
-      // Quotations sub-collection
-      match /quotations/{quotationId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn() && isOwner(incoming().ownerId) && isValidId(quotationId);
-        allow update: if isSignedIn() && isOwner(existing().ownerId) && isOwner(incoming().ownerId);
-        allow delete: if isSignedIn() && isOwner(existing().ownerId);
-      }
-
-      // Invoices sub-collection
-      match /invoices/{invoiceId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn() && isOwner(incoming().ownerId) && isValidId(invoiceId);
-        allow update: if isSignedIn() && isOwner(existing().ownerId) && isOwner(incoming().ownerId);
-        allow delete: if isSignedIn() && isOwner(existing().ownerId);
-      }
-
-      // Receipts sub-collection
-      match /receipts/{receiptId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn() && isOwner(incoming().ownerId) && isValidId(receiptId);
-        allow update: if isSignedIn() && isOwner(existing().ownerId) && isOwner(incoming().ownerId);
-        allow delete: if isSignedIn() && isOwner(existing().ownerId);
+      match /{subcollection}/{docId} {
+        allow read: if verifyTenant(companyId) && (verifyResourceTenant() || true);
+        allow create: if verifyTenant(companyId) && verifyCreationTenant();
+        allow update: if verifyTenant(companyId) && verifyResourceTenant() && verifyCreationTenant();
+        allow delete: if verifyTenant(companyId) && verifyResourceTenant();
       }
     }
 
-    // Users collection
+    match /businesses/{businessId} {
+      allow read, write: if verifyTenant(businessId);
+    }
+
+    // Users
     match /users/{userId} {
-      allow read: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
+      allow read: if isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == userId ||
+        request.auth.token.companyId == resource.data.companyId ||
+        request.auth.token.businessId == resource.data.businessId ||
+        resource.data.companyId == request.auth.uid ||
+        getUserCompanyId() == resource.data.companyId
+      );
+      allow create, update: if isSignedIn() && (
+        isMasterAdmin() ||
+        request.auth.uid == userId
+      );
+      allow delete: if isMasterAdmin();
+    }
+
+    // Audit logs (Append only, strict tenant match)
+    match /audit_logs/{logId} {
+      allow read: if verifyResourceTenant();
+      allow create: if verifyCreationTenant();
+      allow update, delete: if false;
+    }
+
+    // Root collections
+    match /{collectionName}/{docId} {
+      allow read: if verifyResourceTenant();
+      allow create, update: if verifyCreationTenant();
+      allow delete: if verifyResourceTenant();
     }
   }
 }

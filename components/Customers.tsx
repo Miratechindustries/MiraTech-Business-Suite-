@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { Search, Plus, Trash2, Edit, X, User, Phone, Mail, Building, MapPin, CheckCircle2, AlertTriangle, ShieldCheck } from "lucide-react";
-import { auth } from "../lib/firebase";
+import { auth, db, handleFirestoreError, OperationType } from "../lib/firebase";
+import { useUserStore } from "../lib/store";
+import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc } from "firebase/firestore";
+import { logAction } from "../lib/audit";
 
 interface Customer {
   id: string;
@@ -16,6 +19,7 @@ interface Customer {
 }
 
 export default function Customers() {
+  const { currentUser } = useUserStore();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -32,24 +36,42 @@ export default function Customers() {
   const [totalBilling, setTotalBilling] = useState(0);
   const [status, setStatus] = useState<"Active" | "Inactive">("Active");
 
+  const [businessId, setBusinessId] = useState<string | null>(null);
+
   useEffect(() => {
-    const user = auth.currentUser;
-    const cacheKey = user ? `miratech_customers_${user.uid}` : "miratech_customers_guest";
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      setCustomers(JSON.parse(cached));
-    } else {
-      const initial: Customer[] = [
-        { id: "CST-101", name: "Sarah Jenkins", company: "Apex Systems LLC", email: "sjenkins@apexsys.com", phone: "+1 415-555-0192", address: "100 Pine St, San Francisco, CA", totalBilling: 4750.00, status: "Active" },
-        { id: "CST-102", name: "David Miller", company: "Innovate Corp", email: "david@innovate.co", phone: "+1 206-555-0891", address: "800 Fifth Ave, Seattle, WA", totalBilling: 18500.00, status: "Active" },
-        { id: "CST-103", name: "Michael Chang", company: "NextGen Software", email: "m.chang@nextgen.io", phone: "+1 650-555-0311", address: "3000 Sand Hill Rd, Menlo Park, CA", totalBilling: 350.00, status: "Active" },
-        { id: "CST-104", name: "Emily Watson", company: "Watson Holdings", email: "emily@watsonholdings.com", phone: "+1 212-555-0144", address: "420 Lexington Ave, New York, NY", totalBilling: 0.00, status: "Inactive" },
-        { id: "CST-105", name: "Robert Taylor", company: "Vanguard Tech", email: "rtaylor@vanguard.io", phone: "+1 512-555-0209", address: "401 Congress Ave, Austin, TX", totalBilling: 1250.00, status: "Active" },
-      ];
-      setCustomers(initial);
-      localStorage.setItem(cacheKey, JSON.stringify(initial));
+    async function loadBusiness() {
+        if (!auth.currentUser) return;
+        const cached = currentUser?.companyId || currentUser?.businessId;
+        if (cached) {
+          setBusinessId(cached);
+        } else {
+          try {
+            const userSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
+            if (userSnap.exists()) {
+              setBusinessId(userSnap.data()?.businessId || userSnap.data()?.companyId || auth.currentUser.uid);
+            } else {
+              setBusinessId(auth.currentUser.uid);
+            }
+          } catch (e) {
+            handleFirestoreError(e, OperationType.GET, `users/${auth.currentUser.uid}`);
+            setBusinessId(auth.currentUser.uid);
+          }
+        }
     }
-  }, []);
+    loadBusiness();
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    
+    async function fetchCustomers() {
+        const q = query(collection(db, "customers"), where("businessId", "==", businessId));
+        const snapshot = await getDocs(q);
+        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Customer));
+        setCustomers(data);
+    }
+    fetchCustomers();
+  }, [businessId]);
 
   const saveToLocal = (updatedList: Customer[]) => {
     setCustomers(updatedList);
@@ -69,13 +91,12 @@ export default function Customers() {
     }, ...oldLogs]));
   };
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email) return alert("Required fields: Name and Email.");
+    if (!name || !email || !businessId) return;
 
-    const newCustId = id || `CST-${String(customers.length + 101)}`;
-    const newCust: Customer = {
-      id: newCustId,
+    const newCust = {
+      businessId,
       name,
       company: company || "Individual/Direct",
       email,
@@ -85,7 +106,17 @@ export default function Customers() {
       status,
     };
 
-    saveToLocal([...customers, newCust]);
+    const docRef = await addDoc(collection(db, "customers"), newCust);
+    
+    // Log database audit trail
+    await logAction(
+      "Client Created",
+      `Created client profile '${name}' with email: ${email}`,
+      businessId,
+      Number(totalBilling)
+    );
+
+    setCustomers([...customers, { id: docRef.id, ...newCust }]);
     resetForm();
     setIsOpen(false);
   };
@@ -115,33 +146,50 @@ export default function Customers() {
     setIsOpen(true);
   };
 
-  const handleUpdate = (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name) return;
+    if (!editingCust || !businessId) return;
 
-    const updated = customers.map((it) =>
-      it.id === id
-        ? {
-            ...it,
-            name,
-            company: company || "Individual/Direct",
-            email,
-            phone,
-            address,
-            totalBilling: Number(totalBilling),
-            status,
-          }
-        : it
+    const updatedCust = {
+      ...editingCust,
+      name,
+      company: company || "Individual/Direct",
+      email,
+      phone,
+      address,
+      totalBilling: Number(totalBilling),
+      status,
+    };
+    
+    await updateDoc(doc(db, "customers", editingCust.id), updatedCust);
+    
+    // Log database audit trail
+    await logAction(
+      "Client Updated",
+      `Updated client profile '${name}' with email: ${email}`,
+      businessId,
+      Number(totalBilling)
     );
-    saveToLocal(updated);
+
+    setCustomers(customers.map((it) => it.id === editingCust.id ? updatedCust : it));
     resetForm();
     setIsOpen(false);
   };
 
-  const handleDelete = (custID: string) => {
+  const handleDelete = async (custID: string) => {
     if (confirm("Permanently archive this corporate client log?")) {
-      const updated = customers.filter((it) => it.id !== custID);
-      saveToLocal(updated);
+      await deleteDoc(doc(db, "customers", custID));
+      
+      // Log database audit trail
+      if (businessId) {
+        await logAction(
+          "Client Archived",
+          `Permanently archived client log ID: ${custID}`,
+          businessId
+        );
+      }
+
+      setCustomers(customers.filter((it) => it.id !== custID));
     }
   };
 
@@ -193,7 +241,7 @@ export default function Customers() {
         </div>
         <div className="bg-white border border-slate-200/80 p-3.5 rounded-lg shadow-3xs">
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Invoiced Receivables</p>
-          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">${totalTransactions.toLocaleString()}</h3>
+          <h3 className="text-base font-extrabold text-blue-700 mt-1 font-mono">E{totalTransactions.toLocaleString()}</h3>
           <p className="text-[8px] text-blue-500 font-medium">Billed across all contract lifecycles</p>
         </div>
       </div>
@@ -262,7 +310,7 @@ export default function Customers() {
                     <td className="font-bold text-blue-900">{it.company}</td>
                     <td className="font-mono text-[11px] text-slate-600">{it.email}</td>
                     <td className="font-mono text-[11px] text-slate-500">{it.phone || "---"}</td>
-                    <td className="font-mono font-bold text-slate-800">${it.totalBilling.toLocaleString()}</td>
+                    <td className="font-mono font-bold text-slate-800">E{it.totalBilling.toLocaleString()}</td>
                     <td>
                       {isActive ? (
                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-green-50 text-green-700 border border-green-150">
@@ -394,7 +442,7 @@ export default function Customers() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Recorded Billings Total ($)</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Recorded Billings Total (E)</label>
                 <input
                   type="number"
                   placeholder="0.00"
