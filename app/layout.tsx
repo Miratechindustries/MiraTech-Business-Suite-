@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import InstallClientWrapper from "../components/InstallClientWrapper";
 import LegalCompliance from "../components/LegalCompliance";
@@ -44,12 +45,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="antialiased bg-slate-50 text-slate-900 min-h-screen">
+      <body className="antialiased bg-slate-50 text-slate-900 min-h-screen"vercel/install-vercel-speed-insights-8vdile
+        {children}
+        <SpeedInsight
         <ErrorBoundary>
           {children}
         </ErrorBoundary>
         <InstallClientWrapper />
         <LegalCompliance />
+main
       </body>
     </html>
   );
