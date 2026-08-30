@@ -5,6 +5,7 @@ import "./globals.css";
 import InstallClientWrapper from "../components/InstallClientWrapper";
 import LegalCompliance from "../components/LegalCompliance";
 import ErrorBoundary from "../components/ErrorBoundary";
+import MaintenanceBanner from "../components/MaintenanceBanner";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -46,6 +47,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="antialiased bg-slate-50 text-slate-900 min-h-screen">
+        <MaintenanceBanner />
         <ErrorBoundary>
           {children}
         </ErrorBoundary>

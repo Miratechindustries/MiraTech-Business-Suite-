@@ -127,6 +127,21 @@ export async function logError(error: Error, metadata: Record<string, any> = {})
     const userId = auth.currentUser?.uid || "SYSTEM";
     const userEmail = auth.currentUser?.email || "SYSTEM";
     
+    // 1. Write to error_logs for real-time observability in Master Admin
+    await addDoc(collection(db, "error_logs"), {
+      message: error.message || "Unknown error",
+      stackTrace: error.stack || "No stack trace available",
+      source: metadata.source || (typeof window !== "undefined" ? "client-ui" : "server"),
+      resolved: false,
+      severity: metadata.severity || "Medium",
+      userId,
+      userEmail,
+      componentStack: metadata.componentStack || null,
+      timestamp: serverTimestamp(),
+      ...metadata
+    }).catch(e => console.warn("Failed to write to error_logs:", e));
+
+    // 2. Write to audit_logs for compliance ledger
     await addDoc(collection(db, "audit_logs"), {
       action: "System Error",
       detail: `Message: ${error.message}. Stack: ${error.stack}`,
@@ -138,7 +153,7 @@ export async function logError(error: Error, metadata: Record<string, any> = {})
       isError: true,
       severity: metadata.severity || "Medium",
       ...metadata
-    });
+    }).catch(e => console.warn("Failed to write to audit_logs:", e));
   } catch (e) {
     console.error("Failed to log error:", e);
   }
