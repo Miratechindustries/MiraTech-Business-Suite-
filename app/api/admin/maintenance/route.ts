@@ -19,8 +19,14 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(docSnap.data());
   } catch (error: any) {
-    console.error("Failed to retrieve maintenance status:", error);
-    return NextResponse.json({ error: error?.message || "Internal server error" }, { status: 500 });
+    console.warn("Maintenance status check defaulting to operational:", error?.message);
+    return NextResponse.json({
+      enabled: false,
+      message: "System is operating normally.",
+      allowMasterAdmin: true,
+      updatedAt: new Date().toISOString(),
+      updatedBy: "system"
+    });
   }
 }
 
