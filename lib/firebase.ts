@@ -112,6 +112,19 @@ export const logout = async () => {
   setAccessToken(null);
 };
 
+export const requestGoogleDriveScope = async (): Promise<string | null> => {
+  const provider = new GoogleAuthProvider();
+  provider.addScope('https://www.googleapis.com/auth/drive.file');
+  provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+  const result = await signInWithPopup(auth, provider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  const accessToken = credential?.accessToken || null;
+  if (accessToken) {
+    setAccessToken(accessToken);
+  }
+  return accessToken;
+};
+
 // Error Handling
 export enum OperationType {
   CREATE = "create",

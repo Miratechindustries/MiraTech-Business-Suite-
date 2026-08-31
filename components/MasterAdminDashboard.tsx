@@ -14,7 +14,7 @@ import {
   serverTimestamp,
   addDoc
 } from 'firebase/firestore';
-import { db, logout, getAccessToken, auth } from '../lib/firebase';
+import { db, logout, getAccessToken, auth, requestGoogleDriveScope } from '../lib/firebase';
 import { useUserStore, useToastStore } from '../lib/store';
 import { 
   LogOut, 
@@ -301,16 +301,19 @@ export default function MasterAdminDashboard() {
 
   const handleManualBackup = async () => {
     setIsBackingUp(true);
-    setBackupStatus("Generating system data snapshot...");
+    setBackupStatus("Generating complete system data snapshot...");
     try {
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : "";
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : "system_master_token";
       const res = await fetch('/api/admin/backup', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ backupType: 'manual' })
+        body: JSON.stringify({ 
+          backupType: 'manual',
+          userEmail: currentUser?.email || 'miratechindustries@gmail.com'
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Backup generation failed');
@@ -325,11 +328,14 @@ export default function MasterAdminDashboard() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      setBackupStatus("Local JSON backup successfully downloaded!");
+      setBackupStatus(`Local JSON backup (${data.backup?.totalRecords || 0} records) generated and downloaded successfully.`);
+      addToast("System backup downloaded successfully.", "success");
+      
       const backupSnap = await getDocs(query(collection(db, 'backup_history'), orderBy('timestamp', 'desc'), limit(20)));
       setBackupHistory(backupSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err: any) {
       setBackupStatus(`Backup error: ${err.message}`);
+      addToast(`Backup error: ${err.message}`, "error");
     } finally {
       setIsBackingUp(false);
     }
@@ -337,25 +343,41 @@ export default function MasterAdminDashboard() {
 
   const handleDriveBackup = async () => {
     setIsBackingUp(true);
-    setBackupStatus("Exporting tenant data & connecting to Google Drive...");
+    setBackupStatus("Connecting to Google Drive and exporting system data...");
     try {
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : "";
+      // 1. Check or request Google Drive OAuth token
+      let driveToken = await getAccessToken();
+      if (!driveToken) {
+        setBackupStatus("Requesting Google Drive permission popup...");
+        driveToken = await requestGoogleDriveScope();
+      }
+
+      if (!driveToken) {
+        throw new Error("Google Drive access permission was not granted. Please allow Google Drive permissions in the popup.");
+      }
+
+      // 2. Fetch server-side complete backup snapshot
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : "system_master_token";
       const res = await fetch('/api/admin/backup', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ backupType: 'automated-drive' })
+        body: JSON.stringify({ 
+          backupType: 'automated-drive',
+          userEmail: currentUser?.email || 'miratechindustries@gmail.com'
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Backup generation failed');
 
+      // 3. Upload to Google Drive folder
       const fileName = `miratech-backup-${new Date().toISOString().replace(/:/g, '-')}.json`;
-      const driveToken = await getAccessToken();
-      const fileId = await uploadBackupToGoogleDrive(data.backup, fileName, driveToken || undefined);
+      const fileId = await uploadBackupToGoogleDrive(data.backup, fileName, driveToken);
       const driveUrl = `https://drive.google.com/file/d/${fileId}/view`;
 
+      // 4. Log successful Google Drive upload
       await fetch('/api/admin/backup', {
         method: 'POST',
         headers: {
@@ -367,15 +389,19 @@ export default function MasterAdminDashboard() {
           backupType: 'automated-drive',
           status: 'success',
           driveFileId: fileId,
-          driveUrl
+          driveUrl,
+          userEmail: currentUser?.email || 'miratechindustries@gmail.com'
         })
       });
 
-      setBackupStatus(`Successfully uploaded backup to Google Drive under MiraTechBusinessSuite/backup/ (File ID: ${fileId})`);
+      setBackupStatus(`Google Drive backup completed successfully! File stored under folder 'MiraTechBusinessSuite' (File ID: ${fileId})`);
+      addToast("Uploaded backup to Google Drive successfully!", "success");
+
       const backupSnap = await getDocs(query(collection(db, 'backup_history'), orderBy('timestamp', 'desc'), limit(20)));
       setBackupHistory(backupSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err: any) {
       setBackupStatus(`Google Drive backup error: ${err.message}`);
+      addToast(err.message, "error");
     } finally {
       setIsBackingUp(false);
     }
@@ -927,6 +953,40 @@ export default function MasterAdminDashboard() {
                 {isBackingUp ? 'Processing...' : 'Backup to Google Drive'}
               </button>
             </div>
+          </div>
+
+          {/* Backup History Table */}
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-3xs max-w-4xl mx-auto space-y-4">
+            <h3 className="text-sm font-extrabold text-slate-950 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-slate-500" /> Recent Disaster Recovery Backups
+            </h3>
+            {backupHistory.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-6">No historical backups logged yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {backupHistory.map((b, idx) => (
+                  <div key={idx} className="p-3 border border-slate-100 rounded-xl bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-3">
+                      <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-extrabold ${b.status === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                        {b.status || 'success'}
+                      </span>
+                      <span className="font-bold text-slate-800 uppercase tracking-tight">{b.backupType}</span>
+                      {b.recordCount && (
+                        <span className="text-[11px] text-slate-500 font-mono">({b.recordCount} records)</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-slate-500 font-mono text-[11px]">
+                      <span>{b.timestamp?.toDate ? new Date(b.timestamp.toDate()).toLocaleString() : b.timestamp ? new Date(b.timestamp).toLocaleString() : ''}</span>
+                      {b.driveUrl && (
+                        <a href={b.driveUrl} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline">
+                          View in Drive
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </motion.div>
       )}

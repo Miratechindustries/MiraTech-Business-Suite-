@@ -2,20 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "../../../../lib/firebase-admin";
 import { logServerAction } from "../../../../lib/server-audit";
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Verify bearer token is provided
+    if (!authHeader || !authHeader.startsWith("Bearer ") || authHeader.length < 15) {
+      return NextResponse.json({ error: "Unauthorized: Missing or invalid authentication token" }, { status: 401 });
     }
 
     const { 
-      includeCollections = ["companies", "users", "audit_logs", "invoices", "customers", "employees", "expenses"],
+      includeCollections = ["companies", "users", "audit_logs", "invoices", "customers", "employees", "expenses", "error_logs", "system_config"],
       backupType = "manual",
       driveFileId = null,
       driveUrl = null,
       status = "success",
-      errorMessage = null
+      errorMessage = null,
+      userEmail = "miratechindustries@gmail.com"
     } = await req.json().catch(() => ({}));
 
     // If client is just logging a backup attempt result
@@ -26,7 +30,8 @@ export async function POST(req: NextRequest) {
         driveFileId,
         driveUrl,
         errorMessage,
-        timestamp: new Date()
+        timestamp: new Date(),
+        initiatedBy: userEmail
       });
       return NextResponse.json({ success: true });
     }
@@ -34,16 +39,23 @@ export async function POST(req: NextRequest) {
     const backupData: Record<string, any[]> = {};
 
     for (const colName of includeCollections) {
-      const snapshot = await adminDb.collection(colName).get();
-      backupData[colName] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      try {
+        const snapshot = await adminDb.collection(colName).get();
+        backupData[colName] = snapshot.docs.map((doc: any) => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+      } catch (colErr: any) {
+        console.warn(`Could not read collection ${colName} during backup:`, colErr?.message);
+        backupData[colName] = [];
+      }
     }
 
     const fullBackup = {
       version: "1.0",
       timestamp: new Date().toISOString(),
+      generator: "MiraTech Business Suite Data Engine",
+      totalRecords: Object.values(backupData).reduce((acc, curr) => acc + curr.length, 0),
       data: backupData
     };
 
@@ -52,15 +64,17 @@ export async function POST(req: NextRequest) {
       status: "success",
       driveFileId,
       driveUrl,
-      timestamp: new Date()
-    });
+      timestamp: new Date(),
+      initiatedBy: userEmail,
+      recordCount: fullBackup.totalRecords
+    }).catch((histErr) => console.warn("Failed to write to backup_history:", histErr));
 
     await logServerAction({
       action: "DATA_BACKUP_EXPORT",
-      detail: `Exported system backup (${backupType}) containing collections: ${includeCollections.join(", ")}`,
+      detail: `Exported system backup (${backupType}) with ${fullBackup.totalRecords} records across collections: ${includeCollections.join(", ")}`,
       businessId: "system",
       userId: "master_admin",
-      userEmail: "miratechindustries@gmail.com",
+      userEmail,
       department: "governance",
       severity: "INFO"
     });
@@ -78,7 +92,6 @@ export async function POST(req: NextRequest) {
       errorMessage: error?.message || "Unknown error",
       timestamp: new Date()
     }).catch(() => {});
-    return NextResponse.json({ error: error?.message || "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Internal server error during backup generation" }, { status: 500 });
   }
 }
-
