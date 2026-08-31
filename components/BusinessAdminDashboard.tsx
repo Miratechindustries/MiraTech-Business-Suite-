@@ -66,7 +66,8 @@ import {
   Receipt,
   HelpCircle,
   Clock,
-  Briefcase
+  Briefcase,
+  Webhook
 } from "lucide-react";
 import Image from "next/image";
 import CompanyProfile from "./CompanyProfile";

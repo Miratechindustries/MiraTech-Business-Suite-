@@ -2243,7 +2243,7 @@ export default function CompanyCreation() {
               </button>
 
               <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                <span>Didn't receive code?</span>
+                <span>Didn&apos;t receive code?</span>
                 {resendCooldown > 0 ? (
                   <span className="font-mono text-xs font-semibold text-slate-400">
                     Resend in {resendCooldown}s
