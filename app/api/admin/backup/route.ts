@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
-import { logServerAction } from "@/lib/server-audit";
+import { adminDb } from "../../../../lib/firebase-admin";
+import { logServerAction } from "../../../../lib/server-audit";
 
 export async function POST(req: NextRequest) {
   try {

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import InstallClientWrapper from "../components/InstallClientWrapper";
 import LegalCompliance from "../components/LegalCompliance";
@@ -51,7 +50,6 @@ export default function RootLayout({
         <ErrorBoundary>
           {children}
         </ErrorBoundary>
-        <SpeedInsights />
         <InstallClientWrapper />
         <LegalCompliance />
       </body>

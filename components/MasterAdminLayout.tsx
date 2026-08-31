@@ -1,19 +1,17 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
 import { useUserStore } from "../lib/store";
 import { logout } from "../lib/firebase";
 import { LayoutDashboard, Users, Building2, ShieldAlert, LogOut, FileText, ShieldCheck, X, ShoppingCart } from "lucide-react";
 import LoadingSkeleton from "./LoadingSkeleton";
-
-const MasterAdminDashboard = dynamic(() => import("./MasterAdminDashboard"), { loading: () => <LoadingSkeleton /> });
-const UserManagement = dynamic(() => import("./UserManagement"), { loading: () => <LoadingSkeleton /> });
-const AuditLogs = dynamic(() => import("./AuditLogs"), { loading: () => <LoadingSkeleton /> });
-const CompanyCreation = dynamic(() => import("./CompanyCreation"), { loading: () => <LoadingSkeleton /> });
-const CompaniesTable = dynamic(() => import("./CompaniesTable"), { loading: () => <LoadingSkeleton /> });
-const SecurityOperations = dynamic(() => import("./SecurityOperations"), { loading: () => <LoadingSkeleton /> });
-const POSHub = dynamic(() => import("./POSHub"), { loading: () => <LoadingSkeleton /> });
+import MasterAdminDashboard from "./MasterAdminDashboard";
+import UserManagement from "./UserManagement";
+import AuditLogs from "./AuditLogs";
+import CompanyCreation from "./CompanyCreation";
+import CompaniesTable from "./CompaniesTable";
+import SecurityOperations from "./SecurityOperations";
+import POSHub from "./POSHub";
 
 export default function MasterAdminLayout() {
   const [activeTab, setActiveTab] = useState("dashboard");

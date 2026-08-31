@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Wrench, ShieldAlert, RefreshCw } from 'lucide-react';
-import { useUserStore } from '@/lib/store';
+import { useUserStore } from '../lib/store';
 
 export default function MaintenanceBanner() {
   const { currentUser } = useUserStore();

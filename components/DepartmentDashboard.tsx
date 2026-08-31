@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { collection, query, where, orderBy, limit, getDocs, updateDoc, addDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { logDepartmentActivity } from "@/lib/department";
+import { logDepartmentActivity } from "../lib/department";
 import jsPDF from "jspdf";
 import {
   ResponsiveContainer,

@@ -20,7 +20,7 @@ import {
   Layers, 
   Activity
 } from "lucide-react";
-import { logDepartmentActivity } from "@/lib/department";
+import { logDepartmentActivity } from "../lib/department";
 
 interface ModuleConfig {
   id: string;
