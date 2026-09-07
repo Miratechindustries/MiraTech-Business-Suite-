@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import InstallPrompt from "./InstallPrompt";
-import { SpeedInsights } from "@vercel/speed-insights/next";
+
 
 export default function InstallClientWrapper() {
   const [mounted, setMounted] = useState(false);
@@ -15,7 +15,7 @@ export default function InstallClientWrapper() {
   return (
     <>
       <InstallPrompt />
-      <SpeedInsights />
+      
     </>
   );
 }

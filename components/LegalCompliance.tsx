@@ -125,12 +125,21 @@ export default function LegalCompliance() {
             <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 space-y-2.5">
               <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
                 <span>Customize Caching Preferences</span>
-                <button 
-                  onClick={() => setShowTermsModal(true)} 
-                  className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition"
-                >
-                  <FileText className="h-3 w-3" /> View Terms
-                </button>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="/legal"
+                    target="_blank"
+                    className="text-slate-400 hover:text-white flex items-center gap-0.5 transition"
+                  >
+                    Legal Hub <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                  <button 
+                    onClick={() => setShowTermsModal(true)} 
+                    className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <FileText className="h-3 w-3" /> View Terms
+                  </button>
+                </div>
               </div>
 
               {/* Essential */}
@@ -230,12 +239,22 @@ export default function LegalCompliance() {
                     International Terms & Conditions, ePrivacy Compliance, & GDPR/CCPA Rights.
                   </p>
                 </div>
-                <button
-                  onClick={() => setShowTermsModal(false)}
-                  className="p-1.5 bg-slate-850 hover:bg-white/10 text-slate-400 hover:text-white rounded-xl transition cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="/legal"
+                    target="_blank"
+                    className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-indigo-200 hover:text-white rounded-xl text-xs font-medium flex items-center gap-1.5 transition"
+                  >
+                    <span>Open Legal Center</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                  <button
+                    onClick={() => setShowTermsModal(false)}
+                    className="p-1.5 bg-slate-800 hover:bg-white/10 text-slate-400 hover:text-white rounded-xl transition cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Document Nav Header Tabs */}

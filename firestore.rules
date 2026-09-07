@@ -127,6 +127,15 @@ service cloud.firestore {
       allow read, write: if isMasterAdmin();
     }
 
+    // Legal Documents (Public read for statutory compliance, universal registry write)
+    match /legal_documents/{docId} {
+      allow read, write: if true;
+
+      match /previous_versions/{versionId} {
+        allow read, write: if true;
+      }
+    }
+
     // Root collections
     match /{collectionName}/{docId} {
       allow read: if verifyResourceTenant();

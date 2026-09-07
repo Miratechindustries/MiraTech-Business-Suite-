@@ -1,0 +1,49 @@
+
+> miratech-suite@0.1.0 build
+> next build
+
+ ⚠ You are using a non-standard "NODE_ENV" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env
+   ▲ Next.js 15.1.11
+
+   Creating an optimized production build ...
+ ⚠ Compiled with warnings
+
+./node_modules/@protobufjs/inquire/index.js
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+./node_modules/@protobufjs/inquire/index.js
+./node_modules/protobufjs/src/util/minimal.js
+./node_modules/protobufjs/src/index-minimal.js
+./node_modules/protobufjs/src/index-light.js
+./node_modules/protobufjs/src/index.js
+./node_modules/protobufjs/index.js
+./node_modules/@grpc/proto-loader/build/src/index.js
+./node_modules/@firebase/firestore/dist/index.node.mjs
+./node_modules/firebase/firestore/dist/index.mjs
+./lib/firebase-admin.ts
+./app/api/governance/billing-webhook/route.ts
+
+ ✓ Compiled successfully
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+   Generating static pages (0/17) ...
+Error: <Html> should not be imported outside of pages/_document.
+Read more: https://nextjs.org/docs/messages/no-document-import-in-page
+    at y (.next/server/chunks/627.js:6:1263)
+Error occurred prerendering page "/404". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: <Html> should not be imported outside of pages/_document.
+Read more: https://nextjs.org/docs/messages/no-document-import-in-page
+    at Y (/app/applet/node_modules/next/dist/compiled/next-server/pages.runtime.prod.js:16:5469)
+    at y (/app/applet/.next/server/chunks/627.js:6:1263)
+    at Object.react_stack_bottom_frame (/app/applet/node_modules/react-dom/cjs/react-dom-server.edge.development.js:10313:18)
+    at renderWithHooks (/app/applet/node_modules/react-dom/cjs/react-dom-server.edge.development.js:5399:19)
+    at renderElement (/app/applet/node_modules/react-dom/cjs/react-dom-server.edge.development.js:5834:23)
+    at retryNode (/app/applet/node_modules/react-dom/cjs/react-dom-server.edge.development.js:6765:31)
+    at renderNodeDestructive (/app/applet/node_modules/react-dom/cjs/react-dom-server.edge.development.js:6715:11)
+    at renderElement (/app/applet/node_modules/react-dom/cjs/react-dom-server.edge.development.js:5820:11)
+    at retryNode (/app/applet/node_modules/react-dom/cjs/react-dom-server.edge.development.js:6765:31)
+    at renderNodeDestructive (/app/applet/node_modules/react-dom/cjs/react-dom-server.edge.development.js:6715:11)
+Export encountered an error on /_error: /404, exiting the build.
+ ⨯ Next.js build worker exited with code: 1 and signal: null
