@@ -14,7 +14,7 @@ import {
   formatPlanPrice
 } from '../lib/subscriptions';
 import { logAction } from '../lib/audit';
-import { getPaddle, PADDLE_PRICE_MAP, isPaddleConfigured, getPaddleEnvironment } from '../lib/paddle-client';
+import { getPaddle, PADDLE_PRICE_MAP, isPaddleConfigured, getPaddleEnvironment, getPaddleEventLogs, PaddleEventLog } from '../lib/paddle-client';
 import { 
   Check, 
   AlertTriangle, 
@@ -47,6 +47,28 @@ export default function SubscriptionsView() {
   const [paddleReady, setPaddleReady] = useState(false);
   const [paddleConfigured, setPaddleConfigured] = useState(false);
   const [autoRenewUpdating, setAutoRenewUpdating] = useState(false);
+  const [paymentLogs, setPaymentLogs] = useState<PaddleEventLog[]>([]);
+
+  // Background sync hook verifying current user's Paddle subscription status against Firestore on page load
+  useEffect(() => {
+    setPaymentLogs(getPaddleEventLogs());
+    const syncSubscriptionStatus = async () => {
+      if (!currentUser?.companyId) return;
+      try {
+        const docRef = doc(db, 'companies', currentUser.companyId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const remoteData = docSnap.data();
+          if (remoteData.subscriptionStatus && company && remoteData.subscriptionStatus !== company.subscriptionStatus) {
+            setCompany(remoteData);
+          }
+        }
+      } catch (err) {
+        console.warn("Background subscription status sync failed:", err);
+      }
+    };
+    syncSubscriptionStatus();
+  }, [currentUser?.companyId]);
 
   const handleToggleAutoRenew = async (newVal: boolean) => {
     if (!currentUser?.companyId) return;
@@ -487,6 +509,50 @@ export default function SubscriptionsView() {
             </li>
           </ul>
         </div>
+      </div>
+
+      {/* Recent Payment History & Webhook Logs */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-blue-600" />
+            <h3 className="font-bold text-slate-900 text-sm">Recent Paddle Payment & Subscription History</h3>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            {paymentLogs.length} Events Logged
+          </span>
+        </div>
+
+        {paymentLogs.length > 0 ? (
+          <div className="space-y-2.5 max-h-64 overflow-y-auto">
+            {paymentLogs.map((log) => (
+              <div key={log.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-150 rounded-xl text-xs">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md ${
+                      log.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                      log.status === 'error' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {log.name}
+                    </span>
+                    <span className="text-slate-400 text-[11px] font-mono">{new Date(log.timestamp).toLocaleString()}</span>
+                  </div>
+                  <p className="text-slate-600 font-mono text-[11px] truncate max-w-md">{log.details}</p>
+                </div>
+                <span className={`font-bold text-[11px] uppercase ${
+                  log.status === 'completed' ? 'text-emerald-600' : log.status === 'error' ? 'text-red-600' : 'text-blue-600'
+                }`}>
+                  {log.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-xs text-slate-400 space-y-1">
+            <p>No recent payment transactions or webhooks recorded in this session yet.</p>
+            <p className="text-[11px]">Paddle checkout completions and error logs will appear here automatically.</p>
+          </div>
+        )}
       </div>
 
       {/* Subscription Option Matrix */}
