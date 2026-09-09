@@ -26,7 +26,7 @@ import {
   X,
   Plus
 } from "lucide-react";
-import { SUBSCRIPTION_PLANS, getLockedFeaturesForPlan } from '../lib/subscriptions';
+import { SUBSCRIPTION_PLANS, getLockedFeaturesForPlan, formatPlanPrice } from '../lib/subscriptions';
 
 export default function CompaniesTable() {
   const [companies, setCompanies] = useState<any[]>([]);
@@ -641,7 +641,7 @@ export default function CompaniesTable() {
                           className="w-full px-3 py-2 border border-slate-205 rounded-lg bg-slate-50/30 font-bold"
                         >
                           {SUBSCRIPTION_PLANS.map(p => (
-                            <option key={p.id} value={p.id}>{p.name} - E{p.price}/mo</option>
+                            <option key={p.id} value={p.id}>{p.name} - {formatPlanPrice(p, 'monthly', editingCompany?.currency || 'USD')}/mo</option>
                           ))}
                         </select>
                       </div>

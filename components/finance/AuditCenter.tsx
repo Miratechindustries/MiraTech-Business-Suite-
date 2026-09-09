@@ -35,9 +35,10 @@ import {
   Save
 } from "lucide-react";
 import { auth, db } from "../../lib/firebase";
-import { collection, query, getDocs, doc, getDoc, addDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, getDocs, doc, getDoc, addDoc, setDoc, serverTimestamp, where, limit } from "firebase/firestore";
 import { useUserStore, useToastStore } from "../../lib/store";
 import { motion, AnimatePresence } from "motion/react";
+import { logAction, verifyAuditLogIntegrity, computeSha256 } from "../../lib/audit";
 import { 
   getLedgerEntries, 
   getJournalEntries, 
@@ -156,6 +157,88 @@ export default function AuditCenter() {
   const isMasterAdmin = 
     currentUser?.role?.toUpperCase() === "MASTER_ADMIN" || 
     auth.currentUser?.email?.toLowerCase() === "miratechindustries@gmail.com";
+
+  const isFinancialController = 
+    isMasterAdmin || 
+    ["ADMIN", "BUSINESS_ADMIN", "FINANCE_CONTROLLER", "CONTROLLER", "AUDITOR"].includes(currentUser?.role?.toUpperCase() || "");
+
+  // Tamper-Evident SHA-256 Cryptographic Audit Vault State
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
+  const [vaultVerification, setVaultVerification] = useState<{
+    status: "IDLE" | "VERIFYING" | "VERIFIED_AUTHENTIC" | "COMPROMISED";
+    totalScanned: number;
+    validHashes: number;
+    compromisedHashes: number;
+    verifiedAt: string | null;
+    certificateHash: string | null;
+  }>({
+    status: "IDLE",
+    totalScanned: 0,
+    validHashes: 0,
+    compromisedHashes: 0,
+    verifiedAt: null,
+    certificateHash: null
+  });
+
+  const fetchAndVerifyAuditVault = useCallback(async () => {
+    setLoadingAuditLogs(true);
+    setVaultVerification(prev => ({ ...prev, status: "VERIFYING" }));
+    try {
+      const activeScope = isSuperAdminView && selectedTenantId !== "all" ? selectedTenantId : businessId;
+      let q;
+      if (!activeScope || (isSuperAdminView && selectedTenantId === "all")) {
+        q = query(collection(db, "audit_logs"), limit(100));
+      } else {
+        q = query(collection(db, "audit_logs"), where("businessId", "==", activeScope), limit(100));
+      }
+
+      const snap = await getDocs(q);
+      const rawLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      
+      let validCount = 0;
+      let compromisedCount = 0;
+
+      const verifiedLogs = await Promise.all(rawLogs.map(async (l: any) => {
+        const result = await verifyAuditLogIntegrity(l);
+        if (result.isAuthentic) {
+          validCount++;
+        } else {
+          compromisedCount++;
+        }
+        return {
+          ...l,
+          integrityCheck: result
+        };
+      }));
+
+      // Generate a batch integrity certificate
+      const certData = `CERT|${new Date().toISOString()}|COUNT:${verifiedLogs.length}|VALID:${validCount}|FAIL:${compromisedCount}`;
+      const certHash = await computeSha256(certData);
+
+      setAuditLogs(verifiedLogs);
+      setVaultVerification({
+        status: compromisedCount > 0 ? "COMPROMISED" : "VERIFIED_AUTHENTIC",
+        totalScanned: verifiedLogs.length,
+        validHashes: validCount,
+        compromisedHashes: compromisedCount,
+        verifiedAt: new Date().toLocaleTimeString(),
+        certificateHash: certHash
+      });
+
+      if (compromisedCount > 0) {
+        addToast(`SECURITY ALERT: ${compromisedCount} audit records failed cryptographic SHA-256 verification!`, "error");
+      } else {
+        addToast(`Audit Vault: ${validCount} records verified authentic with SHA-256 cryptographic seals.`, "success");
+      }
+    } catch (err: any) {
+      console.error("Failed to verify audit vault", err);
+      addToast(`Audit vault scan error: ${err.message}`, "error");
+      setVaultVerification(prev => ({ ...prev, status: "IDLE" }));
+    } finally {
+      setLoadingAuditLogs(false);
+    }
+  }, [businessId, isSuperAdminView, selectedTenantId, addToast]);
 
   // Load user business & bootstrap tenant profiles if master admin
   useEffect(() => {
@@ -423,6 +506,19 @@ export default function AuditCenter() {
       addToast("Active business scope is required to save balance brought forward.", "error");
       return;
     }
+
+    if (!isFinancialController) {
+      addToast("Security Gate: Only Master Admin or certified Finance Controllers can modify baseline opening balances.", "error");
+      await logAction(
+        "Unauthorized Balance Forward Edit Blocked",
+        `User ${auth.currentUser?.email || "Unknown"} attempted to modify opening fiscal balances without financial controller authorization.`,
+        activeCorpId,
+        undefined,
+        { role: currentUser?.role || "GUEST", department: "Audit", severity: "SECURITY_ALERT" }
+      );
+      return;
+    }
+
     try {
       const payload = {
         id: "opening_bf",
@@ -438,6 +534,15 @@ export default function AuditCenter() {
 
       await setDoc(doc(db, "companies", activeCorpId, "balance_forwards", "opening_bf"), payload);
       setBalanceForward(payload);
+
+      await logAction(
+        "Fiscal Opening Balance Updated",
+        `Opening balance updated. Cash b/f: E${bfForm.cashBf}, AR b/f: E${bfForm.receivablesBf}, AP b/f: E${bfForm.payablesBf}, Equity b/f: E${bfForm.equityBf}.`,
+        activeCorpId,
+        Number(bfForm.cashBf),
+        { role: currentUser?.role || "CONTROLLER", department: "Finance", severity: "AUDIT_CRITICAL" }
+      );
+
       addToast("Opening Balance Brought Forward (b/f) document saved successfully!", "success");
       setShowBfEdit(false);
       fetchAccountingLogs();
@@ -452,6 +557,18 @@ export default function AuditCenter() {
     const activeScope = isSuperAdminView && selectedTenantId !== "all" ? selectedTenantId : businessId;
     if (!activeScope) {
       addToast("Please choose an active tenant to record this entry.", "error");
+      return;
+    }
+
+    if (!isFinancialController) {
+      addToast("Security Gate: Only Master Admin or certified Finance Controllers can post manual journal adjustments.", "error");
+      await logAction(
+        "Unauthorized Journal Adjustment Blocked",
+        `User ${auth.currentUser?.email || "Unknown"} attempted manual journal posting without financial controller authorization.`,
+        activeScope,
+        Number(entryAmount),
+        { role: currentUser?.role || "GUEST", department: "Audit", severity: "SECURITY_ALERT" }
+      );
       return;
     }
 
@@ -482,6 +599,14 @@ export default function AuditCenter() {
         description: `${entryDescription} [Ref ID: ${entryInvoiceRef}]`,
         createdByEmail: operatorEmail
       });
+
+      await logAction(
+        "Manual Journal Adjustment Posted",
+        `Direct journal entry of E${Number(entryAmount)} posted to ${entryModule}. Ref: ${entryInvoiceRef}. Double-entry ledger ref: ${doubleRes?.referenceNumber}.`,
+        activeScope,
+        Number(entryAmount),
+        { role: currentUser?.role || "FINANCE_CONTROLLER", department: "Finance", severity: "AUDIT_CRITICAL" }
+      );
 
       addToast(`Direct bookkeeping recorded: Double Entry entries generated under Ledger Ref ${doubleRes?.referenceNumber}!`, "success");
       setShowEntryForm(false);
@@ -2232,6 +2357,144 @@ export default function AuditCenter() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Cryptographic SHA-256 Audit Vault & Chain Verification Inspector */}
+              <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-3xs space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div>
+                    <h4 className="text-md font-extrabold text-slate-900 flex items-center gap-1.5">
+                      <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                      Tamper-Evident SHA-256 Audit Vault & Chain Verification
+                    </h4>
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      Every administrative, financial, and bookkeeping event is hashed with SHA-256 over its canonical payload. Firestore append-only security rules prevent unauthorized mutation.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={fetchAndVerifyAuditVault}
+                    disabled={loadingAuditLogs}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold shrink-0 shadow-2xs transition cursor-pointer"
+                  >
+                    {loadingAuditLogs ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying Hashes...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5" /> Run Vault Verification Audit
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Vault Verification Metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Audited Records Scanned</span>
+                    <span className="text-base font-extrabold text-slate-800 font-mono">{vaultVerification.totalScanned}</span>
+                    <span className="text-[9px] text-slate-500 block">Append-only audit trail</span>
+                  </div>
+                  <div className="bg-emerald-50/50 border border-emerald-200 p-3 rounded-lg">
+                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">Cryptographic Valid Hashes</span>
+                    <span className="text-base font-extrabold text-emerald-700 font-mono">{vaultVerification.validHashes}</span>
+                    <span className="text-[9px] text-emerald-600 block">SHA-256 Verified Untampered</span>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Compromised / Tampered</span>
+                    <span className={`text-base font-extrabold font-mono ${vaultVerification.compromisedHashes > 0 ? "text-rose-600" : "text-emerald-700"}`}>
+                      {vaultVerification.compromisedHashes}
+                    </span>
+                    <span className="text-[9px] text-slate-500 block">
+                      {vaultVerification.compromisedHashes > 0 ? "TAMPER DETECTED" : "Zero Integrity Failures"}
+                    </span>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Governance Gate Status</span>
+                    <span className="text-xs font-extrabold text-indigo-700 block mt-0.5">
+                      {isFinancialController ? "CONTROLLER PRIVILEGES ACTIVE" : "READ-ONLY AUDIT VIEW"}
+                    </span>
+                    <span className="text-[9px] text-slate-500 block">
+                      Role: {currentUser?.role || "GUEST"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Batch Certificate Display */}
+                {vaultVerification.certificateHash && (
+                  <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                    <div className="flex items-center gap-2 text-emerald-800">
+                      <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <span className="font-extrabold block">Digital Audit Vault Certificate Issued</span>
+                        <span className="text-[10px] text-emerald-700 font-mono">
+                          Batch Certificate SHA-256: {vaultVerification.certificateHash}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      Verified at {vaultVerification.verifiedAt}
+                    </span>
+                  </div>
+                )}
+
+                {/* Audit Logs Table */}
+                {auditLogs.length > 0 && (
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between">
+                      <span>Audit Vault Records Trail</span>
+                      <span className="text-[10px] text-slate-500">Showing last {auditLogs.length} verified operations</span>
+                    </div>
+                    <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-slate-100/70 text-[10px] text-slate-500 uppercase font-mono sticky top-0">
+                          <tr>
+                            <th className="p-2.5">Date / Time</th>
+                            <th className="p-2.5">Action & Scope</th>
+                            <th className="p-2.5">Actor (Role)</th>
+                            <th className="p-2.5">SHA-256 Payload Signature</th>
+                            <th className="p-2.5 text-center">Integrity</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-[11px]">
+                          {auditLogs.map((log) => {
+                            const isValid = log.integrityCheck?.isAuthentic !== false;
+                            return (
+                              <tr key={log.id || Math.random()} className="hover:bg-slate-50">
+                                <td className="p-2.5 font-mono text-slate-500 whitespace-nowrap">
+                                  {log.isoTimestamp ? log.isoTimestamp.replace("T", " ").substring(0, 19) : (log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : "---")}
+                                </td>
+                                <td className="p-2.5">
+                                  <span className="font-bold text-slate-800 block">{log.action}</span>
+                                  <span className="text-[10px] text-slate-500">{log.detail}</span>
+                                </td>
+                                <td className="p-2.5">
+                                  <span className="font-medium text-slate-700 block">{log.user || "System"}</span>
+                                  <span className="text-[9px] text-indigo-600 font-mono">[{log.role || "USER"}]</span>
+                                </td>
+                                <td className="p-2.5 font-mono text-[10px] text-slate-600 max-w-xs truncate" title={log.payloadHash}>
+                                  {log.payloadHash ? `${log.payloadHash.substring(0, 16)}...${log.payloadHash.substring(48)}` : "LEGACY_PRE_UPGRADE"}
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  {isValid ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      <CheckCircle className="h-2.5 w-2.5" /> SEALED
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                      FAILED
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
 
             </div>

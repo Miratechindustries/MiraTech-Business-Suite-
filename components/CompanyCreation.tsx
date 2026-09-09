@@ -6,7 +6,14 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { db, emailSignIn, auth } from '../lib/firebase';
 import firebaseConfig from '../firebase-applet-config.json';
-import { SUBSCRIPTION_PLANS, getLockedFeaturesForPlan, isFeatureAllowedForPlan, FEATURE_DEFINITIONS } from '../lib/subscriptions';
+import { 
+  SUBSCRIPTION_PLANS, 
+  getLockedFeaturesForPlan, 
+  isFeatureAllowedForPlan, 
+  FEATURE_DEFINITIONS,
+  getPlanPrice,
+  formatPlanPrice
+} from '../lib/subscriptions';
 import { useToastStore } from '../lib/store';
 import { 
   Building2, 
@@ -1045,9 +1052,7 @@ export default function CompanyCreation() {
   };
 
   const selectedPlanDetails = SUBSCRIPTION_PLANS.find(p => p.id === subscriptionPlanId) || SUBSCRIPTION_PLANS[2];
-  const monthlyPrice = selectedPlanDetails.price;
-  const annualPrice = Math.round(selectedPlanDetails.price * 12 * 0.8);
-  const activePrice = billingCycle === 'annual' ? annualPrice : monthlyPrice;
+  const activePrice = getPlanPrice(selectedPlanDetails, billingCycle);
 
   return (
     <div className="w-full text-slate-800 space-y-6">
@@ -1998,9 +2003,7 @@ export default function CompanyCreation() {
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {SUBSCRIPTION_PLANS.map((plan) => {
                 const isSelected = subscriptionPlanId === plan.id;
-                const pMonthly = plan.price;
-                const pAnnual = Math.round(plan.price * 12 * 0.8);
-                const displayPrice = billingCycle === 'annual' ? pAnnual : pMonthly;
+                const formattedPrice = formatPlanPrice(plan, billingCycle, currency);
                 const periodLabel = billingCycle === 'annual' ? '/yr' : '/mo';
 
                 return (
@@ -2031,7 +2034,7 @@ export default function CompanyCreation() {
                         </div>
                         <div className="mt-2 flex items-baseline gap-1">
                           <span className="text-lg font-black font-sans text-slate-900">
-                            {currency === 'USD' ? '$' : 'E'}{displayPrice.toLocaleString()}
+                            {formattedPrice}
                           </span>
                           <span className="text-[10px] text-slate-400">{periodLabel}</span>
                         </div>
@@ -2370,7 +2373,7 @@ export default function CompanyCreation() {
                 </div>
                 <div className="space-y-1 text-slate-600">
                   <p><strong className="text-slate-800">Plan:</strong> {selectedPlanDetails.name} ({billingCycle.toUpperCase()})</p>
-                  <p><strong className="text-slate-800">Price:</strong> {currency === 'USD' ? '$' : 'E'}{activePrice.toLocaleString()} (14-Day Free Trial)</p>
+                  <p><strong className="text-slate-800">Price:</strong> {formatPlanPrice(selectedPlanDetails, billingCycle, currency)}/{billingCycle === 'annual' ? 'yr' : 'mo'} (14-Day Free Trial)</p>
                   <p><strong className="text-slate-800">Admin Role:</strong> {initialRole} ({adminPositionTitle})</p>
                   <p><strong className="text-slate-800">Initial Staff Queue:</strong> {staffList.length} staff accounts</p>
                 </div>

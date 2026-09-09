@@ -21,7 +21,9 @@ import {
   SubscriptionPlan, 
   ALL_FEATURES, 
   getLockedFeaturesForPlan,
-  daysBetween 
+  daysBetween,
+  getPlanPrice,
+  formatPlanPrice
 } from "../lib/subscriptions";
 import { logAction } from "../lib/audit";
 import { 
@@ -1153,7 +1155,6 @@ export default function BusinessAdminDashboard({
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 pt-2">
               {SUBSCRIPTION_PLANS.map((plan) => {
                 const isCurrent = plan.id === currentPlanId;
-                const price = billingCycle === "annual" ? Math.round(plan.price * 12 * 0.8) : plan.price;
 
                 return (
                   <div
@@ -1179,7 +1180,7 @@ export default function BusinessAdminDashboard({
                       <div>
                         <h4 className="text-base font-black text-slate-900">{plan.name}</h4>
                         <div className="mt-1 font-mono text-xl font-black text-slate-900">
-                          ${price}
+                          {formatPlanPrice(plan, billingCycle, company?.currency || 'USD')}
                           <span className="text-[10px] font-normal text-slate-400 font-sans">
                             /{billingCycle === "annual" ? "yr" : "mo"}
                           </span>
