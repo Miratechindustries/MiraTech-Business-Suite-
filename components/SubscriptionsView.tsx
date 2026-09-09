@@ -46,6 +46,37 @@ export default function SubscriptionsView() {
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [paddleReady, setPaddleReady] = useState(false);
   const [paddleConfigured, setPaddleConfigured] = useState(false);
+  const [autoRenewUpdating, setAutoRenewUpdating] = useState(false);
+
+  const handleToggleAutoRenew = async (newVal: boolean) => {
+    if (!currentUser?.companyId) return;
+    if (currentUser.role !== 'BUSINESS_ADMIN' && currentUser.role !== 'MASTER_ADMIN') {
+      setError("Only Corporate Administrators can modify subscription continuity settings.");
+      return;
+    }
+    setAutoRenewUpdating(true);
+    setError(null);
+    try {
+      const updateData = { autoRenew: newVal };
+      await updateDoc(doc(db, 'companies', currentUser.companyId), updateData);
+      try {
+        await updateDoc(doc(db, 'businesses', currentUser.companyId), updateData);
+      } catch (e) {}
+
+      setCompany((prev: any) => ({ ...prev, autoRenew: newVal }));
+      setSuccess(`Subscription auto-renew has been ${newVal ? 'enabled' : 'disabled'}.`);
+      await logAction(
+        'Subscription Auto-Renew Updated',
+        `Auto-renew continuity toggled to ${newVal ? 'ON' : 'OFF'}`,
+        currentUser.companyId
+      );
+    } catch (err: any) {
+      console.error(err);
+      setError("Failed to update auto-renew preference: " + err.message);
+    } finally {
+      setAutoRenewUpdating(false);
+    }
+  };
 
   const fetchCompanyDetails = useCallback(async () => {
     if (!currentUser?.companyId) {
@@ -370,6 +401,44 @@ export default function SubscriptionsView() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Auto-Renew Subscription Continuity Control */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl mt-0.5">
+            <RefreshCw className={`w-5 h-5 ${autoRenewUpdating ? 'animate-spin' : ''}`} />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-bold text-slate-900">Subscription Auto-Renewal</h4>
+              <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md border ${
+                company?.autoRenew !== false ? 'bg-emerald-100 text-emerald-800 border-emerald-250' : 'bg-amber-100 text-amber-800 border-amber-250'
+              }`}>
+                {company?.autoRenew !== false ? 'Enabled (Continuous)' : 'Manual Renewal Only'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 leading-normal max-w-xl">
+              Control your subscription continuity. When enabled, your subscription automatically renews at the end of each billing cycle through Paddle Merchant of Record.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={company?.autoRenew !== false}
+              disabled={autoRenewUpdating}
+              onChange={(e) => handleToggleAutoRenew(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+          <span className="text-xs font-bold text-slate-700">
+            {company?.autoRenew !== false ? 'Auto-Renew ON' : 'Auto-Renew OFF'}
+          </span>
         </div>
       </div>
 

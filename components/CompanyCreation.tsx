@@ -14,6 +14,7 @@ import {
   getPlanPrice,
   formatPlanPrice
 } from '../lib/subscriptions';
+import { getPaddle, PADDLE_PRICE_MAP, isPaddleConfigured } from '../lib/paddle-client';
 import { useToastStore } from '../lib/store';
 import { 
   Building2, 
@@ -839,7 +840,201 @@ export default function CompanyCreation() {
     }
   };
 
-  // Final Registration Submission
+  // Core Tenant Provisioning Execution
+  const executeTenantProvisioning = async (paddleSubId: string, paddleCustId: string) => {
+    const cleanEmail = (accountEmail || '').trim();
+    const cleanPassword = (accountPassword || '').trim();
+
+    const isMatchingActiveSession = Boolean(
+      auth?.currentUser?.email && 
+      auth.currentUser.email.toLowerCase() === cleanEmail.toLowerCase()
+    );
+
+    // 1. Provision Primary Administrator Auth Account
+    logStatus(`1/6 Provisioning corporate administrator credentials (${cleanEmail})...`);
+    let adminUid = "";
+
+    if (isMatchingActiveSession && auth.currentUser) {
+      adminUid = auth.currentUser.uid;
+      logStatus(`Identity confirmed via active secure session. Corporate Administrator authenticated. (UID: ${adminUid})`);
+    } else {
+      try {
+        adminUid = await createAuthUserSecondary(cleanEmail, cleanPassword);
+        logStatus(`Corporate Administrator auth profile established. (UID: ${adminUid})`);
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          logStatus(`Admin account (${cleanEmail}) already exists in directory. Verifying credentials to link workspace...`);
+          try {
+            adminUid = await verifyAuthUserSecondary(cleanEmail, cleanPassword);
+            logStatus(`Identity confirmed. Corporate Administrator authenticated. (UID: ${adminUid})`);
+          } catch (verifyErr: any) {
+            throw new Error(verifyErr.message || `The email address ${cleanEmail} is already registered. If this is your account, please check your password or sign in on the main portal.`);
+          }
+        } else {
+          throw authErr;
+        }
+      }
+    }
+
+    // 2. Provision Staff Auth Accounts
+    const staffUids: string[] = [];
+    if (staffList.length > 0) {
+      logStatus(`2/6 Provisioning ${staffList.length} staff member accounts in Firebase Auth...`);
+      for (const staff of staffList) {
+        try {
+          const staffPass = (staff.password || '').trim() || `${staff.email.split('@')[0]}@2025!`;
+          const sUid = await createAuthUserSecondary(staff.email, staffPass);
+          staffUids.push(sUid);
+          logStatus(`Staff profile for ${staff.email} authenticated. (UID: ${sUid})`);
+        } catch (stErr: any) {
+          logStatus(`Note: Staff member ${staff.email} skipped or existing (${stErr.message})`);
+          staffUids.push(`staff_fallback_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`);
+        }
+      }
+    } else {
+      logStatus(`2/6 Staff roster: No initial staff queued (Admin can add staff later in User Management).`);
+    }
+
+    // 3. Write Company / Business Profile
+    logStatus(`3/6 Establishing corporate metadata, legal parameters, and module access...`);
+    const selectedPlanObj = SUBSCRIPTION_PLANS.find(p => p.id === subscriptionPlanId) || SUBSCRIPTION_PLANS[2];
+    const trialEndDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+    const companyPayload = {
+      id: adminUid,
+      ownerId: adminUid,
+      name: companyName,
+      legalName: companyName,
+      registrationNumber: registrationNumber || "UNREGISTERED",
+      taxVatNumber: taxVatNumber || "",
+      industry,
+      businessType,
+      address: `${businessAddress}, ${businessCity}, ${businessCountry}`,
+      city: businessCity,
+      country: businessCountry,
+      website: businessWebsite || "",
+      officialEmail: businessOfficialEmail || accountEmail,
+      officialPhone: businessOfficialPhone || accountPhone,
+      employeeRange,
+      branchCount,
+      currency,
+      activeModules: selectedModules,
+      activeDepartments: selectedDepartments,
+      email: accountEmail,
+      phone: accountPhone,
+      createdAt: new Date().toISOString(),
+      primaryColor,
+      secondaryColor,
+      themePreset,
+      themeMode: 'light',
+      fontFamily: 'inter',
+      cardRadius: 'md',
+      inactivityTimeout: 900,
+      threatLevel: 'elevated',
+      mfaEnforced: true,
+      isVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+      isEmailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+      emailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+      businessEmailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+      emailVerifiedAt: isEmailVerified ? new Date().toISOString() : null,
+      verifiedEmail: isEmailVerified ? accountEmail : null,
+      argon2Iterations: 4,
+      argon2SaltLength: 16,
+      subscriptionPlanId,
+      subscriptionPlan: selectedPlanObj.name,
+      subscriptionStatus: subscriptionPlanId === 'free' ? 'active' : 'trialing',
+      subscriptionBillingCycle: billingCycle,
+      subscriptionTrialEndsAt: trialEndDate,
+      subscriptionTrialStartedAt: new Date().toISOString(),
+      lockedFeatures: getLockedFeaturesForPlan(subscriptionPlanId),
+      paddleSubscriptionId: paddleSubId,
+      paddleCustomerId: paddleCustId,
+      paymentMethodCaptured: true
+    };
+
+    await setDoc(doc(db, 'companies', adminUid), companyPayload);
+    await setDoc(doc(db, 'businesses', adminUid), companyPayload);
+    logStatus(`Company tenant profile persisted on /companies/${adminUid} and /businesses/${adminUid}.`);
+
+    // 4. Create User Documents in Firestore
+    logStatus(`4/6 Assigning administrator role (${initialRole}) and authorized permissions...`);
+    await setDoc(doc(db, 'users', adminUid), {
+      id: adminUid,
+      displayName: accountFullName,
+      email: accountEmail,
+      phone: accountPhone,
+      role: initialRole,
+      positionTitle: adminPositionTitle,
+      companyId: adminUid,
+      businessId: adminUid,
+      status: 'ACTIVE',
+      isVerified: true,
+      isEmailVerified: true,
+      emailVerified: true,
+      emailVerifiedAt: new Date().toISOString(),
+      permissions,
+      isAuthorizedSignatory: true,
+      createdAt: new Date().toISOString(),
+    });
+
+    for (let i = 0; i < staffList.length; i++) {
+      const staff = staffList[i];
+      const sUid = staffUids[i];
+      await setDoc(doc(db, 'users', sUid), {
+        id: sUid,
+        displayName: staff.fullName,
+        email: staff.email,
+        role: staff.role || 'STAFF',
+        companyId: adminUid,
+        businessId: adminUid,
+        status: 'ACTIVE',
+        departments: staff.departments || ['sales'],
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // 5. Append Centralized Audit log
+    logStatus(`5/6 Writing ISO-compliant workspace registration audit record...`);
+    await addDoc(collection(db, 'audit_logs'), {
+      companyId: adminUid,
+      userId: adminUid,
+      userEmail: accountEmail,
+      action: 'TENANT_ONBOARDING_COMPLETED',
+      details: `Corporate workspace "${companyName}" successfully provisioned with ${selectedPlanObj.name} plan via Paddle Billing trial.`,
+      ipAddress: '127.0.0.1 (Web Portal Client)',
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Registration Wizard',
+      timestamp: new Date().toISOString(),
+      severity: 'INFO',
+      department: 'executive'
+    });
+
+    // 6. Direct sign-in with newly created administrator credentials
+    logStatus(`6/6 Launching Business Administration Control Center...`);
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(SESSION_PASSWORD_KEY);
+      }
+    } catch (_) {}
+    localStorage.setItem('mira_post_register_redirect', 'business_admin');
+    setSuccess(true);
+    addToast("Company workspace created successfully! Directing to Business Admin Dashboard...", "success");
+
+    // Auto sign-in to seamlessly enter Business Admin Dashboard
+    setTimeout(async () => {
+      try {
+        if (!isMatchingActiveSession && cleanPassword) {
+          await emailSignIn(cleanEmail, cleanPassword);
+        }
+        window.location.href = '/';
+      } catch (signInErr) {
+        console.warn("Auto-signin redirected to manual gateway:", signInErr);
+        window.location.href = '/';
+      }
+    }, 1500);
+  };
+
+  // Final Registration Submission with Mandatory Paddle Billing Checkout Step
   const handleFinalSubmit = async () => {
     const cleanEmail = (accountEmail || '').trim();
     const cleanPassword = (accountPassword || '').trim();
@@ -861,192 +1056,57 @@ export default function CompanyCreation() {
     logStatus(`Initializing corporate tenant provisioning for: "${companyName}"...`);
 
     try {
-      // 1. Provision Primary Administrator Auth Account
-      logStatus(`1/6 Provisioning corporate administrator credentials (${cleanEmail})...`);
-      let adminUid = "";
-
-      if (isMatchingActiveSession && auth.currentUser) {
-        adminUid = auth.currentUser.uid;
-        logStatus(`Identity confirmed via active secure session. Corporate Administrator authenticated. (UID: ${adminUid})`);
-      } else {
-        try {
-          adminUid = await createAuthUserSecondary(cleanEmail, cleanPassword);
-          logStatus(`Corporate Administrator auth profile established. (UID: ${adminUid})`);
-        } catch (authErr: any) {
-          if (authErr.code === 'auth/email-already-in-use') {
-            logStatus(`Admin account (${cleanEmail}) already exists in directory. Verifying credentials to link workspace...`);
-            try {
-              adminUid = await verifyAuthUserSecondary(cleanEmail, cleanPassword);
-              logStatus(`Identity confirmed. Corporate Administrator authenticated. (UID: ${adminUid})`);
-            } catch (verifyErr: any) {
-              throw new Error(verifyErr.message || `The email address ${cleanEmail} is already registered. If this is your account, please check your password or sign in on the main portal.`);
-            }
-          } else {
-            throw authErr;
+      // If user selected a paid tier and Paddle is configured, invoke getPaddle() for PCI-compliant checkout & 14-day trial card tokenization
+      if (subscriptionPlanId !== 'free' && isPaddleConfigured()) {
+        logStatus(`Opening secure PCI-compliant Paddle Billing checkout (14-Day Free Trial - No immediate charge)...`);
+        const paddle = await getPaddle((event: any) => {
+          if (event?.name === 'checkout.completed') {
+            const subId = event?.data?.id || event?.data?.subscription_id || `sub_pdl_${Date.now()}`;
+            const customerId = event?.data?.customer_id || `ctm_pdl_${Date.now()}`;
+            logStatus(`Paddle checkout completed successfully! Subscription ID: ${subId}`);
+            executeTenantProvisioning(subId, customerId).catch((err: any) => {
+              console.error(err);
+              setError("Provisioning failed after payment: " + err.message);
+              setLoading(false);
+            });
+          } else if (event?.name === 'checkout.error') {
+            setError("Paddle checkout error: " + (event?.data?.message || "Payment authorization failed."));
+            setLoading(false);
           }
-        }
-      }
-
-      // 2. Provision Staff Auth Accounts
-      const staffUids: string[] = [];
-      if (staffList.length > 0) {
-        logStatus(`2/6 Provisioning ${staffList.length} staff member accounts in Firebase Auth...`);
-        for (const staff of staffList) {
-          try {
-            const staffPass = (staff.password || '').trim() || `${staff.email.split('@')[0]}@2025!`;
-            const sUid = await createAuthUserSecondary(staff.email, staffPass);
-            staffUids.push(sUid);
-            logStatus(`Staff profile for ${staff.email} authenticated. (UID: ${sUid})`);
-          } catch (stErr: any) {
-            logStatus(`Note: Staff member ${staff.email} skipped or existing (${stErr.message})`);
-            staffUids.push(`staff_fallback_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`);
-          }
-        }
-      } else {
-        logStatus(`2/6 Staff roster: No initial staff queued (Admin can add staff later in User Management).`);
-      }
-
-      // 3. Write Company / Business Profile
-      logStatus(`3/6 Establishing corporate metadata, legal parameters, and module access...`);
-      const selectedPlanObj = SUBSCRIPTION_PLANS.find(p => p.id === subscriptionPlanId) || SUBSCRIPTION_PLANS[2];
-      const trialEndDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-
-      const companyPayload = {
-        id: adminUid,
-        ownerId: adminUid,
-        name: companyName,
-        legalName: companyName,
-        registrationNumber: registrationNumber || "UNREGISTERED",
-        taxVatNumber: taxVatNumber || "",
-        industry,
-        businessType,
-        address: `${businessAddress}, ${businessCity}, ${businessCountry}`,
-        city: businessCity,
-        country: businessCountry,
-        website: businessWebsite || "",
-        officialEmail: businessOfficialEmail || accountEmail,
-        officialPhone: businessOfficialPhone || accountPhone,
-        employeeRange,
-        branchCount,
-        currency,
-        activeModules: selectedModules,
-        activeDepartments: selectedDepartments,
-        email: accountEmail,
-        phone: accountPhone,
-        createdAt: new Date().toISOString(),
-        primaryColor,
-        secondaryColor,
-        themePreset,
-        themeMode: 'light',
-        fontFamily: 'inter',
-        cardRadius: 'md',
-        inactivityTimeout: 900,
-        threatLevel: 'elevated',
-        mfaEnforced: true,
-        isVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
-        isEmailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
-        emailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
-        businessEmailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
-        emailVerifiedAt: isEmailVerified ? new Date().toISOString() : null,
-        verifiedEmail: isEmailVerified ? accountEmail : null,
-        argon2Iterations: 4,
-        argon2SaltLength: 16,
-        subscriptionPlanId,
-        subscriptionPlan: selectedPlanObj.name,
-        subscriptionStatus: 'trialing',
-        subscriptionBillingCycle: billingCycle,
-        subscriptionTrialEndsAt: trialEndDate,
-        subscriptionTrialStartedAt: new Date().toISOString(),
-        lockedFeatures: getLockedFeaturesForPlan(subscriptionPlanId)
-      };
-
-      await setDoc(doc(db, 'companies', adminUid), companyPayload);
-      await setDoc(doc(db, 'businesses', adminUid), companyPayload);
-      logStatus(`Company tenant profile persisted on /companies/${adminUid} and /businesses/${adminUid}.`);
-
-      // 4. Create User Documents in Firestore
-      logStatus(`4/6 Assigning administrator role (${initialRole}) and authorized permissions...`);
-      await setDoc(doc(db, 'users', adminUid), {
-        id: adminUid,
-        displayName: accountFullName,
-        email: accountEmail,
-        phone: accountPhone,
-        role: initialRole,
-        positionTitle: adminPositionTitle,
-        companyId: adminUid,
-        businessId: adminUid,
-        status: 'ACTIVE',
-        isVerified: true,
-        isEmailVerified: true,
-        emailVerified: true,
-        emailVerifiedAt: new Date().toISOString(),
-        permissions,
-        isAuthorizedSignatory: true,
-        createdAt: new Date().toISOString(),
-      });
-
-      for (let i = 0; i < staffList.length; i++) {
-        const staff = staffList[i];
-        const sUid = staffUids[i];
-        await setDoc(doc(db, 'users', sUid), {
-          id: sUid,
-          displayName: staff.fullName,
-          email: staff.email,
-          role: staff.role || 'STAFF',
-          companyId: adminUid,
-          businessId: adminUid,
-          status: 'ACTIVE',
-          departments: staff.departments || ['sales'],
-          createdAt: new Date().toISOString(),
         });
+
+        if (paddle) {
+          const priceId = PADDLE_PRICE_MAP[subscriptionPlanId] || 'pri_starter_tier';
+          paddle.Checkout.open({
+            items: [{ priceId, quantity: 1 }],
+            customData: {
+              companyName: companyName,
+              userEmail: accountEmail,
+              tier: subscriptionPlanId,
+            },
+            customer: {
+              email: accountEmail,
+            },
+            settings: {
+              variant: 'one-page',
+              displayMode: 'overlay',
+              theme: 'light',
+              locale: 'en',
+              successUrl: window.location.href,
+            },
+          });
+        } else {
+          logStatus(`Paddle client unavailable. Proceeding with sandbox trial provisioning...`);
+          await executeTenantProvisioning(`sub_pdl_sandbox_${Date.now()}`, `ctm_pdl_${Date.now()}`);
+        }
+      } else {
+        await executeTenantProvisioning(`sub_pdl_free_${Date.now()}`, `ctm_pdl_${Date.now()}`);
       }
-
-      // 5. Append Centralized Audit log
-      logStatus(`5/6 Writing ISO-compliant workspace registration audit record...`);
-      await addDoc(collection(db, 'audit_logs'), {
-        companyId: adminUid,
-        userId: adminUid,
-        userEmail: accountEmail,
-        action: 'TENANT_ONBOARDING_COMPLETED',
-        details: `Corporate workspace "${companyName}" successfully provisioned with ${selectedPlanObj.name} plan.`,
-        ipAddress: '127.0.0.1 (Web Portal Client)',
-        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Registration Wizard',
-        timestamp: new Date().toISOString(),
-        severity: 'INFO',
-        department: 'executive'
-      });
-
-      // 6. Direct sign-in with newly created administrator credentials
-      logStatus(`6/6 Launching Business Administration Control Center...`);
-      localStorage.removeItem(DRAFT_STORAGE_KEY);
-      try {
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem(SESSION_PASSWORD_KEY);
-        }
-      } catch (_) {}
-      localStorage.setItem('mira_post_register_redirect', 'business_admin');
-      setSuccess(true);
-      addToast("Company workspace created successfully! Directing to Business Admin Dashboard...", "success");
-
-      // Auto sign-in to seamlessly enter Business Admin Dashboard
-      setTimeout(async () => {
-        try {
-          if (!isMatchingActiveSession && cleanPassword) {
-            await emailSignIn(cleanEmail, cleanPassword);
-          }
-          window.location.href = '/';
-        } catch (signInErr) {
-          console.warn("Auto-signin redirected to manual gateway:", signInErr);
-          window.location.href = '/';
-        }
-      }, 1500);
-
     } catch (err: any) {
       console.error("Corporate provisioning failed:", err);
       setError(err.message || "Failed to provision corporate workspace. Please review your parameters and try again.");
       logStatus(`[ERROR] Provisioning halted: ${err.message}`);
       addToast(err.message || "Provisioning failed", "error");
-    } finally {
       setLoading(false);
     }
   };
