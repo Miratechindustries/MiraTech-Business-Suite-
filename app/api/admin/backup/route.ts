@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       timestamp: new Date(),
       initiatedBy: userEmail,
       recordCount: fullBackup.totalRecords
-    }).catch((histErr) => console.warn("Failed to write to backup_history:", histErr));
+    }).catch((histErr: any) => console.warn("Failed to write to backup_history:", histErr));
 
     await logServerAction({
       action: "DATA_BACKUP_EXPORT",

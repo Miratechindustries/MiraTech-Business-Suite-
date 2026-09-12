@@ -113,7 +113,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
     const newEvent = {
       type: override ? "manager_override" : actionName.toLowerCase().replace(/ /g, "_"),
       user: currentUser?.email || "System User",
-      userId: currentUser?.uid || user.uid,
+      userId: currentUser?.id || user.uid,
       role: currentUser?.role || "STAFF",
       date: new Date().toISOString().split("T")[0],
       time: new Date().toLocaleTimeString(),
@@ -320,17 +320,17 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
     } catch (err) {
       if (isOfflineError(err)) {
         console.warn("[Invoices Offline Fallback] Loading data from local cache.");
-        const cachedCompany = localStorage.getItem(`miratech_offline_company_${user.uid}`);
+        const fallbackUid = user?.uid || businessId;
+        const cachedCompany = localStorage.getItem(`miratech_offline_company_${fallbackUid}`);
         if (cachedCompany) setCompany(JSON.parse(cachedCompany));
-        const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${user.uid}`);
+        const cachedInvs = localStorage.getItem(`miratech_offline_invoices_${fallbackUid}`);
         if (cachedInvs) {
           const rawList = JSON.parse(cachedInvs) as Invoice[];
           setInvoices(departmentId ? rawList.filter(inv => inv.department === departmentId) : rawList);
         } else {
           setInvoices([]);
         }
-        const user = auth.currentUser;
-        const cacheKey = user ? `miratech_customers_${user.uid}` : "miratech_customers_guest";
+        const cacheKey = fallbackUid ? `miratech_customers_${fallbackUid}` : "miratech_customers_guest";
         const cachedClients = localStorage.getItem(cacheKey);
         if (cachedClients) setClients(JSON.parse(cachedClients));
       } else {
@@ -1546,7 +1546,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
                             )}
 
                             {/* Override direct approval button */}
-                            {hasOverrideRights && currentApprovalStatus !== 'approved' && (
+                            {hasOverrideRights && (
                               <button
                                 onClick={() => handleWorkflowTransition('approved', 'Manager Override', true)}
                                 disabled={submitting}

@@ -7,13 +7,43 @@ export type Environments = 'sandbox' | 'production';
 let paddleInstance: any = null;
 let initPromise: Promise<any> | null = null;
 
-// Environment-backed Price IDs for Paddle Products & Prices
+// Verified Sandbox Product ID to Price ID mappings from Paddle catalog
+const PRODUCT_TO_PRICE_SANDBOX: Record<string, string> = {
+  'pro_01m20cd001yz8yabbcdg0dv224': 'pri_01m20chmk0ctkbx9g7gz60zava', // Starter (800 ZAR)
+  'pro_01m20e62pjg23de9j0f6z1s1jp': 'pri_01m20fae6v0sxz3165tfa0qwgv', // Growth (1800 ZAR)
+  'pro_01m20gknwdj8fvxcc9znw8z9jz': 'pri_01m20gr0x0ne82ckzhrcpzrh89', // Professional (3250 ZAR)
+  'pro_01m20gvb80cp59n6j3nn6fzd4g': 'pri_01m20gy3j6hc3sv5r25ec9wtvw', // Elite (5000 ZAR)
+  'pro_01m20gzdhazcfw07bst0vk86e7': 'pri_01m20h77pvkcrs6gcqxdfe3hr3', // Enterprise (7500 ZAR)
+};
+
+const DEFAULT_SANDBOX_PRICES: Record<string, string> = {
+  starter: 'pri_01m20chmk0ctkbx9g7gz60zava',
+  growth: 'pri_01m20fae6v0sxz3165tfa0qwgv',
+  professional: 'pri_01m20gr0x0ne82ckzhrcpzrh89',
+  elite: 'pri_01m20gy3j6hc3sv5r25ec9wtvw',
+  enterprise: 'pri_01m20h77pvkcrs6gcqxdfe3hr3',
+};
+
+export function resolvePaddlePriceId(envVal: string | undefined, tierKey: string): string {
+  // 1. If valid Price ID supplied directly
+  if (envVal && envVal.startsWith('pri_')) {
+    return envVal;
+  }
+  // 2. If Product ID was mistakenly supplied in place of Price ID, map to verified Sandbox Price ID
+  if (envVal && PRODUCT_TO_PRICE_SANDBOX[envVal]) {
+    return PRODUCT_TO_PRICE_SANDBOX[envVal];
+  }
+  // 3. Fallback to verified default Sandbox Price ID for the tier
+  return DEFAULT_SANDBOX_PRICES[tierKey] || envVal || 'pri_01m20chmk0ctkbx9g7gz60zava';
+}
+
+// Environment-backed Price IDs for Paddle Products & Prices (normalized to ensure valid 'pri_' IDs)
 export const PADDLE_PRICE_MAP: Record<string, string> = {
-  starter: process.env.NEXT_PUBLIC_PADDLE_PRICE_STARTER || 'pri_starter_tier',
-  growth: process.env.NEXT_PUBLIC_PADDLE_PRICE_GROWTH || 'pri_growth_tier',
-  professional: process.env.NEXT_PUBLIC_PADDLE_PRICE_PROFESSIONAL || 'pri_professional_tier',
-  elite: process.env.NEXT_PUBLIC_PADDLE_PRICE_ELITE || 'pri_elite_tier',
-  enterprise: process.env.NEXT_PUBLIC_PADDLE_PRICE_ENTERPRISE || 'pri_enterprise_tier',
+  starter: resolvePaddlePriceId(process.env.NEXT_PUBLIC_PADDLE_PRICE_STARTER, 'starter'),
+  growth: resolvePaddlePriceId(process.env.NEXT_PUBLIC_PADDLE_PRICE_GROWTH, 'growth'),
+  professional: resolvePaddlePriceId(process.env.NEXT_PUBLIC_PADDLE_PRICE_PROFESSIONAL, 'professional'),
+  elite: resolvePaddlePriceId(process.env.NEXT_PUBLIC_PADDLE_PRICE_ELITE, 'elite'),
+  enterprise: resolvePaddlePriceId(process.env.NEXT_PUBLIC_PADDLE_PRICE_ENTERPRISE, 'enterprise'),
 };
 
 export function getPaddleEnvironment(): Environments {

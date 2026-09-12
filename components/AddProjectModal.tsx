@@ -142,7 +142,7 @@ export default function AddProjectModal({ isOpen, onClose, companyId, customers:
 
     try {
       await addDoc(collection(db, "companies", companyId, "projects"), {
-        ownerId: currentUser?.uid || "SYSTEM",
+        ownerId: (currentUser as any)?.uid || (currentUser as any)?.id || "SYSTEM",
         projectReference,
         name: name.trim(),
         description: description.trim(),

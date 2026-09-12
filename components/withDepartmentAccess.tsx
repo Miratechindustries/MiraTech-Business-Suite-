@@ -124,7 +124,7 @@ export function withDepartmentAccess<P extends object>(
   WrappedComponent: React.ComponentType<P>,
   departmentType: string
 ) {
-  return function WithDepartmentAccessComponent(props: P) {
+  return function WithDepartmentAccessComponent(props: P & { onUpgradeClick?: () => void; [key: string]: any }) {
     const { hasAccess, loading } = useDepartmentAccess(departmentType);
 
     if (loading) {
@@ -161,6 +161,6 @@ export function withDepartmentAccess<P extends object>(
       );
     }
 
-    return <WrappedComponent {...props} />;
+    return <WrappedComponent {...props as P} />;
   };
 }

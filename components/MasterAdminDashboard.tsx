@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import AuditTrailDrawer from './AuditTrailDrawer';
 import { 
   collection, 
   getCountFromServer, 
@@ -67,6 +68,7 @@ export default function MasterAdminDashboard() {
   const [counts, setCounts] = useState({ companies: 0, users: 0, alerts: 0, errors: 0 });
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<'overview' | 'health' | 'errors' | 'apm' | 'audit' | 'backup' | 'maintenance'>('overview');
+  const [isAuditDrawerOpen, setIsAuditDrawerOpen] = useState(false);
   
   // Error state
   const [errorLogs, setErrorLogs] = useState<any[]>([]);
@@ -490,6 +492,12 @@ export default function MasterAdminDashboard() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setIsAuditDrawerOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+          >
+            <Activity className="w-3.5 h-3.5" /> Global Audit
+          </button>
           <button 
             onClick={fetchCountsAndErrors}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
@@ -990,6 +998,11 @@ export default function MasterAdminDashboard() {
           </div>
         </motion.div>
       )}
+      
+      <AuditTrailDrawer 
+        isOpen={isAuditDrawerOpen}
+        onClose={() => setIsAuditDrawerOpen(false)}
+      />
     </motion.div>
   );
 }

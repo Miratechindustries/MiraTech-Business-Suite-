@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import AuditTrailDrawer from "./AuditTrailDrawer";
 import { db, handleFirestoreError, OperationType } from "../lib/firebase";
 import { 
   doc, 
@@ -69,7 +70,9 @@ import {
   HelpCircle,
   Clock,
   Briefcase,
-  Webhook
+  Webhook,
+  XCircle,
+  PauseCircle
 } from "lucide-react";
 import Image from "next/image";
 import CompanyProfile from "./CompanyProfile";
@@ -107,6 +110,7 @@ export default function BusinessAdminDashboard({
 }: BusinessAdminDashboardProps) {
   const { currentUser } = useUserStore();
   const [activeSubTab, setActiveSubTab] = useState<"overview" | "settings" | "employees" | "billing" | "hierarchy" | "security" | "compliance" | "integrations" | "budgets">(initialSubTab);
+  const [isAuditDrawerOpen, setIsAuditDrawerOpen] = useState(false);
   
   const [company, setCompany] = useState<any | null>(null);
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
@@ -400,6 +404,7 @@ export default function BusinessAdminDashboard({
   // Handle Delete Employee
   const handleDeleteEmployee = async (empId: string, empName: string) => {
     if (!confirm(`Are you sure you want to revoke access and remove ${empName}?`)) return;
+    if (!companyId) return;
     try {
       await deleteDoc(doc(db, "users", empId));
       showToast(`Employee ${empName} has been removed.`, "info");
@@ -494,6 +499,77 @@ export default function BusinessAdminDashboard({
                 <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-150">
                   Business Administration Center
                 </span>
+
+                {/* Visual Subscription Status Badge directly from Firestore Document */}
+                {(() => {
+                  const rawStatus = (company?.status || company?.subscriptionStatus || 'active').toLowerCase().trim();
+                  const nextDate = company?.next_billing_date || company?.nextBillingDate || company?.subscriptionRenewsAt;
+                  const formattedNextDate = nextDate ? new Date(nextDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+
+                  if (rawStatus === 'active') {
+                    return (
+                      <span
+                        id="badge-subscription-status"
+                        title={formattedNextDate ? `Active • Next renewal on ${formattedNextDate}` : "Active Subscription"}
+                        className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-250 shadow-3xs"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                        <span>Subscription: Active</span>
+                      </span>
+                    );
+                  }
+
+                  if (rawStatus === 'trialing') {
+                    return (
+                      <span
+                        id="badge-subscription-status"
+                        title={formattedNextDate ? `Trial active until ${formattedNextDate}` : "Trialing Subscription"}
+                        className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-250 shadow-3xs"
+                      >
+                        <Sparkles className="w-3 h-3 text-blue-600 shrink-0" />
+                        <span>Subscription: Trialing</span>
+                      </span>
+                    );
+                  }
+
+                  if (rawStatus === 'past_due') {
+                    return (
+                      <span
+                        id="badge-subscription-status"
+                        title="Immediate attention required: Payment past due"
+                        className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 shadow-3xs animate-pulse"
+                      >
+                        <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                        <span>Subscription: Past Due</span>
+                      </span>
+                    );
+                  }
+
+                  if (rawStatus === 'canceled') {
+                    return (
+                      <span
+                        id="badge-subscription-status"
+                        title="Subscription has been canceled"
+                        className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-250 shadow-3xs"
+                      >
+                        <XCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                        <span>Subscription: Canceled</span>
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <span
+                      id="badge-subscription-status"
+                      className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-250 shadow-3xs"
+                    >
+                      <PauseCircle className="w-3 h-3 text-slate-500 shrink-0" />
+                      <span>Subscription: {rawStatus.toUpperCase()}</span>
+                    </span>
+                  );
+                })()}
+
                 {company?.isVerified ? (
                   <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                     <ShieldCheck className="w-3 h-3" /> Verified Corporate Workspace
@@ -533,6 +609,14 @@ export default function BusinessAdminDashboard({
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
             <button
               type="button"
+              onClick={() => setIsAuditDrawerOpen(true)}
+              className="px-5 py-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-black rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider"
+            >
+              <Activity className="w-4 h-4 text-indigo-500" />
+              <span>Audit Trail</span>
+            </button>
+            <button
+              type="button"
               id="btn-go-to-company-dashboard"
               onClick={onNavigateToCompanyDashboard}
               className="px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-black rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer uppercase tracking-wider group"
@@ -548,11 +632,21 @@ export default function BusinessAdminDashboard({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 pt-6 mt-6 border-t border-slate-100">
           <div className="bg-slate-50 border border-slate-150/80 p-3.5 rounded-2xl">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">
-              Active Tier
+              Active Tier & Health
             </span>
             <div className="flex items-center gap-1.5 font-mono text-base font-black text-indigo-700">
               <Sparkles className="w-4 h-4 text-indigo-600" />
               <span>{currentPlan.name}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] font-medium text-slate-500">
+              <span className="capitalize font-semibold text-slate-700">
+                {company?.status || company?.subscriptionStatus || 'Active'}
+              </span>
+              {(company?.next_billing_date || company?.nextBillingDate || company?.subscriptionRenewsAt) && (
+                <span className="text-slate-400 text-[10px]">
+                  Next: {new Date(company.next_billing_date || company.nextBillingDate || company.subscriptionRenewsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </span>
+              )}
             </div>
           </div>
 
@@ -716,22 +810,22 @@ export default function BusinessAdminDashboard({
 
       {/* TAB CONTENT: SECURITY */}
       {activeSubTab === "security" && (
-        <EnterpriseSecurityPanel companyId={companyId} currentUser={currentUser} />
+        <EnterpriseSecurityPanel companyId={companyId || ""} currentUser={currentUser} />
       )}
 
       {/* TAB CONTENT: COMPLIANCE */}
       {activeSubTab === "compliance" && (
-        <DataPrivacyVault companyId={companyId} currentUser={currentUser} />
+        <DataPrivacyVault companyId={companyId || ""} currentUser={currentUser} />
       )}
 
       {/* TAB CONTENT: INTEGRATIONS */}
       {activeSubTab === "integrations" && (
-        <ApiWebhookHub companyId={companyId} currentUser={currentUser} />
+        <ApiWebhookHub companyId={companyId || ""} currentUser={currentUser} />
       )}
 
       {/* TAB CONTENT: BUDGETS */}
       {activeSubTab === "budgets" && (
-        <DepartmentBudgetHub companyId={companyId} currentUser={currentUser} />
+        <DepartmentBudgetHub companyId={companyId || ""} currentUser={currentUser} />
       )}
 
       {/* TAB CONTENT 1: GOVERNANCE & OVERVIEW */}
@@ -1504,6 +1598,11 @@ export default function BusinessAdminDashboard({
           </div>
         </div>
       )}
+      <AuditTrailDrawer 
+        isOpen={isAuditDrawerOpen} 
+        onClose={() => setIsAuditDrawerOpen(false)} 
+        companyId={companyId} 
+      />
     </div>
   );
 }

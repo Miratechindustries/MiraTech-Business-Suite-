@@ -29,7 +29,12 @@ import {
   ExternalLink,
   Info,
   KeyRound,
-  RefreshCw
+  RefreshCw,
+  FileText,
+  Download,
+  Receipt,
+  Calendar,
+  ArrowDownRight
 } from 'lucide-react';
 
 export default function SubscriptionsView() {
@@ -49,6 +54,55 @@ export default function SubscriptionsView() {
   const [autoRenewUpdating, setAutoRenewUpdating] = useState(false);
   const [paymentLogs, setPaymentLogs] = useState<PaddleEventLog[]>([]);
 
+  // Payment History & Invoices from Paddle API
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [invoicesError, setInvoicesError] = useState<string | null>(null);
+  const [isLiveGateway, setIsLiveGateway] = useState(false);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
+  const [historyTab, setHistoryTab] = useState<'invoices' | 'logs'>('invoices');
+
+  // Fetch past invoices/receipts using Paddle API data
+  const fetchPaymentHistory = useCallback(async (targetCompanyId?: string) => {
+    const compId = targetCompanyId || currentUser?.companyId;
+    if (!compId) return;
+    setLoadingInvoices(true);
+    setInvoicesError(null);
+    try {
+      const res = await fetch(`/api/paddle/transactions?companyId=${encodeURIComponent(compId)}`);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setInvoices(data.transactions || []);
+      setIsLiveGateway(Boolean(data.isLiveGateway));
+    } catch (err: any) {
+      console.warn("Payment history fetch:", err.message);
+      setInvoicesError(err.message || "Failed to load payment history");
+    } finally {
+      setLoadingInvoices(false);
+    }
+  }, [currentUser?.companyId]);
+
+  const handleDownloadInvoice = async (txnId: string) => {
+    try {
+      setDownloadingInvoiceId(txnId);
+      const res = await fetch(`/api/paddle/transactions?action=invoice&transactionId=${encodeURIComponent(txnId)}`);
+      const data = await res.json();
+      if (data.url) {
+        window.open(data.url, '_blank', 'noopener,noreferrer');
+      } else {
+        await handleOpenCustomerPortal();
+      }
+    } catch (err: any) {
+      console.error("Failed to download invoice PDF:", err);
+      await handleOpenCustomerPortal();
+    } finally {
+      setDownloadingInvoiceId(null);
+    }
+  };
+
   // Background sync hook verifying current user's Paddle subscription status against Firestore on page load
   useEffect(() => {
     setPaymentLogs(getPaddleEventLogs());
@@ -59,9 +113,12 @@ export default function SubscriptionsView() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const remoteData = docSnap.data();
-          if (remoteData.subscriptionStatus && company && remoteData.subscriptionStatus !== company.subscriptionStatus) {
-            setCompany(remoteData);
-          }
+          setCompany((prev: any) => {
+            if (remoteData.subscriptionStatus && prev && remoteData.subscriptionStatus !== prev.subscriptionStatus) {
+              return { ...prev, ...remoteData };
+            }
+            return prev;
+          });
         }
       } catch (err) {
         console.warn("Background subscription status sync failed:", err);
@@ -125,7 +182,10 @@ export default function SubscriptionsView() {
 
   useEffect(() => {
     fetchCompanyDetails();
-  }, [fetchCompanyDetails, currentUser?.companyId]);
+    if (currentUser?.companyId) {
+      fetchPaymentHistory(currentUser.companyId);
+    }
+  }, [fetchCompanyDetails, fetchPaymentHistory, currentUser?.companyId]);
 
   // Check Paddle configuration on mount
   useEffect(() => {
@@ -208,12 +268,24 @@ export default function SubscriptionsView() {
       const calculatedPrice = getPlanPrice(plan, billingCycle);
       const formattedPrice = formatPlanPrice(plan, billingCycle, company?.currency || 'USD');
 
+      const nextRenewal = new Date();
+      if (billingCycle === 'annual') {
+        nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
+      } else {
+        nextRenewal.setMonth(nextRenewal.getMonth() + 1);
+      }
+      const nextBillingDateIso = nextRenewal.toISOString();
+
       const updateData: any = {
         subscriptionPlanId: plan.id,
         subscriptionPlan: plan.name,
         subscriptionBillingCycle: billingCycle,
         lockedFeatures: planLockedFeats,
+        status: 'active',
         subscriptionStatus: 'active',
+        next_billing_date: nextBillingDateIso,
+        nextBillingDate: nextBillingDateIso,
+        subscriptionRenewsAt: nextBillingDateIso,
         subscriptionStartedAt: new Date().toISOString(),
         lastPaymentRef: subId,
         lastPaymentMethod: 'Paddle Billing (MoR)',
@@ -239,6 +311,7 @@ export default function SubscriptionsView() {
       setCompany((prev: any) => ({ ...prev, ...updateData }));
       setSuccess(`Transaction Processed via Paddle! Workspace upgraded to "${plan.name}" with real-time provisioning.`);
       setSelectedPlan(null);
+      fetchPaymentHistory(currentUser.companyId);
     } catch (err: any) {
       console.error(err);
       setError("Failed to record Paddle upgrade in workspace: " + err.message);
@@ -511,46 +584,223 @@ export default function SubscriptionsView() {
         </div>
       </div>
 
-      {/* Recent Payment History & Webhook Logs */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-blue-600" />
-            <h3 className="font-bold text-slate-900 text-sm">Recent Paddle Payment & Subscription History</h3>
+      {/* Payment History & Invoices Section */}
+      <div id="section-payment-history" className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-150">
+                <Receipt className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Payment History & Invoices</h3>
+                <p className="text-xs text-slate-500 font-medium">Past billing statements, transaction receipts, and merchant records fetched via Paddle</p>
+              </div>
+            </div>
           </div>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            {paymentLogs.length} Events Logged
-          </span>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Gateway state pill */}
+            {isLiveGateway ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-250">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                Paddle MoR Synced
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                Workspace Ledger
+              </span>
+            )}
+
+            {/* Tab Toggle between Invoices & Webhooks */}
+            <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-[11px] font-bold">
+              <button
+                type="button"
+                onClick={() => setHistoryTab('invoices')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  historyTab === 'invoices'
+                    ? 'bg-white text-slate-900 shadow-3xs font-extrabold'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Invoices ({invoices.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryTab('logs')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  historyTab === 'logs'
+                    ? 'bg-white text-slate-900 shadow-3xs font-extrabold'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Events ({paymentLogs.length})
+              </button>
+            </div>
+
+            {/* Refresh button */}
+            <button
+              type="button"
+              onClick={() => fetchPaymentHistory()}
+              disabled={loadingInvoices}
+              title="Refresh transaction history from Paddle"
+              className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingInvoices ? 'animate-spin text-indigo-600' : ''}`} />
+            </button>
+          </div>
         </div>
 
-        {paymentLogs.length > 0 ? (
-          <div className="space-y-2.5 max-h-64 overflow-y-auto">
-            {paymentLogs.map((log) => (
-              <div key={log.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-150 rounded-xl text-xs">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md ${
-                      log.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
-                      log.status === 'error' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
-                    }`}>
-                      {log.name}
-                    </span>
-                    <span className="text-slate-400 text-[11px] font-mono">{new Date(log.timestamp).toLocaleString()}</span>
-                  </div>
-                  <p className="text-slate-600 font-mono text-[11px] truncate max-w-md">{log.details}</p>
-                </div>
-                <span className={`font-bold text-[11px] uppercase ${
-                  log.status === 'completed' ? 'text-emerald-600' : log.status === 'error' ? 'text-red-600' : 'text-blue-600'
-                }`}>
-                  {log.status}
-                </span>
+        {historyTab === 'invoices' ? (
+          <div className="space-y-3">
+            {loadingInvoices ? (
+              <div className="py-8 flex flex-col items-center justify-center gap-2 text-slate-400">
+                <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                <span className="text-xs font-semibold">Synchronizing invoices with Paddle API...</span>
               </div>
-            ))}
+            ) : invoicesError ? (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center justify-between">
+                <span>{invoicesError}</span>
+                <button
+                  type="button"
+                  onClick={() => fetchPaymentHistory()}
+                  className="font-bold underline cursor-pointer ml-2"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : invoices.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-150 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      <th className="py-2.5 px-3">Invoice #</th>
+                      <th className="py-2.5 px-3">Date</th>
+                      <th className="py-2.5 px-3">Description</th>
+                      <th className="py-2.5 px-3 text-right">Amount</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2.5 px-3 text-right">Receipt / Tax Doc</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {invoices.map((inv) => (
+                      <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-3 font-mono font-bold text-slate-900">
+                          <span className="flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-indigo-500" />
+                            <span>{inv.invoiceNumber}</span>
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-600 font-medium">
+                          {inv.billedAt ? new Date(inv.billedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+                        </td>
+                        <td className="py-3 px-3 text-slate-700 font-medium">
+                          {inv.description}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
+                          {inv.amount}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            inv.status === 'completed' || inv.status === 'paid' || inv.status === 'active'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : inv.status === 'billed'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : inv.status === 'past_due'
+                              ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                          }`}>
+                            {(inv.status === 'completed' || inv.status === 'paid' || inv.status === 'active') && (
+                              <CheckCircle2 className="w-2.5 h-2.5" />
+                            )}
+                            {inv.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadInvoice(inv.id)}
+                              disabled={downloadingInvoiceId === inv.id}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 transition cursor-pointer border border-slate-200 hover:border-indigo-200"
+                            >
+                              {downloadingInvoiceId === inv.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-indigo-600" />
+                              ) : (
+                                <Download className="w-3 h-3 text-slate-500" />
+                              )}
+                              <span>PDF Invoice</span>
+                            </button>
+                            {inv.receiptUrl && (
+                              <a
+                                href={inv.receiptUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                                title="View Online Receipt"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 px-4 bg-slate-50/60 rounded-xl border border-dashed border-slate-200 space-y-2">
+                <FileText className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-xs font-bold text-slate-700">No past billing receipts or invoices recorded yet.</p>
+                <p className="text-[11px] text-slate-400 max-w-md mx-auto">
+                  When your workspace processes a subscription checkout or recurring billing cycle via Paddle, official tax-compliant PDF invoices will appear here automatically.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenCustomerPortal}
+                  disabled={isOpeningPortal}
+                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition cursor-pointer shadow-3xs"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Launch Paddle Customer Portal</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="text-center py-8 text-xs text-slate-400 space-y-1">
-            <p>No recent payment transactions or webhooks recorded in this session yet.</p>
-            <p className="text-[11px]">Paddle checkout completions and error logs will appear here automatically.</p>
+          /* Webhook Event Stream */
+          <div>
+            {paymentLogs.length > 0 ? (
+              <div className="space-y-2.5 max-h-64 overflow-y-auto">
+                {paymentLogs.map((log) => (
+                  <div key={log.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-150 rounded-xl text-xs">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md ${
+                          log.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                          log.status === 'error' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {log.name}
+                        </span>
+                        <span className="text-slate-400 text-[11px] font-mono">{new Date(log.timestamp).toLocaleString()}</span>
+                      </div>
+                      <p className="text-slate-600 font-mono text-[11px] truncate max-w-md">{log.details}</p>
+                    </div>
+                    <span className={`font-bold text-[11px] uppercase ${
+                      log.status === 'completed' ? 'text-emerald-600' : log.status === 'error' ? 'text-red-600' : 'text-blue-600'
+                    }`}>
+                      {log.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-xs text-slate-400 space-y-1">
+                <p>No recent payment transactions or webhooks recorded in this session yet.</p>
+                <p className="text-[11px]">Paddle checkout completions and error logs will appear here automatically.</p>
+              </div>
+            )}
           </div>
         )}
       </div>

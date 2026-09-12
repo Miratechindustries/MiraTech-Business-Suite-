@@ -359,6 +359,8 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
       try {
         const metrics: typeof dbKpis = {};
 
+        if (!businessId) return;
+
         // 1. Fetch Invoices for Finance & Executive
         const invoicesRef = collection(db, "companies", businessId, "invoices");
         const invoicesSnap = await getDocs(invoicesRef);

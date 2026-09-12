@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     let scrubbedCount = 0;
     const batch = adminDb.batch();
 
-    snapshot.docs.forEach((docSnap) => {
+    snapshot.docs.forEach((docSnap: any) => {
       const docRef = usersRef.doc(docSnap.id);
       batch.update(docRef, {
         displayName: "[ANONYMIZED_SUBJECT]",

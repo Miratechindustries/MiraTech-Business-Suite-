@@ -116,8 +116,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "run_self_diagnostics") {
-      const dbCheck = await adminDb.collection("companies").limit(1).get().then(() => "OK").catch(e => `Error: ${e.message}`);
-      const usersCheck = await adminDb.collection("users").limit(1).get().then(() => "OK").catch(e => `Error: ${e.message}`);
+      const dbCheck = await adminDb.collection("companies").limit(1).get().then(() => "OK").catch((e: any) => `Error: ${e.message}`);
+      const usersCheck = await adminDb.collection("users").limit(1).get().then(() => "OK").catch((e: any) => `Error: ${e.message}`);
       const storageCheck = "OK (Operational)";
       const memUsage = typeof process !== "undefined" && process.memoryUsage ? `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB` : "N/A";
 

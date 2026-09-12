@@ -4,7 +4,7 @@ import { db } from "../lib/firebase";
 import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs } from "firebase/firestore";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, ShoppingCart, Trash2, Printer, X, AlertTriangle, Save, Play } from 'lucide-react';
-import { useToastStore } from "../lib/store";
+import { useToastStore, useUserStore } from "../lib/store";
 
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -47,7 +47,11 @@ const ThermalReceiptModal = ({ cart, total, tax, grandTotal, companyName, receip
   </div>
 );
 
-export default function POSHub({ companyId, userId }: { companyId: string, userId: string }) {
+export default function POSHub({ companyId: propCompanyId, userId: propUserId }: { companyId?: string, userId?: string } = {}) {
+  const { currentUser } = useUserStore();
+  const companyId = propCompanyId || currentUser?.companyId || currentUser?.businessId || 'GLOBAL_MASTER';
+  const userId = propUserId || currentUser?.id || currentUser?.uid || 'ADMIN_USER';
+
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [filteredInventory, setFilteredInventory] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
@@ -60,13 +64,16 @@ export default function POSHub({ companyId, userId }: { companyId: string, userI
   const [currentShiftId, setCurrentShiftId] = useState<string | null>(null);
   const [showOpeningFloatModal, setShowOpeningFloatModal] = useState(false);
   const [openingFloat, setOpeningFloat] = useState(0);
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [isOffline, setIsOffline] = useState(false);
   const [companyName, setCompanyName] = useState('My Company');
   const addToast = useToastStore((state) => state.addToast);
 
   const TAX_RATE = 0.15;
 
   useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      setIsOffline(!navigator.onLine);
+    }
     const fetchCompanyData = async () => {
         const compDoc = await getDocs(query(collection(db, "companies"), where("ownerId", "==", companyId)));
         if (!compDoc.empty) {

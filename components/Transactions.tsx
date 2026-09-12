@@ -191,6 +191,12 @@ export default function Transactions() {
   const [importMode, setImportMode] = useState<"both" | "statement_only" | "ledger_only">("both");
   const [isProcessingImport, setIsProcessingImport] = useState(false);
 
+  // Bank Reconciliation States
+  const [selectedTxIdsForReconciliation, setSelectedTxIdsForReconciliation] = useState<string[]>([]);
+  const [isProcessingReconciliation, setIsProcessingReconciliation] = useState(false);
+  const [statementDate, setStatementDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [statementEndingBalance, setStatementEndingBalance] = useState<number>(0);
+
   useEffect(() => {
     async function loadBusiness() {
       const user = auth.currentUser;
@@ -2031,6 +2037,7 @@ export default function Transactions() {
           </div>
         </div>
       )}
+      {inspectVoucherTx && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white border border-slate-200 rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-fade-in">
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">

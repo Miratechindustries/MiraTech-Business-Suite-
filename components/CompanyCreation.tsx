@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { doc, setDoc, addDoc, collection } from 'firebase/firestore';
+import { doc, setDoc, addDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { db, emailSignIn, auth } from '../lib/firebase';
@@ -167,6 +167,7 @@ export default function CompanyCreation() {
   const [error, setError] = useState<string | null>(null);
   const [statusLogs, setStatusLogs] = useState<string[]>([]);
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
+  const [existingSubStatus, setExistingSubStatus] = useState<{ status: string; planName?: string } | null>(null);
 
   // Step 1: Account
   const [accountFullName, setAccountFullName] = useState('');
@@ -176,6 +177,33 @@ export default function CompanyCreation() {
   const [accountConfirmPassword, setAccountConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  useEffect(() => {
+    const checkExistingSubscription = async () => {
+      const email = accountEmail.trim().toLowerCase();
+      if (!email || email.length < 5) {
+        setExistingSubStatus(null);
+        return;
+      }
+      try {
+        const q = query(collection(db, 'companies'), where('email', '==', email));
+        const qSnap = await getDocs(q);
+        if (!qSnap.empty) {
+          const compData = qSnap.docs[0].data();
+          if (compData.subscriptionStatus || compData.status) {
+            setExistingSubStatus({
+              status: compData.subscriptionStatus || compData.status || 'active',
+              planName: compData.subscriptionPlan || compData.subscriptionPlanId || 'Standard',
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("Firestore subscription status check warning:", err);
+      }
+    };
+    const t = setTimeout(checkExistingSubscription, 500);
+    return () => clearTimeout(t);
+  }, [accountEmail]);
 
   // Sync password helper to persist across refreshes without exposing in permanent localStorage
   const updatePasswordState = (newPassword: string) => {
@@ -1058,46 +1086,51 @@ export default function CompanyCreation() {
     try {
       // If user selected a paid tier and Paddle is configured, invoke getPaddle() for PCI-compliant checkout & 14-day trial card tokenization
       if (subscriptionPlanId !== 'free' && isPaddleConfigured()) {
-        logStatus(`Opening secure PCI-compliant Paddle Billing checkout (14-Day Free Trial - No immediate charge)...`);
-        const paddle = await getPaddle((event: any) => {
-          if (event?.name === 'checkout.completed') {
-            const subId = event?.data?.id || event?.data?.subscription_id || `sub_pdl_${Date.now()}`;
-            const customerId = event?.data?.customer_id || `ctm_pdl_${Date.now()}`;
-            logStatus(`Paddle checkout completed successfully! Subscription ID: ${subId}`);
-            executeTenantProvisioning(subId, customerId).catch((err: any) => {
-              console.error(err);
-              setError("Provisioning failed after payment: " + err.message);
-              setLoading(false);
-            });
-          } else if (event?.name === 'checkout.error') {
-            setError("Paddle checkout error: " + (event?.data?.message || "Payment authorization failed."));
-            setLoading(false);
-          }
-        });
-
-        if (paddle) {
-          const priceId = PADDLE_PRICE_MAP[subscriptionPlanId] || 'pri_starter_tier';
-          paddle.Checkout.open({
-            items: [{ priceId, quantity: 1 }],
-            customData: {
-              companyName: companyName,
-              userEmail: accountEmail,
-              tier: subscriptionPlanId,
-            },
-            customer: {
-              email: accountEmail,
-            },
-            settings: {
-              variant: 'one-page',
-              displayMode: 'overlay',
-              theme: 'light',
-              locale: 'en',
-              successUrl: window.location.href,
-            },
-          });
+        if (existingSubStatus && ['active', 'trialing', 'past_due'].includes(existingSubStatus.status)) {
+          logStatus(`Firestore Check: Valid subscription found (${existingSubStatus.status}). Bypassing Paddle checkout re-trigger...`);
+          await executeTenantProvisioning(`sub_existing_${Date.now()}`, `ctm_existing_${Date.now()}`);
         } else {
-          logStatus(`Paddle client unavailable. Proceeding with sandbox trial provisioning...`);
-          await executeTenantProvisioning(`sub_pdl_sandbox_${Date.now()}`, `ctm_pdl_${Date.now()}`);
+          logStatus(`Opening secure PCI-compliant Paddle Billing checkout (14-Day Free Trial - No immediate charge)...`);
+          const paddle = await getPaddle((event: any) => {
+            if (event?.name === 'checkout.completed') {
+              const subId = event?.data?.id || event?.data?.subscription_id || `sub_pdl_${Date.now()}`;
+              const customerId = event?.data?.customer_id || `ctm_pdl_${Date.now()}`;
+              logStatus(`Paddle checkout completed successfully! Subscription ID: ${subId}`);
+              executeTenantProvisioning(subId, customerId).catch((err: any) => {
+                console.error(err);
+                setError("Provisioning failed after payment: " + err.message);
+                setLoading(false);
+              });
+            } else if (event?.name === 'checkout.error') {
+              setError("Paddle checkout error: " + (event?.data?.message || "Payment authorization failed."));
+              setLoading(false);
+            }
+          });
+
+          if (paddle) {
+            const priceId = PADDLE_PRICE_MAP[subscriptionPlanId] || 'pri_starter_tier';
+            paddle.Checkout.open({
+              items: [{ priceId, quantity: 1 }],
+              customData: {
+                companyName: companyName,
+                userEmail: accountEmail,
+                tier: subscriptionPlanId,
+              },
+              customer: {
+                email: accountEmail,
+              },
+              settings: {
+                variant: 'one-page',
+                displayMode: 'overlay',
+                theme: 'light',
+                locale: 'en',
+                successUrl: window.location.href,
+              },
+            });
+          } else {
+            logStatus(`Paddle client unavailable. Proceeding with sandbox trial provisioning...`);
+            await executeTenantProvisioning(`sub_pdl_sandbox_${Date.now()}`, `ctm_pdl_${Date.now()}`);
+          }
         }
       } else {
         await executeTenantProvisioning(`sub_pdl_free_${Date.now()}`, `ctm_pdl_${Date.now()}`);
@@ -2436,6 +2469,14 @@ export default function CompanyCreation() {
                   <p><strong className="text-slate-800">Price:</strong> {formatPlanPrice(selectedPlanDetails, billingCycle, currency)}/{billingCycle === 'annual' ? 'yr' : 'mo'} (14-Day Free Trial)</p>
                   <p><strong className="text-slate-800">Admin Role:</strong> {initialRole} ({adminPositionTitle})</p>
                   <p><strong className="text-slate-800">Initial Staff Queue:</strong> {staffList.length} staff accounts</p>
+                  {existingSubStatus && (
+                    <div className="mt-2.5 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-xs text-emerald-800">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <div>
+                        <span className="font-bold">Firestore Subscription Status:</span> Valid <span className="uppercase">{existingSubStatus.status}</span> record found. Paddle re-checkout will be bypassed.
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

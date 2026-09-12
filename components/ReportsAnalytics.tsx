@@ -69,7 +69,7 @@ export default function ReportsAnalytics() {
           { quarter: "Q4 - Autumn", billings: 0, invoices: 0, expenses: 0, netProfit: 0 },
         ];
 
-        function getQuarterIndex(dateStr: string | undefined): number {
+        const getQuarterIndex = (dateStr: string | undefined): number => {
           if (!dateStr) return 1;
           const month = parseInt(dateStr.split("-")[1], 10);
           if (isNaN(month)) return 1;
@@ -78,7 +78,7 @@ export default function ReportsAnalytics() {
           if (month >= 7 && month <= 9) return 2;
           if (month >= 10 && month <= 12) return 3;
           return 1;
-        }
+        };
 
         quots.forEach(q => {
           const idx = getQuarterIndex(q.date);

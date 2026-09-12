@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     let prunedCount = 0;
     const batch = adminDb.batch();
 
-    snapshot.docs.forEach((docSnap) => {
+    snapshot.docs.forEach((docSnap: any) => {
       const data = docSnap.data();
       const timestampStr = data.timestamp || data.createdAt;
       if (timestampStr) {
