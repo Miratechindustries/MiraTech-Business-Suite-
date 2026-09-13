@@ -962,6 +962,9 @@ export default function Transactions() {
     });
     setCsvStep("upload");
   };
+
+  const grossInflow = txns.filter(t => t.type === "Inflow").reduce((s, t) => s + t.amount, 0);
+  const grossOutflow = txns.filter(t => t.type === "Outflow").reduce((s, t) => s + t.amount, 0);
   const netBookCash = grossInflow - grossOutflow;
 
   // Reconciliation metrics

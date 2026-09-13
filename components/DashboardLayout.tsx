@@ -531,7 +531,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
     companyUnsubscribeRef.current = onSnapshot(doc(db, "companies", targetCompanyId), (compSnap) => {
       if (compSnap.exists()) {
-        const data = { id: compSnap.id, ...compSnap.data() } as CompanyData;
+        const data = { id: compSnap.id, ...compSnap.data() } as unknown as CompanyData;
         setCompany(data);
         if (typeof data.inactivityTimeout === "number") {
           localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
@@ -540,7 +540,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
         // Fallback to businesses collection
         const unsubBiz = onSnapshot(doc(db, "businesses", targetCompanyId), (bizSnap) => {
           if (bizSnap.exists()) {
-            const data = { id: bizSnap.id, ...bizSnap.data() } as CompanyData;
+            const data = { id: bizSnap.id, ...bizSnap.data() } as unknown as CompanyData;
             setCompany(data);
             if (typeof data.inactivityTimeout === "number") {
               localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));

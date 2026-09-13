@@ -403,9 +403,9 @@ export default function WorkspaceSwitcher({
           className="h-6 w-6 rounded-lg flex items-center justify-center font-black text-[10px] text-white flex-shrink-0 shadow-xs overflow-hidden"
           style={{ backgroundColor: currentOrg.primaryColor || "#2563EB" }}
         >
-          {currentOrg.letterheadLogo ? (
+          {(currentOrg as any).letterheadLogo ? (
             <img 
-              src={currentOrg.letterheadLogo} 
+              src={(currentOrg as any).letterheadLogo} 
               alt={currentOrg.name} 
               className="h-full w-full object-cover"
               onError={(e) => {
