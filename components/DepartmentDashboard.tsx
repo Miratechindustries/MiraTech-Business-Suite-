@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { collection, query, where, orderBy, limit, getDocs, updateDoc, addDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { logDepartmentActivity } from "@/lib/department";
+import { logDepartmentActivity } from "../lib/department";
 import jsPDF from "jspdf";
 import {
   ResponsiveContainer,
@@ -358,6 +358,8 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
       setLoadingKpis(true);
       try {
         const metrics: typeof dbKpis = {};
+
+        if (!businessId) return;
 
         // 1. Fetch Invoices for Finance & Executive
         const invoicesRef = collection(db, "companies", businessId, "invoices");

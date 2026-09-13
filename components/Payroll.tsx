@@ -71,6 +71,7 @@ interface Payslip {
   medicalAid: number;
   otherFeeAmount: number;
   otherFeeDescription: string;
+  otherDeductions?: number;
   grossSalary: number;
   totalDeductions: number;
   netSalary: number;
@@ -157,7 +158,7 @@ export default function Payroll() {
     if (!input) return;
     
     // Temporarily hide buttons for clean export
-    const buttons = input.querySelectorAll(".no-print");
+    const buttons = input.querySelectorAll<HTMLElement>(".no-print");
     buttons.forEach(btn => btn.style.display = 'none');
     
     const canvas = await html2canvas(input, { scale: 2 });
@@ -664,7 +665,7 @@ export default function Payroll() {
         "PAYE tax ($)": p.paye,
         "ENPF pension ($)": p.enpf,
         "Medical Aid ($)": p.medicalAid,
-        "Other Deductions ($)": p.otherDeductions,
+        "Other Deductions ($)": p.otherFeeAmount || p.otherDeductions || 0,
         "Total Deductions ($)": p.totalDeductions,
         "Net Salary ($)": p.netSalary,
         "Status": p.status,

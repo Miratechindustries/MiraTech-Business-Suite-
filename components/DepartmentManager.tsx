@@ -20,7 +20,7 @@ import {
   Layers, 
   Activity
 } from "lucide-react";
-import { logDepartmentActivity } from "@/lib/department";
+import { logDepartmentActivity } from "../lib/department";
 
 interface ModuleConfig {
   id: string;
@@ -64,6 +64,7 @@ export default function DepartmentManager() {
     }
 
     async function fetchModules() {
+      if (!businessId) return;
       try {
         const companyRef = doc(db, "companies", businessId);
         const companySnap = await getDoc(companyRef);
@@ -103,6 +104,8 @@ export default function DepartmentManager() {
     setSaving(true);
     setError(null);
     setSuccess(false);
+
+    if (!businessId) return;
 
     try {
       const companyRef = doc(db, "companies", businessId);

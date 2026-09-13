@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import InstallPrompt from "./InstallPrompt";
 
+
 export default function InstallClientWrapper() {
   const [mounted, setMounted] = useState(false);
 
@@ -11,6 +12,11 @@ export default function InstallClientWrapper() {
   }, []);
 
   if (!mounted) return null;
-  return <InstallPrompt />;
+  return (
+    <>
+      <InstallPrompt />
+      
+    </>
+  );
 }
 

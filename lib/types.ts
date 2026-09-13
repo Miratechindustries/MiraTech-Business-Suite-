@@ -26,14 +26,18 @@ export interface ScopedPermissions {
   canFinalizeDocuments?: boolean;
   canRejectDocuments?: boolean;
   canReturnForEditing?: boolean;
+  canViewApprovalHistory?: boolean;
+  approvalRights?: boolean;
 }
 
-export interface User {
+export interface User extends ScopedPermissions {
   id: string;
+  uid?: string;
   email: string;
   role: Role;
   businessId: string;
   companyId?: string;
+  name?: string;
   displayName?: string;
   positionTitle?: string;
   phone?: string;
@@ -44,6 +48,8 @@ export interface User {
   isEmailVerified?: boolean;
   emailVerified?: boolean;
   status?: 'ACTIVE' | 'DEACTIVATED' | 'PENDING';
+  authorizedCompanyIds?: string[];
+  lastActiveCompanyId?: string;
   createdAt?: string;
 }
 

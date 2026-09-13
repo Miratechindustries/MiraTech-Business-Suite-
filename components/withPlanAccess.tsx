@@ -154,11 +154,11 @@ export function PlanUpgradeGate({
 /**
  * Higher Order Component (HOC) to wrap application components with plan-level gating.
  */
-export function withPlanAccess<P extends WithPlanAccessProps>(
+export function withPlanAccess<P extends object>(
   WrappedComponent: React.ComponentType<P>,
   moduleKey: string
 ) {
-  return function WithPlanAccessComponent(props: P) {
+  return function WithPlanAccessComponent(props: P & { onUpgradeClick?: () => void; onBack?: () => void; [key: string]: any }) {
     const { loading, accessResult, allowed } = usePlanAccess(moduleKey);
 
     if (loading) {
@@ -182,6 +182,6 @@ export function withPlanAccess<P extends WithPlanAccessProps>(
       );
     }
 
-    return <WrappedComponent {...props} />;
+    return <WrappedComponent {...props as P} />;
   };
 }

@@ -134,3 +134,26 @@ export function daysBetween(date1: Date, date2: Date): number {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
+/**
+ * Standardized pricing calculation across all subscription surfaces:
+ * - Monthly: base plan.price
+ * - Annual: 20% discount (price * 12 * 0.8)
+ */
+export function getPlanPrice(plan: SubscriptionPlan, billingCycle: 'monthly' | 'annual' = 'monthly'): number {
+  if (billingCycle === 'annual') {
+    return Math.round(plan.price * 12 * 0.8);
+  }
+  return plan.price;
+}
+
+export function formatPlanPrice(
+  plan: SubscriptionPlan, 
+  billingCycle: 'monthly' | 'annual' = 'monthly',
+  currency: string = 'USD'
+): string {
+  const price = getPlanPrice(plan, billingCycle);
+  const symbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'ZAR' ? 'R' : 'E';
+  return `${symbol}${price.toLocaleString()}`;
+}
+
+

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAndSendOtp } from "@/lib/otp";
+import { createAndSendOtp } from "../../../../lib/otp";
 
 export async function POST(req: NextRequest) {
   try {

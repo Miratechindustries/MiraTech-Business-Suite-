@@ -1,25 +1,24 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
 import { useUserStore } from "../lib/store";
 import { logout } from "../lib/firebase";
-import { LayoutDashboard, Users, Building2, ShieldAlert, LogOut, FileText, ShieldCheck, X, ShoppingCart } from "lucide-react";
+import { LayoutDashboard, Users, Building2, ShieldAlert, LogOut, FileText, ShieldCheck, X, ShoppingCart, ChevronRight } from "lucide-react";
 import LoadingSkeleton from "./LoadingSkeleton";
-
-const MasterAdminDashboard = dynamic(() => import("./MasterAdminDashboard"), { loading: () => <LoadingSkeleton /> });
-const UserManagement = dynamic(() => import("./UserManagement"), { loading: () => <LoadingSkeleton /> });
-const AuditLogs = dynamic(() => import("./AuditLogs"), { loading: () => <LoadingSkeleton /> });
-const CompanyCreation = dynamic(() => import("./CompanyCreation"), { loading: () => <LoadingSkeleton /> });
-const CompaniesTable = dynamic(() => import("./CompaniesTable"), { loading: () => <LoadingSkeleton /> });
-const SecurityOperations = dynamic(() => import("./SecurityOperations"), { loading: () => <LoadingSkeleton /> });
-const POSHub = dynamic(() => import("./POSHub"), { loading: () => <LoadingSkeleton /> });
+import MasterAdminDashboard from "./MasterAdminDashboard";
+import UserManagement from "./UserManagement";
+import AuditLogs from "./AuditLogs";
+import CompanyCreation from "./CompanyCreation";
+import CompaniesTable from "./CompaniesTable";
+import SecurityOperations from "./SecurityOperations";
+import POSHub from "./POSHub";
+import WorkspaceSwitcher from "./WorkspaceSwitcher";
 
 export default function MasterAdminLayout() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'Connected' | 'Offline' | 'Syncing'>('Syncing');
-  const { currentUser } = useUserStore();
+  const { currentUser, setViewMode } = useUserStore();
 
   useEffect(() => {
     // Initial sync simulation
@@ -83,11 +82,35 @@ export default function MasterAdminLayout() {
     <div className="flex min-h-screen bg-[#F8FAFC] text-slate-800">
       {/* Desktop Sidebar */}
       <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col flex-shrink-0 z-10">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-extrabold text-slate-950 tracking-tighter">Mira Admin</span>
-            <StatusIndicator />
+        <div className="p-4 border-b border-slate-100 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-extrabold text-slate-950 tracking-tighter">Mira Admin</span>
+              <StatusIndicator />
+            </div>
           </div>
+          {/* Omni-Tenant Workspace Switcher */}
+          <WorkspaceSwitcher
+            currentCompany={null}
+            currentUser={currentUser}
+            userAuthId={currentUser?.id}
+            userEmail={currentUser?.email}
+            onSwitchWorkspace={(companyId) => {
+              if (typeof window !== "undefined") {
+                localStorage.setItem("mira_active_workspace_id", companyId);
+              }
+              if (currentUser) {
+                useUserStore.getState().setCurrentUser({
+                  ...currentUser,
+                  companyId,
+                  businessId: companyId,
+                  lastActiveCompanyId: companyId,
+                });
+              }
+              setViewMode("COMPANY");
+            }}
+            className="w-full"
+          />
         </div>
 
         <nav className="p-4 space-y-1 flex-1 overflow-y-auto">
@@ -95,6 +118,21 @@ export default function MasterAdminLayout() {
             <NavItem key={tab.id} tab={tab} />
           ))}
         </nav>
+
+        <div className="p-3 border-t border-slate-100">
+          <button
+            type="button"
+            id="btn-switch-to-tenant-portal"
+            onClick={() => setViewMode("COMPANY")}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-indigo-50/80 hover:bg-indigo-100/80 border border-indigo-200/70 text-indigo-950 text-xs font-bold transition cursor-pointer"
+          >
+            <span className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-indigo-600" />
+              <span>Enter Tenant Portal</span>
+            </span>
+            <ChevronRight className="h-3.5 w-3.5 text-indigo-400" />
+          </button>
+        </div>
 
         <div className="p-4 border-t border-slate-100 bg-slate-50/45">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Admin Account</p>
@@ -113,22 +151,46 @@ export default function MasterAdminLayout() {
       {/* Main Content Pane */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile Header */}
-        <header className="bg-white border-b border-slate-200 py-3 px-4 flex items-center justify-between md:hidden flex-shrink-0">
-          <div className="flex items-center gap-3 animate-none">
+        <header className="bg-white border-b border-slate-200 py-2.5 px-3 flex items-center justify-between md:hidden flex-shrink-0 gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="p-1 px-2 border border-slate-200 text-slate-600 rounded-md hover:bg-slate-50 transition cursor-pointer"
+              className="p-1.5 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition cursor-pointer"
               aria-label="Toggle Navigation drawer"
             >
               <LayoutDashboard className="h-4 w-4" />
             </button>
-            <span className="text-xs font-extrabold text-[#0B1329] uppercase tracking-wider">Mira Admin</span>
-            <StatusIndicator />
+            <span className="text-xs font-extrabold text-[#0B1329] uppercase tracking-wider">Admin</span>
           </div>
+
+          {/* Mobile Workspace Switcher */}
+          <WorkspaceSwitcher
+            currentCompany={null}
+            currentUser={currentUser}
+            userAuthId={currentUser?.id}
+            userEmail={currentUser?.email}
+            onSwitchWorkspace={(companyId) => {
+              if (typeof window !== "undefined") {
+                localStorage.setItem("mira_active_workspace_id", companyId);
+              }
+              if (currentUser) {
+                useUserStore.getState().setCurrentUser({
+                  ...currentUser,
+                  companyId,
+                  businessId: companyId,
+                  lastActiveCompanyId: companyId,
+                });
+              }
+              setViewMode("COMPANY");
+            }}
+            isMobile
+            className="flex-1 max-w-[170px]"
+          />
+
           {/* Mobile Direct Sign Out Button */}
           <button
             onClick={handleLogout}
-            className="p-1.5 border border-red-100 text-red-500 hover:text-red-605 hover:bg-red-50 rounded-lg cursor-pointer transition"
+            className="p-1.5 border border-red-100 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer transition"
             title="Sign Out"
           >
             <LogOut className="h-4 w-4" />

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import AuditTrailDrawer from "./AuditTrailDrawer";
 import { db, handleFirestoreError, OperationType } from "../lib/firebase";
 import { 
   doc, 
@@ -21,7 +22,9 @@ import {
   SubscriptionPlan, 
   ALL_FEATURES, 
   getLockedFeaturesForPlan,
-  daysBetween 
+  daysBetween,
+  getPlanPrice,
+  formatPlanPrice
 } from "../lib/subscriptions";
 import { logAction } from "../lib/audit";
 import { 
@@ -66,7 +69,10 @@ import {
   Receipt,
   HelpCircle,
   Clock,
-  Briefcase
+  Briefcase,
+  Webhook,
+  XCircle,
+  PauseCircle
 } from "lucide-react";
 import Image from "next/image";
 import CompanyProfile from "./CompanyProfile";
@@ -104,6 +110,7 @@ export default function BusinessAdminDashboard({
 }: BusinessAdminDashboardProps) {
   const { currentUser } = useUserStore();
   const [activeSubTab, setActiveSubTab] = useState<"overview" | "settings" | "employees" | "billing" | "hierarchy" | "security" | "compliance" | "integrations" | "budgets">(initialSubTab);
+  const [isAuditDrawerOpen, setIsAuditDrawerOpen] = useState(false);
   
   const [company, setCompany] = useState<any | null>(null);
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
@@ -397,6 +404,7 @@ export default function BusinessAdminDashboard({
   // Handle Delete Employee
   const handleDeleteEmployee = async (empId: string, empName: string) => {
     if (!confirm(`Are you sure you want to revoke access and remove ${empName}?`)) return;
+    if (!companyId) return;
     try {
       await deleteDoc(doc(db, "users", empId));
       showToast(`Employee ${empName} has been removed.`, "info");
@@ -491,6 +499,77 @@ export default function BusinessAdminDashboard({
                 <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-150">
                   Business Administration Center
                 </span>
+
+                {/* Visual Subscription Status Badge directly from Firestore Document */}
+                {(() => {
+                  const rawStatus = (company?.status || company?.subscriptionStatus || 'active').toLowerCase().trim();
+                  const nextDate = company?.next_billing_date || company?.nextBillingDate || company?.subscriptionRenewsAt;
+                  const formattedNextDate = nextDate ? new Date(nextDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+
+                  if (rawStatus === 'active') {
+                    return (
+                      <span
+                        id="badge-subscription-status"
+                        title={formattedNextDate ? `Active • Next renewal on ${formattedNextDate}` : "Active Subscription"}
+                        className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-250 shadow-3xs"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                        <span>Subscription: Active</span>
+                      </span>
+                    );
+                  }
+
+                  if (rawStatus === 'trialing') {
+                    return (
+                      <span
+                        id="badge-subscription-status"
+                        title={formattedNextDate ? `Trial active until ${formattedNextDate}` : "Trialing Subscription"}
+                        className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-250 shadow-3xs"
+                      >
+                        <Sparkles className="w-3 h-3 text-blue-600 shrink-0" />
+                        <span>Subscription: Trialing</span>
+                      </span>
+                    );
+                  }
+
+                  if (rawStatus === 'past_due') {
+                    return (
+                      <span
+                        id="badge-subscription-status"
+                        title="Immediate attention required: Payment past due"
+                        className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 shadow-3xs animate-pulse"
+                      >
+                        <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                        <span>Subscription: Past Due</span>
+                      </span>
+                    );
+                  }
+
+                  if (rawStatus === 'canceled') {
+                    return (
+                      <span
+                        id="badge-subscription-status"
+                        title="Subscription has been canceled"
+                        className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-250 shadow-3xs"
+                      >
+                        <XCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                        <span>Subscription: Canceled</span>
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <span
+                      id="badge-subscription-status"
+                      className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-250 shadow-3xs"
+                    >
+                      <PauseCircle className="w-3 h-3 text-slate-500 shrink-0" />
+                      <span>Subscription: {rawStatus.toUpperCase()}</span>
+                    </span>
+                  );
+                })()}
+
                 {company?.isVerified ? (
                   <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                     <ShieldCheck className="w-3 h-3" /> Verified Corporate Workspace
@@ -530,6 +609,14 @@ export default function BusinessAdminDashboard({
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
             <button
               type="button"
+              onClick={() => setIsAuditDrawerOpen(true)}
+              className="px-5 py-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-black rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider"
+            >
+              <Activity className="w-4 h-4 text-indigo-500" />
+              <span>Audit Trail</span>
+            </button>
+            <button
+              type="button"
               id="btn-go-to-company-dashboard"
               onClick={onNavigateToCompanyDashboard}
               className="px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-black rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer uppercase tracking-wider group"
@@ -545,11 +632,21 @@ export default function BusinessAdminDashboard({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 pt-6 mt-6 border-t border-slate-100">
           <div className="bg-slate-50 border border-slate-150/80 p-3.5 rounded-2xl">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">
-              Active Tier
+              Active Tier & Health
             </span>
             <div className="flex items-center gap-1.5 font-mono text-base font-black text-indigo-700">
               <Sparkles className="w-4 h-4 text-indigo-600" />
               <span>{currentPlan.name}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] font-medium text-slate-500">
+              <span className="capitalize font-semibold text-slate-700">
+                {company?.status || company?.subscriptionStatus || 'Active'}
+              </span>
+              {(company?.next_billing_date || company?.nextBillingDate || company?.subscriptionRenewsAt) && (
+                <span className="text-slate-400 text-[10px]">
+                  Next: {new Date(company.next_billing_date || company.nextBillingDate || company.subscriptionRenewsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </span>
+              )}
             </div>
           </div>
 
@@ -713,22 +810,22 @@ export default function BusinessAdminDashboard({
 
       {/* TAB CONTENT: SECURITY */}
       {activeSubTab === "security" && (
-        <EnterpriseSecurityPanel companyId={companyId} currentUser={currentUser} />
+        <EnterpriseSecurityPanel companyId={companyId || ""} currentUser={currentUser} />
       )}
 
       {/* TAB CONTENT: COMPLIANCE */}
       {activeSubTab === "compliance" && (
-        <DataPrivacyVault companyId={companyId} currentUser={currentUser} />
+        <DataPrivacyVault companyId={companyId || ""} currentUser={currentUser} />
       )}
 
       {/* TAB CONTENT: INTEGRATIONS */}
       {activeSubTab === "integrations" && (
-        <ApiWebhookHub companyId={companyId} currentUser={currentUser} />
+        <ApiWebhookHub companyId={companyId || ""} currentUser={currentUser} />
       )}
 
       {/* TAB CONTENT: BUDGETS */}
       {activeSubTab === "budgets" && (
-        <DepartmentBudgetHub companyId={companyId} currentUser={currentUser} />
+        <DepartmentBudgetHub companyId={companyId || ""} currentUser={currentUser} />
       )}
 
       {/* TAB CONTENT 1: GOVERNANCE & OVERVIEW */}
@@ -1087,148 +1184,8 @@ export default function BusinessAdminDashboard({
       {/* TAB CONTENT 4: BILLING & SUBSCRIPTION TIERS */}
       {activeSubTab === "billing" && (
         <div className="space-y-6 animate-fade-in">
-          {/* Current Tier Overview Box */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-3xl p-6 sm:p-8 shadow-md relative overflow-hidden">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-              <div className="space-y-3">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-white text-[10px] font-black uppercase tracking-wider backdrop-blur-xs border border-white/10">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  Active Corporate Subscription
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-                  {currentPlan.name} Plan
-                </h2>
-                <p className="text-xs text-slate-300 font-medium max-w-xl leading-relaxed">
-                  {currentPlan.description} You have access to enterprise workflow capacity, unlimited automated invoices, and multi-user branch synchronization.
-                </p>
-                <div className="flex flex-wrap items-center gap-4 text-xs pt-2">
-                  <span className="bg-white/10 px-3 py-1 rounded-xl text-slate-200 font-bold">
-                    Billing: <strong className="text-white uppercase">{billingCycle}</strong>
-                  </span>
-                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-xl font-bold">
-                    Status: Active Operational Trial
-                  </span>
-                </div>
-              </div>
-
-              {/* Billing Cycle Switcher */}
-              <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 space-y-3 text-center sm:text-left shrink-0">
-                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest block">
-                  Select Billing Cycle
-                </span>
-                <div className="flex items-center gap-2 bg-slate-950/60 p-1 rounded-xl border border-white/10">
-                  <button
-                    type="button"
-                    onClick={() => setBillingCycle("monthly")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
-                      billingCycle === "monthly" ? "bg-white text-slate-900" : "text-slate-300 hover:text-white"
-                    }`}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBillingCycle("annual")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1 ${
-                      billingCycle === "annual" ? "bg-white text-slate-900" : "text-slate-300 hover:text-white"
-                    }`}
-                  >
-                    Annual <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.2 rounded font-black">-20%</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Interactive Tier Comparison & Direct Switching Grid */}
-          <div className="space-y-4">
-            <h3 className="text-base font-black text-slate-900 tracking-tight">
-              Switch or Upgrade Corporate Plan Tier
-            </h3>
-            <p className="text-xs text-slate-500 font-medium">
-              Scale your operational entitlement seamlessly. Changes apply immediately across all team permissions.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 pt-2">
-              {SUBSCRIPTION_PLANS.map((plan) => {
-                const isCurrent = plan.id === currentPlanId;
-                const price = billingCycle === "annual" ? Math.round(plan.price * 12 * 0.8) : plan.price;
-
-                return (
-                  <div
-                    key={plan.id}
-                    className={`bg-white rounded-3xl p-5 border flex flex-col justify-between space-y-4 transition ${
-                      isCurrent
-                        ? "border-2 border-indigo-600 shadow-md ring-2 ring-indigo-100"
-                        : "border-slate-200 hover:border-slate-300 shadow-xs"
-                    }`}
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                          Tier
-                        </span>
-                        {isCurrent && (
-                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full text-[9px] font-black uppercase">
-                            Active
-                          </span>
-                        )}
-                      </div>
-
-                      <div>
-                        <h4 className="text-base font-black text-slate-900">{plan.name}</h4>
-                        <div className="mt-1 font-mono text-xl font-black text-slate-900">
-                          ${price}
-                          <span className="text-[10px] font-normal text-slate-400 font-sans">
-                            /{billingCycle === "annual" ? "yr" : "mo"}
-                          </span>
-                        </div>
-                      </div>
-
-                      <p className="text-[11px] text-slate-500 leading-normal line-clamp-3">
-                        {plan.description}
-                      </p>
-
-                      <div className="space-y-1.5 pt-2 border-t border-slate-100 text-[11px]">
-                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">
-                          Included Modules:
-                        </span>
-                        {plan.features.slice(0, 4).map(f => (
-                          <div key={f} className="flex items-center gap-1.5 text-slate-600">
-                            <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-                            <span className="capitalize">{f.replace("_", " ")}</span>
-                          </div>
-                        ))}
-                        {plan.features.length > 4 && (
-                          <span className="text-[10px] text-slate-400 font-bold block pt-1">
-                            +{plan.features.length - 4} more modules
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={isCurrent || tierUpdating}
-                      onClick={() => handleSwitchPlanTier(plan.id)}
-                      className={`w-full py-2 rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer ${
-                        isCurrent
-                          ? "bg-slate-100 text-slate-400 cursor-default"
-                          : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
-                      }`}
-                    >
-                      {isCurrent ? "Current Plan" : `Switch to ${plan.name}`}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Deep In-Depth Subscriptions & Invoicing View */}
-          <div className="pt-4">
-            <SubscriptionsView />
-          </div>
+          {/* Unified Subscriptions & Billing Center with Payment Gateway Integration */}
+          <SubscriptionsView />
         </div>
       )}
 
@@ -1641,6 +1598,11 @@ export default function BusinessAdminDashboard({
           </div>
         </div>
       )}
+      <AuditTrailDrawer 
+        isOpen={isAuditDrawerOpen} 
+        onClose={() => setIsAuditDrawerOpen(false)} 
+        companyId={companyId} 
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminDb } from "../../../../lib/firebase-admin";
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,10 +37,10 @@ export async function POST(req: NextRequest) {
 
       await adminDb.collection("audit_logs").add({
         companyId,
-        userId: "stripe_webhook",
-        userEmail: "billing@gateway.webhook",
+        userId: "paddle_billing_webhook",
+        userEmail: "billing@paddle.gateway",
         action: "BILLING_WEBHOOK_SYNCHRONIZED",
-        details: `Received verified billing webhook event [${eventType}]. Updated tenant subscription tier to ${subscriptionTier}.`,
+        details: `Received verified Paddle billing webhook event [${eventType}]. Updated tenant subscription tier to ${subscriptionTier}.`,
         category: "billing",
         severity: "INFO",
         timestamp: new Date().toISOString()

@@ -58,7 +58,7 @@ interface ProcurementHubProps {
 export default function ProcurementHub({ companyId }: ProcurementHubProps) {
   const addToast = useToastStore((state) => state.addToast);
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "requests" | "suppliers" | "rfqs" | "pos" | "grn" | "matching"
+    "dashboard" | "requests" | "suppliers" | "rfqs" | "pos" | "grn" | "matching" | "invoices"
   >("dashboard");
 
   // Data states
@@ -67,6 +67,7 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
   const [rfqs, setRfqs] = useState<any[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
   const [goodsReceivedList, setGoodsReceivedList] = useState<any[]>([]);
+  const [supplierInvoices, setSupplierInvoices] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -161,6 +162,10 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
       setGoodsReceivedList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
+    const unsubInvoices = onSnapshot(collection(db, "companies", companyId, "supplier_invoices"), (snap) => {
+      setSupplierInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
     const unsubInventory = onSnapshot(query(collection(db, "products"), where("businessId", "==", companyId)), (snap) => {
       setInventoryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
@@ -172,9 +177,38 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
       unsubRfqs();
       unsubPos();
       unsubGrn();
+      unsubInvoices();
       unsubInventory();
     };
   }, [companyId]);
+
+  const loadAllProcurementData = async () => {
+    if (!companyId) return;
+    setLoading(true);
+    try {
+      const [prSnap, supSnap, rfqSnap, poSnap, grnSnap, invsSnap, invSnap] = await Promise.all([
+        getDocs(collection(db, "companies", companyId, "purchase_requests")),
+        getDocs(collection(db, "companies", companyId, "suppliers")),
+        getDocs(collection(db, "companies", companyId, "rfqs")),
+        getDocs(collection(db, "companies", companyId, "purchase_orders")),
+        getDocs(collection(db, "companies", companyId, "goods_received")),
+        getDocs(collection(db, "companies", companyId, "supplier_invoices")),
+        getDocs(query(collection(db, "products"), where("businessId", "==", companyId)))
+      ]);
+
+      setPurchaseRequests(prSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setSuppliers(supSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setRfqs(rfqSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setPurchaseOrders(poSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setGoodsReceivedList(grnSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setSupplierInvoices(invsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setInventoryItems(invSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+      console.warn("Manual procurement reload error", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // 1. Calculations for Dashboard
   const totalSpend = purchaseOrders

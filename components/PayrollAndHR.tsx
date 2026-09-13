@@ -239,8 +239,8 @@ const HRManagement = () => {
   };
 
   // Safe Cloud-ledgers dynamic Firestore sync
-  const handleUpdateEmployeeHR = async (updatedFields: Partial<Employee>) => {
-    if (!selectedEmployee) return;
+  const handleUpdateEmployeeHR = async (updatedFields: Partial<Employee>): Promise<boolean> => {
+    if (!selectedEmployee) return false;
     setIsHrSaving(true);
     try {
       const docRef = doc(db, "employees", selectedEmployee.id);
@@ -259,12 +259,14 @@ const HRManagement = () => {
       );
 
       addToast("Employee HR ledger updated in real-time cloud data", "success");
+      return true;
     } catch (err: any) {
       console.error(err);
       addToast("Failed to write update: " + err.message, "error");
       try {
         handleFirestoreError(err, OperationType.UPDATE, `employees/${selectedEmployee.id}`);
       } catch (r) {}
+      return false;
     } finally {
       setIsHrSaving(false);
     }

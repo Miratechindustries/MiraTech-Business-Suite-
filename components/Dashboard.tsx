@@ -25,6 +25,8 @@ interface Invoice {
 interface Quotation {
   total: number;
   status: "pending" | "accepted" | "declined";
+  number?: string;
+  createdAt?: string;
 }
 
 interface Transaction {
@@ -44,6 +46,9 @@ interface CompanyDetails {
   phone: string;
   address: string;
   letterheadLogo: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  subscriptionStatus?: string;
 }
 
 interface DashboardProps {
@@ -132,7 +137,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
         const qRef = collection(db, "companies", businessId, "quotations");
         const qSnap = await getDocs(qRef);
         qSnap.forEach((docSnap) => {
-          qList.push({ id: docSnap.id, ...docSnap.data() } as Quotation);
+          qList.push({ id: docSnap.id, ...docSnap.data() } as unknown as Quotation);
         });
         // Sort by number descending
         qList.sort((a, b) => (b.number || "").localeCompare(a.number || ""));
@@ -146,7 +151,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
         const iRef = collection(db, "companies", businessId, "invoices");
         const iSnap = await getDocs(iRef);
         iSnap.forEach((docSnap) => {
-          iList.push({ id: docSnap.id, ...docSnap.data() } as Invoice);
+          iList.push({ id: docSnap.id, ...docSnap.data() } as unknown as Invoice);
         });
         // Sort by number descending
         iList.sort((a, b) => (b.number || "").localeCompare(a.number || ""));
@@ -160,7 +165,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
         const tRef = collection(db, "companies", businessId, "transactions");
         const tSnap = await getDocs(tRef);
         tSnap.forEach((docSnap) => {
-          tList.push({ id: docSnap.id, ...docSnap.data() } as Transaction);
+          tList.push({ id: docSnap.id, ...docSnap.data() } as unknown as Transaction);
         });
         setTransactions(tList);
         localStorage.setItem(`miratech_offline_transactions_${businessId}`, JSON.stringify(tList));
@@ -223,7 +228,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
   // Past 12 Months Revenue and Invoiced Trends
   const trendData = (() => {
-    const months = [];
+    const months: any[] = [];
     let baseDate = new Date();
     // Anchor at May 2026 for consistent presentation in demo database, else use current year.
     if (baseDate.getFullYear() < 2026) {

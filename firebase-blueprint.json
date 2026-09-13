@@ -189,9 +189,35 @@
         "customerEmail": { "type": "string" }
       },
       "required": ["ownerId", "title", "status", "priority", "createdAt"]
+    },
+    "LegalDocument": {
+      "title": "Legal Document",
+      "description": "Dynamic legal and compliance documents with version history.",
+      "type": "object",
+      "properties": {
+        "slug": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "currentVersion": { "type": "string" },
+        "effectiveDate": { "type": "string" },
+        "lastUpdated": { "type": "string" },
+        "summary": { "type": "string" },
+        "content": { "type": "string" },
+        "versions": { "type": "array" },
+        "requiresReconsent": { "type": "boolean" },
+        "jurisdictionNotice": { "type": "string" },
+        "applicableLaw": { "type": "string" },
+        "publishedAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "slug", "currentVersion", "effectiveDate", "content"]
     }
   },
   "firestore": {
+    "/legal_documents/{docId}": {
+      "schema": "LegalDocument",
+      "description": "Public and dynamic legal compliance documents registry."
+    },
     "/companies/{companyId}": {
       "schema": "Company",
       "description": "Company registration directory."

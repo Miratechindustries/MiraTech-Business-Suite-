@@ -12,7 +12,7 @@ import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/fire
 import firebaseConfig from "../firebase-applet-config.json";
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
+export const db = getFirestore(app, (firebaseConfig.firestoreDatabaseId as string) || undefined);
 export const auth = getAuth(app);
 
 export const initAuth = (
@@ -112,6 +112,19 @@ export const logout = async () => {
   setAccessToken(null);
 };
 
+export const requestGoogleDriveScope = async (): Promise<string | null> => {
+  const provider = new GoogleAuthProvider();
+  provider.addScope('https://www.googleapis.com/auth/drive.file');
+  provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+  const result = await signInWithPopup(auth, provider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  const accessToken = credential?.accessToken || null;
+  if (accessToken) {
+    setAccessToken(accessToken);
+  }
+  return accessToken;
+};
+
 // Error Handling
 export enum OperationType {
   CREATE = "create",
@@ -127,6 +140,21 @@ export async function logError(error: Error, metadata: Record<string, any> = {})
     const userId = auth.currentUser?.uid || "SYSTEM";
     const userEmail = auth.currentUser?.email || "SYSTEM";
     
+    // 1. Write to error_logs for real-time observability in Master Admin
+    await addDoc(collection(db, "error_logs"), {
+      message: error.message || "Unknown error",
+      stackTrace: error.stack || "No stack trace available",
+      source: metadata.source || (typeof window !== "undefined" ? "client-ui" : "server"),
+      resolved: false,
+      severity: metadata.severity || "Medium",
+      userId,
+      userEmail,
+      componentStack: metadata.componentStack || null,
+      timestamp: serverTimestamp(),
+      ...metadata
+    }).catch(e => console.warn("Failed to write to error_logs:", e));
+
+    // 2. Write to audit_logs for compliance ledger
     await addDoc(collection(db, "audit_logs"), {
       action: "System Error",
       detail: `Message: ${error.message}. Stack: ${error.stack}`,
@@ -138,7 +166,7 @@ export async function logError(error: Error, metadata: Record<string, any> = {})
       isError: true,
       severity: metadata.severity || "Medium",
       ...metadata
-    });
+    }).catch(e => console.warn("Failed to write to audit_logs:", e));
   } catch (e) {
     console.error("Failed to log error:", e);
   }

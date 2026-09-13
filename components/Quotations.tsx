@@ -346,21 +346,21 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
     } catch (err) {
       if (isOfflineError(err)) {
         console.warn("[Quotations Offline Fallback] Loading data from local cache.");
-        const cachedCompany = localStorage.getItem(`miratech_offline_company_${user.uid}`);
+        const fallbackUid = user?.uid || businessId;
+        const cachedCompany = localStorage.getItem(`miratech_offline_company_${fallbackUid}`);
         if (cachedCompany) setCompany(JSON.parse(cachedCompany));
-        const cachedQuots = localStorage.getItem(`miratech_offline_quotations_${user.uid}`);
+        const cachedQuots = localStorage.getItem(`miratech_offline_quotations_${fallbackUid}`);
         if (cachedQuots) {
           const rawList = JSON.parse(cachedQuots) as Quotation[];
           setQuotations(departmentId ? rawList.filter(q => q.department === departmentId) : rawList);
         } else {
           setQuotations([]);
         }
-        const user = auth.currentUser;
-        const cacheKey = user ? `miratech_customers_${user.uid}` : "miratech_customers_guest";
+        const cacheKey = fallbackUid ? `miratech_customers_${fallbackUid}` : "miratech_customers_guest";
         const cachedClients = localStorage.getItem(cacheKey);
         if (cachedClients) setClients(JSON.parse(cachedClients));
 
-        const cachedProducts = localStorage.getItem(`miratech_products_${user.uid}`);
+        const cachedProducts = localStorage.getItem(`miratech_products_${fallbackUid}`);
         if (cachedProducts) setProducts(JSON.parse(cachedProducts));
       } else {
         handleFirestoreError(err, OperationType.GET, quotsPath);
@@ -400,7 +400,9 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
     const next = [...items];
     if (field === "description") {
       next[index].description = String(value);
-    } else {
+    } else if (field === "productId") {
+      next[index].productId = value ? String(value) : undefined;
+    } else if (field === "quantity" || field === "price") {
       next[index][field] = Number(value);
     }
     setItems(next);
@@ -1669,7 +1671,7 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
                             )}
 
                             {/* Override direct approval button */}
-                            {hasOverrideRights && currentApprovalStatus !== 'approved' && (
+                            {hasOverrideRights && (
                               <button
                                 onClick={() => handleWorkflowTransition('approved', 'Manager Override', true)}
                                 disabled={submitting}

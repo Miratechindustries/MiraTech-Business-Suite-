@@ -70,6 +70,7 @@ import DepartmentsHub from "./DepartmentsHub";
 import POSHub from "./POSHub";
 import CompanyCreation from "./CompanyCreation";
 import BusinessAdminDashboard from "./BusinessAdminDashboard";
+import WorkspaceSwitcher, { WorkspaceOrg } from "./WorkspaceSwitcher";
 
 // Wrapped dynamic department dashboards with both Plan-level Gating & RBAC Department Security
 const ProtectedSales = withPlanAccess(
@@ -122,7 +123,7 @@ const ProtectedExecutive = withPlanAccess(
       >
         <ArrowLeft className="h-3 w-3" /> Back to Departments Hub
       </button>
-      <Dashboard />
+      <Dashboard googleToken={null} />
     </div>
   ), "executive"),
   "executive"
@@ -180,6 +181,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   const [passwordValue, setPasswordValue] = useState("");
   const [authError, setAuthError] = useState("");
   const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [isAddOrgModalOpen, setIsAddOrgModalOpen] = useState(false);
   const [authSuccess, setAuthSuccess] = useState("");
 
   // Inactivity auto-logout states
@@ -190,7 +192,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   const companyUnsubscribeRef = useRef<(() => void) | null>(null);
   const isWarningShownRef = useRef<boolean>(false);
 
-  const { setCurrentUser, currentUser } = useUserStore();
+  const { setCurrentUser, currentUser, viewMode, setViewMode } = useUserStore();
 
   const isMasterAdmin = currentUser?.role?.toUpperCase() === 'MASTER_ADMIN' || user?.email?.toLowerCase() === 'miratechindustries@gmail.com';
 
@@ -291,7 +293,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
           hasAccess = true;
         } else if (data.userId && data.userId === user.uid) {
           hasAccess = true;
-        } else if (data.departmentId && currentUser?.departments?.includes(data.departmentId) && currentUser?.canReceiveApprovalNotifications) {
+        } else if (data.departmentId && currentUser?.departments?.includes(data.departmentId) && (currentUser as any)?.canReceiveApprovalNotifications) {
           hasAccess = true;
         }
 
@@ -519,6 +521,88 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     );
   };
 
+  // Helper to subscribe to any company or business profile in real time
+  const subscribeToCompany = (targetCompanyId: string) => {
+    if (companyUnsubscribeRef.current) {
+      companyUnsubscribeRef.current();
+      companyUnsubscribeRef.current = null;
+    }
+    if (!targetCompanyId) return;
+
+    companyUnsubscribeRef.current = onSnapshot(doc(db, "companies", targetCompanyId), (compSnap) => {
+      if (compSnap.exists()) {
+        const data = { id: compSnap.id, ...compSnap.data() } as unknown as CompanyData;
+        setCompany(data);
+        if (typeof data.inactivityTimeout === "number") {
+          localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
+        }
+      } else {
+        // Fallback to businesses collection
+        const unsubBiz = onSnapshot(doc(db, "businesses", targetCompanyId), (bizSnap) => {
+          if (bizSnap.exists()) {
+            const data = { id: bizSnap.id, ...bizSnap.data() } as unknown as CompanyData;
+            setCompany(data);
+            if (typeof data.inactivityTimeout === "number") {
+              localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
+            }
+          } else {
+            setCompany(null);
+          }
+        }, (err) => {
+          console.warn("[DashboardLayout Info] Reading business profile locally or waiting for replication:", err.message);
+        });
+        companyUnsubscribeRef.current = unsubBiz;
+      }
+    }, (err) => {
+      console.warn("[DashboardLayout Info] Reading company profile locally or waiting for replication:", err.message);
+    });
+  };
+
+  // Workspace Switcher action handler
+  const handleSwitchWorkspace = async (targetCompanyId: string, orgData?: WorkspaceOrg) => {
+    if (!targetCompanyId) return;
+
+    // 1. Remember in localStorage for session restoration
+    if (typeof window !== "undefined") {
+      localStorage.setItem("mira_active_workspace_id", targetCompanyId);
+    }
+
+    // 2. Update user state in Zustand store
+    if (currentUser) {
+      const updatedUser = {
+        ...currentUser,
+        companyId: targetCompanyId,
+        businessId: targetCompanyId,
+        lastActiveCompanyId: targetCompanyId,
+      };
+      setCurrentUser(updatedUser);
+    }
+
+    // 3. Persist in user document if authenticated
+    if (user?.uid) {
+      try {
+        await updateDoc(doc(db, "users", user.uid), {
+          companyId: targetCompanyId,
+          businessId: targetCompanyId,
+          lastActiveCompanyId: targetCompanyId,
+        });
+      } catch (err) {
+        console.warn("[DashboardLayout] Could not persist workspace in user profile:", err);
+      }
+    }
+
+    // 4. Re-bind live company listener
+    subscribeToCompany(targetCompanyId);
+
+    // 5. If Master Admin switched to a specific tenant workspace, enter COMPANY view mode
+    if (isMasterAdmin) {
+      setViewMode("COMPANY");
+    }
+
+    // 6. Reset to dashboard view of the target workspace
+    setActiveTab("dashboard");
+  };
+
   useEffect(() => {
     // Listen for auth state transitions
     const unsubscribe = initAuth(
@@ -567,40 +651,9 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             console.log("DEBUG: setCurrentUser called with:", userData);
 
             // Dynamically listen to company profile to populate sidebar / branding in real time
-            const targetCompanyId = userData.companyId || userData.businessId || currentUser.uid;
-            if (companyUnsubscribeRef.current) {
-              companyUnsubscribeRef.current();
-              companyUnsubscribeRef.current = null;
-            }
-            if (targetCompanyId) {
-              companyUnsubscribeRef.current = onSnapshot(doc(db, "companies", targetCompanyId), (compSnap) => {
-                if (compSnap.exists()) {
-                  const data = compSnap.data() as CompanyData;
-                  setCompany(data);
-                  if (typeof data.inactivityTimeout === "number") {
-                    localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
-                  }
-                } else {
-                  // Fallback to businesses
-                  const unsubBiz = onSnapshot(doc(db, "businesses", targetCompanyId), (bizSnap) => {
-                    if (bizSnap.exists()) {
-                      const data = bizSnap.data() as CompanyData;
-                      setCompany(data);
-                      if (typeof data.inactivityTimeout === "number") {
-                        localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
-                      }
-                    } else {
-                      setCompany(null);
-                    }
-                  }, (err) => {
-                    console.warn("[DashboardLayout Info] Reading business profile locally or waiting for replication:", err.message);
-                  });
-                  companyUnsubscribeRef.current = unsubBiz;
-                }
-              }, (err) => {
-                console.warn("[DashboardLayout Info] Reading company profile locally or waiting for replication:", err.message);
-              });
-            }
+            const storedWorkspace = typeof window !== "undefined" ? localStorage.getItem("mira_active_workspace_id") : null;
+            const targetCompanyId = storedWorkspace || userData.lastActiveCompanyId || userData.companyId || userData.businessId || currentUser.uid;
+            subscribeToCompany(targetCompanyId);
           } catch (err) {
             handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`);
             // Fallback user data in case of error
@@ -1063,25 +1116,60 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
       {company && (
         <style dangerouslySetInnerHTML={{ __html: generateThemeStyles() }} />
       )}
-      {isMasterAdmin ? (
+      {isMasterAdmin && viewMode === 'MASTER' ? (
         <MasterAdminLayout />
       ) : (
         <div className="flex flex-col min-h-screen bg-[#F8FAFC] text-slate-800 custom-themed-app">
+          {/* Master Admin Omniscient Banner when in Company View */}
+          {isMasterAdmin && (
+            <div className="bg-slate-900 text-white px-4 py-2 text-xs font-bold flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 shadow-xs z-20">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-[11px] text-slate-300 font-medium">
+                  Omniscient Mode: Active in tenant workspace <strong className="text-white">{company?.name || "Selected Company"}</strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  id="btn-return-master-admin-control"
+                  onClick={() => setViewMode('MASTER')}
+                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black rounded-lg uppercase tracking-wider transition cursor-pointer flex items-center gap-1"
+                >
+                  <ShieldAlert className="h-3 w-3" /> Return to Master Admin Console
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Desktop Header bar (no sidebar, centered breadcrumbs layout) */}
           <header className="bg-white border-b border-slate-200 h-14 px-5 hidden md:flex items-center justify-between flex-shrink-0 z-10">
-            {/* Clickable Logo Breadcrumb to return to Divisions Hub */}
-            <div onClick={() => setActiveTab("dashboard")} className="flex items-center gap-2.5 cursor-pointer group">
-              <div className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg group-hover:bg-slate-100 transition">
-                <Landmark className="h-4.5 w-4.5" style={{ color: company?.primaryColor || '#2563EB' }} />
+            {/* Left: Clickable Logo Breadcrumb & Workspace Switcher */}
+            <div className="flex items-center gap-3">
+              <div onClick={() => setActiveTab("dashboard")} className="flex items-center gap-2.5 cursor-pointer group">
+                <div className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg group-hover:bg-slate-100 transition">
+                  <Landmark className="h-4.5 w-4.5" style={{ color: company?.primaryColor || '#2563EB' }} />
+                </div>
+                <div className="flex flex-col font-sans">
+                  <span className="text-xs font-black text-slate-800 uppercase tracking-tight group-hover:opacity-85 transition leading-none mb-0.5" style={{ color: company?.primaryColor || '#0F172A' }}>
+                    {company?.name || "Mira Suite"}
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-widest leading-none">
+                    Divisions Hub
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-col font-sans">
-                <span className="text-xs font-black text-slate-800 uppercase tracking-tight group-hover:opacity-85 transition leading-none mb-0.5" style={{ color: company?.primaryColor || '#0F172A' }}>
-                  {company?.name || "Mira Suite"}
-                </span>
-                <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-widest leading-none">
-                  Divisions Hub
-                </span>
-              </div>
+
+              {/* Workspace Switcher */}
+              <div className="h-5 w-px bg-slate-200" />
+              <WorkspaceSwitcher
+                currentCompany={company}
+                currentUser={currentUser}
+                userAuthId={user?.uid}
+                userEmail={user?.email || currentUser?.email}
+                onSwitchWorkspace={handleSwitchWorkspace}
+                onRegisterNewOrg={() => setIsAddOrgModalOpen(true)}
+              />
             </div>
 
             {/* Right identity layout */}
@@ -1156,18 +1244,24 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             </div>
           </header>
 
-          {/* Mobile Header navigation bar with back anchor */}
-          <header className="bg-white border-b border-slate-200 py-3 px-4 flex items-center justify-between md:hidden flex-shrink-0 z-10">
-            <div onClick={() => setActiveTab("dashboard")} className="flex items-center gap-2 min-w-0 cursor-pointer">
-              <div className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+          {/* Mobile Header navigation bar with workspace switcher */}
+          <header className="bg-white border-b border-slate-200 py-2.5 px-3 flex items-center justify-between md:hidden flex-shrink-0 z-10 gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div onClick={() => setActiveTab("dashboard")} className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer flex-shrink-0">
                 <Landmark className="h-4 w-4" style={{ color: company?.primaryColor || '#2563EB' }} />
               </div>
-              <div className="flex flex-col min-w-0 leading-tight">
-                <span className="text-[11px] font-black text-[#0B1329] uppercase tracking-wide truncate" style={{ color: company?.primaryColor || '#0B1329' }}>
-                  {company?.name || "MIRA SUITE"}
-                </span>
-                <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">DIVISIONS HUB</span>
-              </div>
+              
+              {/* Mobile Workspace Switcher */}
+              <WorkspaceSwitcher
+                currentCompany={company}
+                currentUser={currentUser}
+                userAuthId={user?.uid}
+                userEmail={user?.email || currentUser?.email}
+                onSwitchWorkspace={handleSwitchWorkspace}
+                onRegisterNewOrg={() => setIsAddOrgModalOpen(true)}
+                isMobile
+                className="flex-1 min-w-0"
+              />
             </div>
 
           <div className="flex items-center gap-2.5">
@@ -1298,7 +1392,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                 {activeTab === "reports" && <ProtectedReports onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
                 {activeTab === "support" && <ProtectedSupport onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
                 {activeTab === "procurement" && <ProtectedProcurement onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "pos" && <ProtectedPOS companyId={company?.ownerId || user.uid} onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                {activeTab === "pos" && <ProtectedPOS companyId={company?.ownerId || user.uid} userId={user.uid} onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
                 {activeTab === "marketing" && <ProtectedMarketing onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
                 {activeTab === "audit" && <ProtectedAudit onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
                 {activeTab === "executive" && <ProtectedExecutive onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
@@ -1357,6 +1451,34 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                 Log Out Now
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Register / Add Organization Modal */}
+      {isAddOrgModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 md:p-6 overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto p-6 relative animate-in fade-in zoom-in-95 duration-200">
+            <button
+              type="button"
+              id="btn-close-add-org-modal"
+              onClick={() => setIsAddOrgModalOpen(false)}
+              className="absolute top-5 right-5 p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition cursor-pointer"
+              title="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="mb-6">
+              <span className="text-[10px] font-black uppercase text-blue-600 tracking-wider bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200/60">
+                Multi-Tenant Expansion
+              </span>
+              <h2 className="text-lg font-extrabold text-slate-900 tracking-tight flex items-center gap-2 mt-2">
+                <Building2 className="h-5 w-5 text-blue-600" /> Register Additional Organization
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Provision a new corporate workspace connected to your account ({currentUser?.email || user?.email}). You will be able to seamlessly switch between all your organizations.
+              </p>
+            </div>
+            <CompanyCreation />
           </div>
         </div>
       )}

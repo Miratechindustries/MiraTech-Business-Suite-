@@ -1,12 +1,20 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { doc, setDoc, addDoc, collection } from 'firebase/firestore';
+import { doc, setDoc, addDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { db, emailSignIn } from '../lib/firebase';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { db, emailSignIn, auth } from '../lib/firebase';
 import firebaseConfig from '../firebase-applet-config.json';
-import { SUBSCRIPTION_PLANS, getLockedFeaturesForPlan, isFeatureAllowedForPlan, FEATURE_DEFINITIONS } from '../lib/subscriptions';
+import { 
+  SUBSCRIPTION_PLANS, 
+  getLockedFeaturesForPlan, 
+  isFeatureAllowedForPlan, 
+  FEATURE_DEFINITIONS,
+  getPlanPrice,
+  formatPlanPrice
+} from '../lib/subscriptions';
+import { getPaddle, PADDLE_PRICE_MAP, isPaddleConfigured } from '../lib/paddle-client';
 import { useToastStore } from '../lib/store';
 import { 
   Building2, 
@@ -148,6 +156,7 @@ const STEPS = [
 ];
 
 const DRAFT_STORAGE_KEY = "miratech_registration_wizard_draft_v2";
+const SESSION_PASSWORD_KEY = "miratech_temp_registration_pwd";
 
 export default function CompanyCreation() {
   const { addToast } = useToastStore();
@@ -158,6 +167,7 @@ export default function CompanyCreation() {
   const [error, setError] = useState<string | null>(null);
   const [statusLogs, setStatusLogs] = useState<string[]>([]);
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
+  const [existingSubStatus, setExistingSubStatus] = useState<{ status: string; planName?: string } | null>(null);
 
   // Step 1: Account
   const [accountFullName, setAccountFullName] = useState('');
@@ -167,6 +177,51 @@ export default function CompanyCreation() {
   const [accountConfirmPassword, setAccountConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  useEffect(() => {
+    const checkExistingSubscription = async () => {
+      const email = accountEmail.trim().toLowerCase();
+      if (!email || email.length < 5) {
+        setExistingSubStatus(null);
+        return;
+      }
+      try {
+        const q = query(collection(db, 'companies'), where('email', '==', email));
+        const qSnap = await getDocs(q);
+        if (!qSnap.empty) {
+          const compData = qSnap.docs[0].data();
+          if (compData.subscriptionStatus || compData.status) {
+            setExistingSubStatus({
+              status: compData.subscriptionStatus || compData.status || 'active',
+              planName: compData.subscriptionPlan || compData.subscriptionPlanId || 'Standard',
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("Firestore subscription status check warning:", err);
+      }
+    };
+    const t = setTimeout(checkExistingSubscription, 500);
+    return () => clearTimeout(t);
+  }, [accountEmail]);
+
+  // Sync password helper to persist across refreshes without exposing in permanent localStorage
+  const updatePasswordState = (newPassword: string) => {
+    setAccountPassword(newPassword);
+    try {
+      if (typeof window !== 'undefined') {
+        if (newPassword) {
+          sessionStorage.setItem(SESSION_PASSWORD_KEY, newPassword);
+        } else {
+          sessionStorage.removeItem(SESSION_PASSWORD_KEY);
+        }
+      }
+    } catch (_) {}
+  };
+
+  const updateConfirmPasswordState = (newConfirmPassword: string) => {
+    setAccountConfirmPassword(newConfirmPassword);
+  };
 
   // Step 2: Business
   const [companyName, setCompanyName] = useState('');
@@ -256,7 +311,7 @@ export default function CompanyCreation() {
   const [primaryColor] = useState('#0F172A');
   const [secondaryColor] = useState('#3B82F6');
 
-  // Check for saved draft on mount
+  // Check for saved draft & session password on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
@@ -266,8 +321,30 @@ export default function CompanyCreation() {
           setHasSavedDraft(true);
         }
       }
+
+      // Check session storage for temporary password set during this browsing session
+      if (typeof window !== 'undefined') {
+        const cachedPwd = sessionStorage.getItem(SESSION_PASSWORD_KEY);
+        if (cachedPwd && cachedPwd.length >= 8) {
+          setAccountPassword(cachedPwd);
+          setAccountConfirmPassword(cachedPwd);
+        }
+      }
     } catch {
       // ignore
+    }
+  }, []);
+
+  // Sync active authenticated session if available and email not set
+  useEffect(() => {
+    if (auth?.currentUser?.email) {
+      const curEmail = auth.currentUser.email;
+      setAccountEmail(prev => prev || curEmail);
+      if (auth.currentUser.displayName) {
+        setAccountFullName(prev => prev || (auth.currentUser?.displayName || ''));
+      }
+      setIsEmailVerified(true);
+      setVerifiedEmail(curEmail);
     }
   }, []);
 
@@ -302,6 +379,15 @@ export default function CompanyCreation() {
       if (draft.subscriptionPlanId) setSubscriptionPlanId(draft.subscriptionPlanId);
       if (draft.billingCycle) setBillingCycle(draft.billingCycle);
       if (draft.currentStep) setCurrentStep(Math.min(draft.currentStep, 7));
+
+      // Attempt to restore password if saved in session
+      if (typeof window !== 'undefined') {
+        const cachedPwd = sessionStorage.getItem(SESSION_PASSWORD_KEY);
+        if (cachedPwd && cachedPwd.length >= 8) {
+          setAccountPassword(cachedPwd);
+          setAccountConfirmPassword(cachedPwd);
+        }
+      }
 
       addToast("Saved registration draft restored successfully.", "info");
       setHasSavedDraft(false);
@@ -350,21 +436,33 @@ export default function CompanyCreation() {
 
   const clearDraft = () => {
     localStorage.removeItem(DRAFT_STORAGE_KEY);
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(SESSION_PASSWORD_KEY);
+      }
+    } catch (_) {}
+    setAccountPassword('');
+    setAccountConfirmPassword('');
     setHasSavedDraft(false);
     addToast("Draft cleared.", "info");
   };
 
   // Pure Step Completeness Check (no side-effects, safe during render)
   const isStepComplete = (stepNumber: number): boolean => {
+    const isMatchingActiveSession = Boolean(
+      auth?.currentUser?.email && 
+      auth.currentUser.email.toLowerCase() === accountEmail.trim().toLowerCase()
+    );
+
     if (stepNumber === 1) {
+      const hasValidPassword = isMatchingActiveSession || (accountPassword.length >= 8 && accountPassword === accountConfirmPassword);
       return !!(
         accountFullName.trim() &&
         accountEmail.trim() &&
         accountEmail.includes('@') &&
         accountEmail.includes('.') &&
         accountPhone.trim() &&
-        accountPassword.length >= 8 &&
-        accountPassword === accountConfirmPassword
+        hasValidPassword
       );
     }
     if (stepNumber === 2) {
@@ -387,7 +485,8 @@ export default function CompanyCreation() {
       return !!subscriptionPlanId;
     }
     if (stepNumber === 7) {
-      return agreedToTerms && isEmailVerified && verifiedEmail === accountEmail;
+      const hasValidPassword = isMatchingActiveSession || accountPassword.length >= 8;
+      return agreedToTerms && isEmailVerified && verifiedEmail === accountEmail && hasValidPassword;
     }
     return true;
   };
@@ -409,17 +508,23 @@ export default function CompanyCreation() {
         setError("Please enter your contact phone number.");
         return false;
       }
-      if (accountPassword.length < 8) {
-        setError("Password must be at least 8 characters long.");
-        return false;
-      }
-      if (!/[a-z]/.test(accountPassword) || !/[A-Z]/.test(accountPassword) || !/[0-9]/.test(accountPassword) || !/[^A-Za-z0-9]/.test(accountPassword)) {
-        setError("Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.");
-        return false;
-      }
-      if (accountPassword !== accountConfirmPassword) {
-        setError("Password and confirmation password do not match.");
-        return false;
+      const isMatchingActiveSession = Boolean(
+        auth?.currentUser?.email && 
+        auth.currentUser.email.toLowerCase() === accountEmail.trim().toLowerCase()
+      );
+      if (!isMatchingActiveSession) {
+        if (accountPassword.length < 8) {
+          setError("Password must be at least 8 characters long.");
+          return false;
+        }
+        if (!/[a-z]/.test(accountPassword) || !/[A-Z]/.test(accountPassword) || !/[0-9]/.test(accountPassword) || !/[^A-Za-z0-9]/.test(accountPassword)) {
+          setError("Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.");
+          return false;
+        }
+        if (accountPassword !== accountConfirmPassword) {
+          setError("Password and confirmation password do not match.");
+          return false;
+        }
       }
     }
 
@@ -468,6 +573,32 @@ export default function CompanyCreation() {
     }
 
     if (stepNumber === 7) {
+      if (!accountFullName.trim()) {
+        setError("Primary Administrator full name is required.");
+        return false;
+      }
+      if (!accountEmail.trim() || !accountEmail.includes('@')) {
+        setError("Valid primary corporate email address is required.");
+        return false;
+      }
+      const isMatchingActiveSession = Boolean(
+        auth?.currentUser?.email && 
+        auth.currentUser.email.toLowerCase() === accountEmail.trim().toLowerCase()
+      );
+      if (!isMatchingActiveSession) {
+        if (!accountPassword || accountPassword.trim().length < 8) {
+          setError("Administrator master password is missing or shorter than 8 characters. Please configure your password in the Administrator section below.");
+          return false;
+        }
+        if (accountConfirmPassword && accountPassword !== accountConfirmPassword) {
+          setError("Account passwords do not match. Please re-enter.");
+          return false;
+        }
+      }
+      if (!companyName.trim()) {
+        setError("Company / Business Name is required.");
+        return false;
+      }
       if (!isEmailVerified || verifiedEmail !== accountEmail) {
         setError("Please verify your company email address before finalizing corporate tenant registration.");
         return false;
@@ -672,21 +803,279 @@ export default function CompanyCreation() {
 
   // Helper to create Firebase Auth user without disrupting active master session
   const createAuthUserSecondary = async (emailInput: string, passwordInput: string): Promise<string> => {
+    const trimmedEmail = (emailInput || '').trim();
+    const trimmedPassword = (passwordInput || '').trim();
+    if (!trimmedEmail) {
+      throw new Error("Corporate administrator email address is required.");
+    }
+    if (!trimmedPassword) {
+      throw new Error("Administrator master password is missing. Please provide a password of at least 8 characters.");
+    }
+    if (trimmedPassword.length < 6) {
+      throw new Error(`Administrator password must be at least 6 characters for account (${trimmedEmail}).`);
+    }
+
     const secondaryAppName = `ProvisionApp_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
     const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
     const secondaryAuth = getAuth(secondaryApp);
     try {
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, emailInput, passwordInput);
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, trimmedEmail, trimmedPassword);
       const uid = userCredential.user.uid;
       await signOut(secondaryAuth);
       return uid;
+    } catch (authErr: any) {
+      if (authErr.code === 'auth/missing-password') {
+        throw new Error("Administrator master password is missing. Please enter your password before launching.");
+      }
+      if (authErr.code === 'auth/weak-password') {
+        throw new Error("Administrator master password is too weak. Please use at least 8 characters including mixed case, numbers, and symbols.");
+      }
+      throw authErr;
     } finally {
       await deleteApp(secondaryApp);
     }
   };
 
-  // Final Registration Submission
+  // Helper to verify existing credentials if account already exists
+  const verifyAuthUserSecondary = async (emailInput: string, passwordInput: string): Promise<string> => {
+    const trimmedEmail = (emailInput || '').trim();
+    const trimmedPassword = (passwordInput || '').trim();
+    if (!trimmedEmail) {
+      throw new Error("Corporate administrator email address is required.");
+    }
+    if (!trimmedPassword) {
+      throw new Error(`The account ${trimmedEmail} already exists. Please provide your master password to verify and link this workspace.`);
+    }
+
+    const secondaryAppName = `VerifyApp_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+    const secondaryAuth = getAuth(secondaryApp);
+    try {
+      const userCredential = await signInWithEmailAndPassword(secondaryAuth, trimmedEmail, trimmedPassword);
+      const uid = userCredential.user.uid;
+      await signOut(secondaryAuth);
+      return uid;
+    } catch (err: any) {
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        throw new Error(`The email ${trimmedEmail} is already registered, but the password does not match. Please verify your credentials or sign in through the main gateway.`);
+      }
+      if (err.code === 'auth/missing-password') {
+        throw new Error(`Master password is required for existing account verification (${trimmedEmail}).`);
+      }
+      throw err;
+    } finally {
+      await deleteApp(secondaryApp);
+    }
+  };
+
+  // Core Tenant Provisioning Execution
+  const executeTenantProvisioning = async (paddleSubId: string, paddleCustId: string) => {
+    const cleanEmail = (accountEmail || '').trim();
+    const cleanPassword = (accountPassword || '').trim();
+
+    const isMatchingActiveSession = Boolean(
+      auth?.currentUser?.email && 
+      auth.currentUser.email.toLowerCase() === cleanEmail.toLowerCase()
+    );
+
+    // 1. Provision Primary Administrator Auth Account
+    logStatus(`1/6 Provisioning corporate administrator credentials (${cleanEmail})...`);
+    let adminUid = "";
+
+    if (isMatchingActiveSession && auth.currentUser) {
+      adminUid = auth.currentUser.uid;
+      logStatus(`Identity confirmed via active secure session. Corporate Administrator authenticated. (UID: ${adminUid})`);
+    } else {
+      try {
+        adminUid = await createAuthUserSecondary(cleanEmail, cleanPassword);
+        logStatus(`Corporate Administrator auth profile established. (UID: ${adminUid})`);
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          logStatus(`Admin account (${cleanEmail}) already exists in directory. Verifying credentials to link workspace...`);
+          try {
+            adminUid = await verifyAuthUserSecondary(cleanEmail, cleanPassword);
+            logStatus(`Identity confirmed. Corporate Administrator authenticated. (UID: ${adminUid})`);
+          } catch (verifyErr: any) {
+            throw new Error(verifyErr.message || `The email address ${cleanEmail} is already registered. If this is your account, please check your password or sign in on the main portal.`);
+          }
+        } else {
+          throw authErr;
+        }
+      }
+    }
+
+    // 2. Provision Staff Auth Accounts
+    const staffUids: string[] = [];
+    if (staffList.length > 0) {
+      logStatus(`2/6 Provisioning ${staffList.length} staff member accounts in Firebase Auth...`);
+      for (const staff of staffList) {
+        try {
+          const staffPass = (staff.password || '').trim() || `${staff.email.split('@')[0]}@2025!`;
+          const sUid = await createAuthUserSecondary(staff.email, staffPass);
+          staffUids.push(sUid);
+          logStatus(`Staff profile for ${staff.email} authenticated. (UID: ${sUid})`);
+        } catch (stErr: any) {
+          logStatus(`Note: Staff member ${staff.email} skipped or existing (${stErr.message})`);
+          staffUids.push(`staff_fallback_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`);
+        }
+      }
+    } else {
+      logStatus(`2/6 Staff roster: No initial staff queued (Admin can add staff later in User Management).`);
+    }
+
+    // 3. Write Company / Business Profile
+    logStatus(`3/6 Establishing corporate metadata, legal parameters, and module access...`);
+    const selectedPlanObj = SUBSCRIPTION_PLANS.find(p => p.id === subscriptionPlanId) || SUBSCRIPTION_PLANS[2];
+    const trialEndDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+    const companyPayload = {
+      id: adminUid,
+      ownerId: adminUid,
+      name: companyName,
+      legalName: companyName,
+      registrationNumber: registrationNumber || "UNREGISTERED",
+      taxVatNumber: taxVatNumber || "",
+      industry,
+      businessType,
+      address: `${businessAddress}, ${businessCity}, ${businessCountry}`,
+      city: businessCity,
+      country: businessCountry,
+      website: businessWebsite || "",
+      officialEmail: businessOfficialEmail || accountEmail,
+      officialPhone: businessOfficialPhone || accountPhone,
+      employeeRange,
+      branchCount,
+      currency,
+      activeModules: selectedModules,
+      activeDepartments: selectedDepartments,
+      email: accountEmail,
+      phone: accountPhone,
+      createdAt: new Date().toISOString(),
+      primaryColor,
+      secondaryColor,
+      themePreset,
+      themeMode: 'light',
+      fontFamily: 'inter',
+      cardRadius: 'md',
+      inactivityTimeout: 900,
+      threatLevel: 'elevated',
+      mfaEnforced: true,
+      isVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+      isEmailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+      emailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+      businessEmailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
+      emailVerifiedAt: isEmailVerified ? new Date().toISOString() : null,
+      verifiedEmail: isEmailVerified ? accountEmail : null,
+      argon2Iterations: 4,
+      argon2SaltLength: 16,
+      subscriptionPlanId,
+      subscriptionPlan: selectedPlanObj.name,
+      subscriptionStatus: subscriptionPlanId === 'free' ? 'active' : 'trialing',
+      subscriptionBillingCycle: billingCycle,
+      subscriptionTrialEndsAt: trialEndDate,
+      subscriptionTrialStartedAt: new Date().toISOString(),
+      lockedFeatures: getLockedFeaturesForPlan(subscriptionPlanId),
+      paddleSubscriptionId: paddleSubId,
+      paddleCustomerId: paddleCustId,
+      paymentMethodCaptured: true
+    };
+
+    await setDoc(doc(db, 'companies', adminUid), companyPayload);
+    await setDoc(doc(db, 'businesses', adminUid), companyPayload);
+    logStatus(`Company tenant profile persisted on /companies/${adminUid} and /businesses/${adminUid}.`);
+
+    // 4. Create User Documents in Firestore
+    logStatus(`4/6 Assigning administrator role (${initialRole}) and authorized permissions...`);
+    await setDoc(doc(db, 'users', adminUid), {
+      id: adminUid,
+      displayName: accountFullName,
+      email: accountEmail,
+      phone: accountPhone,
+      role: initialRole,
+      positionTitle: adminPositionTitle,
+      companyId: adminUid,
+      businessId: adminUid,
+      status: 'ACTIVE',
+      isVerified: true,
+      isEmailVerified: true,
+      emailVerified: true,
+      emailVerifiedAt: new Date().toISOString(),
+      permissions,
+      isAuthorizedSignatory: true,
+      createdAt: new Date().toISOString(),
+    });
+
+    for (let i = 0; i < staffList.length; i++) {
+      const staff = staffList[i];
+      const sUid = staffUids[i];
+      await setDoc(doc(db, 'users', sUid), {
+        id: sUid,
+        displayName: staff.fullName,
+        email: staff.email,
+        role: staff.role || 'STAFF',
+        companyId: adminUid,
+        businessId: adminUid,
+        status: 'ACTIVE',
+        departments: staff.departments || ['sales'],
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // 5. Append Centralized Audit log
+    logStatus(`5/6 Writing ISO-compliant workspace registration audit record...`);
+    await addDoc(collection(db, 'audit_logs'), {
+      companyId: adminUid,
+      userId: adminUid,
+      userEmail: accountEmail,
+      action: 'TENANT_ONBOARDING_COMPLETED',
+      details: `Corporate workspace "${companyName}" successfully provisioned with ${selectedPlanObj.name} plan via Paddle Billing trial.`,
+      ipAddress: '127.0.0.1 (Web Portal Client)',
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Registration Wizard',
+      timestamp: new Date().toISOString(),
+      severity: 'INFO',
+      department: 'executive'
+    });
+
+    // 6. Direct sign-in with newly created administrator credentials
+    logStatus(`6/6 Launching Business Administration Control Center...`);
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(SESSION_PASSWORD_KEY);
+      }
+    } catch (_) {}
+    localStorage.setItem('mira_post_register_redirect', 'business_admin');
+    setSuccess(true);
+    addToast("Company workspace created successfully! Directing to Business Admin Dashboard...", "success");
+
+    // Auto sign-in to seamlessly enter Business Admin Dashboard
+    setTimeout(async () => {
+      try {
+        if (!isMatchingActiveSession && cleanPassword) {
+          await emailSignIn(cleanEmail, cleanPassword);
+        }
+        window.location.href = '/';
+      } catch (signInErr) {
+        console.warn("Auto-signin redirected to manual gateway:", signInErr);
+        window.location.href = '/';
+      }
+    }, 1500);
+  };
+
+  // Final Registration Submission with Mandatory Paddle Billing Checkout Step
   const handleFinalSubmit = async () => {
+    const cleanEmail = (accountEmail || '').trim();
+    const cleanPassword = (accountPassword || '').trim();
+
+    const isMatchingActiveSession = Boolean(
+      auth?.currentUser?.email && 
+      auth.currentUser.email.toLowerCase() === cleanEmail.toLowerCase()
+    );
+
+    if (!isMatchingActiveSession && (!cleanPassword || cleanPassword.length < 8)) {
+      setError("Administrator master password is missing or shorter than 8 characters. Please configure your master password in the Administrator section below.");
+      return;
+    }
     if (!validateStep(7)) return;
 
     setLoading(true);
@@ -695,178 +1084,68 @@ export default function CompanyCreation() {
     logStatus(`Initializing corporate tenant provisioning for: "${companyName}"...`);
 
     try {
-      // 1. Provision Primary Administrator Auth Account
-      logStatus(`1/6 Provisioning corporate administrator credentials (${accountEmail})...`);
-      let adminUid = "";
-      try {
-        adminUid = await createAuthUserSecondary(accountEmail, accountPassword);
-        logStatus(`Corporate Administrator auth profile established. (UID: ${adminUid})`);
-      } catch (authErr: any) {
-        if (authErr.code === 'auth/email-already-in-use') {
-          throw new Error(`The email address ${accountEmail} is already registered. Please sign in or use a different corporate email.`);
-        }
-        throw authErr;
-      }
+      // If user selected a paid tier and Paddle is configured, invoke getPaddle() for PCI-compliant checkout & 14-day trial card tokenization
+      if (subscriptionPlanId !== 'free' && isPaddleConfigured()) {
+        if (existingSubStatus && ['active', 'trialing', 'past_due'].includes(existingSubStatus.status)) {
+          logStatus(`Firestore Check: Valid subscription found (${existingSubStatus.status}). Bypassing Paddle checkout re-trigger...`);
+          await executeTenantProvisioning(`sub_existing_${Date.now()}`, `ctm_existing_${Date.now()}`);
+        } else {
+          logStatus(`Opening secure PCI-compliant Paddle Billing checkout (14-Day Free Trial - No immediate charge)...`);
+          const paddle = await getPaddle((event: any) => {
+            if (event?.name === 'checkout.completed') {
+              const subId = event?.data?.id || event?.data?.subscription_id || `sub_pdl_${Date.now()}`;
+              const customerId = event?.data?.customer_id || `ctm_pdl_${Date.now()}`;
+              logStatus(`Paddle checkout completed successfully! Subscription ID: ${subId}`);
+              executeTenantProvisioning(subId, customerId).catch((err: any) => {
+                console.error(err);
+                setError("Provisioning failed after payment: " + err.message);
+                setLoading(false);
+              });
+            } else if (event?.name === 'checkout.error') {
+              setError("Paddle checkout error: " + (event?.data?.message || "Payment authorization failed."));
+              setLoading(false);
+            }
+          });
 
-      // 2. Provision Staff Auth Accounts
-      const staffUids: string[] = [];
-      if (staffList.length > 0) {
-        logStatus(`2/6 Provisioning ${staffList.length} staff member accounts in Firebase Auth...`);
-        for (const staff of staffList) {
-          try {
-            const sUid = await createAuthUserSecondary(staff.email, staff.password);
-            staffUids.push(sUid);
-            logStatus(`Staff profile for ${staff.email} authenticated. (UID: ${sUid})`);
-          } catch (stErr: any) {
-            logStatus(`Note: Staff member ${staff.email} skipped or existing (${stErr.message})`);
-            staffUids.push(`staff_fallback_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`);
+          if (paddle) {
+            const priceId = PADDLE_PRICE_MAP[subscriptionPlanId] || 'pri_starter_tier';
+            paddle.Checkout.open({
+              items: [{ priceId, quantity: 1 }],
+              customData: {
+                companyName: companyName,
+                userEmail: accountEmail,
+                tier: subscriptionPlanId,
+              },
+              customer: {
+                email: accountEmail,
+              },
+              settings: {
+                variant: 'one-page',
+                displayMode: 'overlay',
+                theme: 'light',
+                locale: 'en',
+                successUrl: window.location.href,
+              },
+            });
+          } else {
+            logStatus(`Paddle client unavailable. Proceeding with sandbox trial provisioning...`);
+            await executeTenantProvisioning(`sub_pdl_sandbox_${Date.now()}`, `ctm_pdl_${Date.now()}`);
           }
         }
       } else {
-        logStatus(`2/6 Staff roster: No initial staff queued (Admin can add staff later in User Management).`);
+        await executeTenantProvisioning(`sub_pdl_free_${Date.now()}`, `ctm_pdl_${Date.now()}`);
       }
-
-      // 3. Write Company / Business Profile
-      logStatus(`3/6 Establishing corporate metadata, legal parameters, and module access...`);
-      const selectedPlanObj = SUBSCRIPTION_PLANS.find(p => p.id === subscriptionPlanId) || SUBSCRIPTION_PLANS[2];
-      const trialEndDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-
-      const companyPayload = {
-        id: adminUid,
-        ownerId: adminUid,
-        name: companyName,
-        legalName: companyName,
-        registrationNumber: registrationNumber || "UNREGISTERED",
-        taxVatNumber: taxVatNumber || "",
-        industry,
-        businessType,
-        address: `${businessAddress}, ${businessCity}, ${businessCountry}`,
-        city: businessCity,
-        country: businessCountry,
-        website: businessWebsite || "",
-        officialEmail: businessOfficialEmail || accountEmail,
-        officialPhone: businessOfficialPhone || accountPhone,
-        employeeRange,
-        branchCount,
-        currency,
-        activeModules: selectedModules,
-        activeDepartments: selectedDepartments,
-        email: accountEmail,
-        phone: accountPhone,
-        createdAt: new Date().toISOString(),
-        primaryColor,
-        secondaryColor,
-        themePreset,
-        themeMode: 'light',
-        fontFamily: 'inter',
-        cardRadius: 'md',
-        inactivityTimeout: 900,
-        threatLevel: 'elevated',
-        mfaEnforced: true,
-        isVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
-        isEmailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
-        emailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
-        businessEmailVerified: Boolean(isEmailVerified && verifiedEmail === accountEmail),
-        emailVerifiedAt: isEmailVerified ? new Date().toISOString() : null,
-        verifiedEmail: isEmailVerified ? accountEmail : null,
-        argon2Iterations: 4,
-        argon2SaltLength: 16,
-        subscriptionPlanId,
-        subscriptionPlan: selectedPlanObj.name,
-        subscriptionStatus: 'trialing',
-        subscriptionBillingCycle: billingCycle,
-        subscriptionTrialEndsAt: trialEndDate,
-        subscriptionTrialStartedAt: new Date().toISOString(),
-        lockedFeatures: getLockedFeaturesForPlan(subscriptionPlanId)
-      };
-
-      await setDoc(doc(db, 'companies', adminUid), companyPayload);
-      await setDoc(doc(db, 'businesses', adminUid), companyPayload);
-      logStatus(`Company tenant profile persisted on /companies/${adminUid} and /businesses/${adminUid}.`);
-
-      // 4. Create User Documents in Firestore
-      logStatus(`4/6 Assigning administrator role (${initialRole}) and authorized permissions...`);
-      await setDoc(doc(db, 'users', adminUid), {
-        id: adminUid,
-        displayName: accountFullName,
-        email: accountEmail,
-        phone: accountPhone,
-        role: initialRole,
-        positionTitle: adminPositionTitle,
-        companyId: adminUid,
-        businessId: adminUid,
-        status: 'ACTIVE',
-        isVerified: true,
-        isEmailVerified: true,
-        emailVerified: true,
-        emailVerifiedAt: new Date().toISOString(),
-        permissions,
-        isAuthorizedSignatory: true,
-        createdAt: new Date().toISOString(),
-      });
-
-      for (let i = 0; i < staffList.length; i++) {
-        const staff = staffList[i];
-        const sUid = staffUids[i];
-        await setDoc(doc(db, 'users', sUid), {
-          id: sUid,
-          displayName: staff.fullName,
-          email: staff.email,
-          role: staff.role || 'STAFF',
-          companyId: adminUid,
-          businessId: adminUid,
-          status: 'ACTIVE',
-          departments: staff.departments || ['sales'],
-          createdAt: new Date().toISOString(),
-        });
-      }
-
-      // 5. Append Centralized Audit log
-      logStatus(`5/6 Writing ISO-compliant workspace registration audit record...`);
-      await addDoc(collection(db, 'audit_logs'), {
-        companyId: adminUid,
-        userId: adminUid,
-        userEmail: accountEmail,
-        action: 'TENANT_ONBOARDING_COMPLETED',
-        details: `Corporate workspace "${companyName}" successfully provisioned with ${selectedPlanObj.name} plan.`,
-        ipAddress: '127.0.0.1 (Web Portal Client)',
-        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Registration Wizard',
-        timestamp: new Date().toISOString(),
-        severity: 'INFO',
-        department: 'executive'
-      });
-
-      // 6. Direct sign-in with newly created administrator credentials
-      logStatus(`6/6 Launching Business Administration Control Center...`);
-      localStorage.removeItem(DRAFT_STORAGE_KEY);
-      localStorage.setItem('mira_post_register_redirect', 'business_admin');
-      setSuccess(true);
-      addToast("Company workspace created successfully! Directing to Business Admin Dashboard...", "success");
-
-      // Auto sign-in to seamlessly enter Business Admin Dashboard
-      setTimeout(async () => {
-        try {
-          await emailSignIn(accountEmail, accountPassword);
-        } catch (signInErr) {
-          console.warn("Auto-signin redirected to manual gateway:", signInErr);
-          window.location.href = '/';
-        }
-      }, 1500);
-
     } catch (err: any) {
       console.error("Corporate provisioning failed:", err);
       setError(err.message || "Failed to provision corporate workspace. Please review your parameters and try again.");
       logStatus(`[ERROR] Provisioning halted: ${err.message}`);
       addToast(err.message || "Provisioning failed", "error");
-    } finally {
       setLoading(false);
     }
   };
 
   const selectedPlanDetails = SUBSCRIPTION_PLANS.find(p => p.id === subscriptionPlanId) || SUBSCRIPTION_PLANS[2];
-  const monthlyPrice = selectedPlanDetails.price;
-  const annualPrice = Math.round(selectedPlanDetails.price * 12 * 0.8);
-  const activePrice = billingCycle === 'annual' ? annualPrice : monthlyPrice;
+  const activePrice = getPlanPrice(selectedPlanDetails, billingCycle);
 
   return (
     <div className="w-full text-slate-800 space-y-6">
@@ -1060,7 +1339,7 @@ export default function CompanyCreation() {
                     <input
                       type={showPassword ? "text" : "password"}
                       value={accountPassword}
-                      onChange={(e) => setAccountPassword(e.target.value)}
+                      onChange={(e) => updatePasswordState(e.target.value)}
                       placeholder="Minimum 8 characters"
                       className="w-full pl-9 pr-10 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-100 transition"
                       required
@@ -1817,9 +2096,7 @@ export default function CompanyCreation() {
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {SUBSCRIPTION_PLANS.map((plan) => {
                 const isSelected = subscriptionPlanId === plan.id;
-                const pMonthly = plan.price;
-                const pAnnual = Math.round(plan.price * 12 * 0.8);
-                const displayPrice = billingCycle === 'annual' ? pAnnual : pMonthly;
+                const formattedPrice = formatPlanPrice(plan, billingCycle, currency);
                 const periodLabel = billingCycle === 'annual' ? '/yr' : '/mo';
 
                 return (
@@ -1850,7 +2127,7 @@ export default function CompanyCreation() {
                         </div>
                         <div className="mt-2 flex items-baseline gap-1">
                           <span className="text-lg font-black font-sans text-slate-900">
-                            {currency === 'USD' ? '$' : 'E'}{displayPrice.toLocaleString()}
+                            {formattedPrice}
                           </span>
                           <span className="text-[10px] text-slate-400">{periodLabel}</span>
                         </div>
@@ -2019,16 +2296,113 @@ export default function CompanyCreation() {
                   </button>
                 </div>
                 <div className="space-y-1 text-slate-600">
-                  <p><strong className="text-slate-800">Full Name:</strong> {accountFullName}</p>
+                  <p><strong className="text-slate-800">Full Name:</strong> {accountFullName || <span className="text-amber-600 italic">Not set</span>}</p>
                   <p className="flex items-center gap-1.5">
-                    <strong className="text-slate-800">Sign-in Email:</strong> {accountEmail}
+                    <strong className="text-slate-800">Sign-in Email:</strong> {accountEmail || <span className="text-amber-600 italic">Not set</span>}
                     {isEmailVerified && verifiedEmail === accountEmail && (
                       <span className="inline-flex items-center text-[9px] text-emerald-600 font-bold bg-emerald-100 px-1.5 rounded">
                         <Check className="w-2.5 h-2.5 mr-0.5" /> Verified
                       </span>
                     )}
                   </p>
-                  <p><strong className="text-slate-800">Contact Phone:</strong> {accountPhone}</p>
+                  <p><strong className="text-slate-800">Contact Phone:</strong> {accountPhone || <span className="text-amber-600 italic">Not set</span>}</p>
+                  
+                  {/* Master Password Status / Inline Entry if resumed from draft */}
+                  {(() => {
+                    const isMatchingActiveSession = Boolean(
+                      auth?.currentUser?.email && 
+                      auth.currentUser.email.toLowerCase() === (accountEmail || '').trim().toLowerCase()
+                    );
+                    if (isMatchingActiveSession) {
+                      return (
+                        <div className="mt-2 p-2 bg-blue-50/80 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-900">
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                            Authenticated via active session ({auth.currentUser?.email})
+                          </span>
+                          <span className="text-[10px] text-blue-600 bg-blue-100 font-bold px-1.5 py-0.5 rounded">Linked</span>
+                        </div>
+                      );
+                    }
+
+                    return accountPassword.length < 8 ? (
+                      <div className="mt-2.5 p-3 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-2.5 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                            <KeyRound className="w-4 h-4 text-amber-700" />
+                            <span>Administrator Master Password Required</span>
+                          </div>
+                          <span className="text-[9px] font-bold text-amber-800 bg-amber-200/70 border border-amber-300 px-2 py-0.5 rounded-full">
+                            Required to Launch
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-amber-800 leading-tight">
+                          Please enter your master password to finalize corporate tenant account provisioning:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="relative">
+                            <input
+                              type={showPassword ? "text" : "password"}
+                              placeholder="Master Password (min 8 chars)"
+                              value={accountPassword}
+                              onChange={(e) => updatePasswordState(e.target.value)}
+                              className="w-full pl-3 pr-8 py-2 bg-white border border-amber-300 rounded-lg text-xs text-slate-900 font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                            >
+                              {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                          <div className="relative">
+                            <input
+                              type={showConfirmPassword ? "text" : "password"}
+                              placeholder="Confirm Master Password"
+                              value={accountConfirmPassword}
+                              onChange={(e) => updateConfirmPasswordState(e.target.value)}
+                              className="w-full pl-3 pr-8 py-2 bg-white border border-amber-300 rounded-lg text-xs text-slate-900 font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                            >
+                              {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                        {accountPassword && accountPassword.length < 8 && (
+                          <p className="text-[10px] text-amber-800 font-medium">
+                            Password must be at least 8 characters (currently {accountPassword.length}/8).
+                          </p>
+                        )}
+                        {accountPassword && accountConfirmPassword && accountPassword !== accountConfirmPassword && (
+                          <p className="text-[10px] text-rose-600 font-medium">
+                            Passwords do not match.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800">
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          Administrator Master Password Configured
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updatePasswordState('');
+                            updateConfirmPasswordState('');
+                          }}
+                          className="text-[10px] text-slate-500 hover:text-slate-800 underline font-medium cursor-pointer"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -2092,9 +2466,17 @@ export default function CompanyCreation() {
                 </div>
                 <div className="space-y-1 text-slate-600">
                   <p><strong className="text-slate-800">Plan:</strong> {selectedPlanDetails.name} ({billingCycle.toUpperCase()})</p>
-                  <p><strong className="text-slate-800">Price:</strong> {currency === 'USD' ? '$' : 'E'}{activePrice.toLocaleString()} (14-Day Free Trial)</p>
+                  <p><strong className="text-slate-800">Price:</strong> {formatPlanPrice(selectedPlanDetails, billingCycle, currency)}/{billingCycle === 'annual' ? 'yr' : 'mo'} (14-Day Free Trial)</p>
                   <p><strong className="text-slate-800">Admin Role:</strong> {initialRole} ({adminPositionTitle})</p>
                   <p><strong className="text-slate-800">Initial Staff Queue:</strong> {staffList.length} staff accounts</p>
+                  {existingSubStatus && (
+                    <div className="mt-2.5 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-xs text-emerald-800">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <div>
+                        <span className="font-bold">Firestore Subscription Status:</span> Valid <span className="uppercase">{existingSubStatus.status}</span> record found. Paddle re-checkout will be bypassed.
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2110,7 +2492,19 @@ export default function CompanyCreation() {
                   required
                 />
                 <span className="text-xs text-slate-700 leading-relaxed">
-                  I agree to the <strong className="text-slate-900">MiraTech Business Suite Terms of Service</strong>, Corporate Data Processing Agreement, and Privacy Policy. I confirm that all submitted details are accurate and that I have authority to initialize this corporate tenant.
+                  I agree to the{" "}
+                  <a href="/legal?doc=terms-of-service" target="_blank" className="text-blue-600 hover:text-blue-800 underline font-semibold">
+                    MiraTech Terms of Service
+                  </a>
+                  ,{" "}
+                  <a href="/legal?doc=data-processing-agreement" target="_blank" className="text-blue-600 hover:text-blue-800 underline font-semibold">
+                    Data Processing Agreement
+                  </a>
+                  , and{" "}
+                  <a href="/legal?doc=privacy-policy" target="_blank" className="text-blue-600 hover:text-blue-800 underline font-semibold">
+                    Privacy Policy
+                  </a>
+                  . I confirm that all submitted details are accurate and that I have authority to initialize this corporate tenant.
                 </span>
               </label>
             </div>
@@ -2243,7 +2637,7 @@ export default function CompanyCreation() {
               </button>
 
               <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                <span>Didn't receive code?</span>
+                <span>Didn&apos;t receive code?</span>
                 {resendCooldown > 0 ? (
                   <span className="font-mono text-xs font-semibold text-slate-400">
                     Resend in {resendCooldown}s
@@ -2303,8 +2697,12 @@ export default function CompanyCreation() {
             <button
               type="button"
               onClick={handleFinalSubmit}
-              disabled={loading || !agreedToTerms}
-              className="flex items-center gap-2 px-8 py-3 bg-[#0066FF] hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition cursor-pointer disabled:opacity-50"
+              disabled={
+                loading || 
+                !agreedToTerms || 
+                (!Boolean(auth?.currentUser?.email && auth.currentUser.email.toLowerCase() === (accountEmail || '').trim().toLowerCase()) && accountPassword.trim().length < 8)
+              }
+              className="flex items-center gap-2 px-8 py-3 bg-[#0066FF] hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>

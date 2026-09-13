@@ -102,6 +102,40 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // System Config & Maintenance (Public read for maintenance mode check, Master Admin write)
+    match /system_config/{docId} {
+      allow read: if true;
+      allow write: if isMasterAdmin();
+    }
+
+    // Error Logs (Appendable for error reporting, Master Admin manageable)
+    match /error_logs/{logId} {
+      allow read: if isMasterAdmin() || isSignedIn();
+      allow create: if true;
+      allow update, delete: if isMasterAdmin();
+    }
+
+    // APM Metrics & Telemetry
+    match /apm_metrics/{metricId} {
+      allow read: if isMasterAdmin();
+      allow create: if true;
+      allow update, delete: if isMasterAdmin();
+    }
+
+    // Backup History
+    match /backup_history/{backupId} {
+      allow read, write: if isMasterAdmin();
+    }
+
+    // Legal Documents (Public read for statutory compliance, universal registry write)
+    match /legal_documents/{docId} {
+      allow read, write: if true;
+
+      match /previous_versions/{versionId} {
+        allow read, write: if true;
+      }
+    }
+
     // Root collections
     match /{collectionName}/{docId} {
       allow read: if verifyResourceTenant();
