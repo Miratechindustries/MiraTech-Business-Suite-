@@ -1052,16 +1052,23 @@ export default function SubscriptionsView() {
               )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="bg-slate-50 border-t border-slate-100 p-4 flex justify-between items-center text-[10px] text-slate-400">
-              <span>Paddle Merchant of Record • PCI-DSS Level 1 Compliant</span>
-              <button
-                type="button"
-                onClick={() => setSelectedPlan(null)}
-                className="font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
-              >
-                Close
-              </button>
+            {/* Modal Footer & Paddle MoR Disclosure */}
+            <div className="bg-slate-50 border-t border-slate-150 p-4 space-y-2 text-[11px] text-slate-500">
+              <p className="leading-relaxed text-[10px] text-slate-400">
+                Payments and subscriptions are securely processed by <strong>Paddle.com Market Ltd as Merchant of Record</strong>. Subscriptions renew automatically every {billingCycle === 'annual' ? 'year' : 'month'} until cancelled. View our{' '}
+                <a href="/terms" target="_blank" className="text-blue-600 hover:underline">Terms of Service</a> and{' '}
+                <a href="/refund" target="_blank" className="text-blue-600 hover:underline">Refund &amp; Cancellation Policy</a>.
+              </p>
+              <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-[10px]">
+                <span className="text-emerald-700 font-medium">✓ PCI-DSS Level 1 Encrypted • 14-Day Evaluation</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPlan(null)}
+                  className="font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

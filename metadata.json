@@ -1,6 +1,6 @@
 {
   "name": "MiraTech Executive Report & Ledger Engine",
-  "description": "Full-stack ledger, invoicing, quotation, and receipt suite with corporate letterhead A4 PDF/CSV exports, and Google Sheets/Drive synchronization.",
+  "description": "Cloud-based business management and enterprise ERP SaaS platform integrating CRM, double-entry accounting, invoicing, automated payroll, multi-warehouse inventory, and project operations with Paddle Merchant of Record billing.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
