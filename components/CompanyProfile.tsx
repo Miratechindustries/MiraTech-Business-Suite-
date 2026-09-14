@@ -241,7 +241,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     }
 
     fetchCompany();
-  }, [onCompanyLoaded, currentUser]);
+  }, [onCompanyLoaded, currentUser, auth.currentUser]);
 
   const handleLetterheadLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

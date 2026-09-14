@@ -343,6 +343,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
 
   useEffect(() => {
     fetchInvoicesAndCompany();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   const handleClientSelect = (clientId: string) => {

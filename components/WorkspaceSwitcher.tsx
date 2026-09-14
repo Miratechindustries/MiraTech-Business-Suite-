@@ -298,6 +298,7 @@ export default function WorkspaceSwitcher({
   // Initial load and whenever currentCompany or user changes
   useEffect(() => {
     loadUserOrganizations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCompanyId, effectiveUserId, effectiveEmail]);
 
   // Click outside and Escape key handler to close popover

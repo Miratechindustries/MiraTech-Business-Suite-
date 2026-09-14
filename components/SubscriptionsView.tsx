@@ -75,7 +75,12 @@ export default function SubscriptionsView() {
     setLoadingInvoices(true);
     setInvoicesError(null);
     try {
-      const res = await fetch(`/api/paddle/transactions?companyId=${encodeURIComponent(compId)}`);
+      const custId = company?.paddleCustomerId || '';
+      const subId = company?.paddleSubscriptionId || '';
+      const qParams = new URLSearchParams({ companyId: compId });
+      if (custId) qParams.append('customerId', custId);
+      if (subId) qParams.append('subscriptionId', subId);
+      const res = await fetch(`/api/paddle/transactions?${qParams.toString()}`);
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || `HTTP ${res.status}`);

@@ -112,6 +112,7 @@ export default function Receipts({ departmentId }: { departmentId?: string }) {
 
   useEffect(() => {
     fetchReceiptsAndCompany();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   const handleDelete = async (id: string) => {

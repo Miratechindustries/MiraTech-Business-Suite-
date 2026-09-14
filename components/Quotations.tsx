@@ -372,6 +372,7 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
 
   useEffect(() => {
     fetchQuotationsAndCompany();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   const handleClientSelect = (clientId: string) => {

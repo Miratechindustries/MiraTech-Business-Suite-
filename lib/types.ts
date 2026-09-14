@@ -50,6 +50,8 @@ export interface User extends ScopedPermissions {
   status?: 'ACTIVE' | 'DEACTIVATED' | 'PENDING';
   authorizedCompanyIds?: string[];
   lastActiveCompanyId?: string;
+  subscriptionPlanId?: string;
+  subscriptionPlan?: string;
   createdAt?: string;
 }
 

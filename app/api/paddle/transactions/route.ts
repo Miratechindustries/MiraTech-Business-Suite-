@@ -26,12 +26,21 @@ export async function GET(req: NextRequest) {
     }
 
     // Load company from Firestore
-    const companyDoc = await adminDb.collection("companies").doc(companyId).get();
-    if (!companyDoc.exists) {
-      return NextResponse.json({ error: "Company not found" }, { status: 404 });
+    let companyData: Record<string, any> = {};
+    try {
+      const companyDoc = await adminDb.collection("companies").doc(companyId).get();
+      if (companyDoc.exists) {
+        companyData = companyDoc.data() || {};
+      }
+    } catch (dbErr: any) {
+      console.warn("[Paddle Transactions API] Falling back to parameter-based lookup:", dbErr?.message || dbErr);
     }
-
-    const companyData = companyDoc.data() || {};
+    if (searchParams.get("customerId")) {
+      companyData.paddleCustomerId = companyData.paddleCustomerId || searchParams.get("customerId");
+    }
+    if (searchParams.get("subscriptionId")) {
+      companyData.paddleSubscriptionId = companyData.paddleSubscriptionId || searchParams.get("subscriptionId");
+    }
     const customerId = companyData.paddleCustomerId;
     const subscriptionId = companyData.paddleSubscriptionId;
 

@@ -14,6 +14,22 @@ import firebaseConfig from "../firebase-applet-config.json";
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId;
 export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
+
+// Suppress normal gRPC stream idle disconnect logs in Node.js server environment
+if (typeof window === "undefined") {
+  const origError = console.error;
+  console.error = (...args: any[]) => {
+    const firstArg = args[0] ? String(args[0]) : "";
+    if (
+      firstArg.includes("Disconnecting idle stream") ||
+      firstArg.includes("Timed out waiting for new targets") ||
+      firstArg.includes("1 CANCELLED: Disconnecting idle stream")
+    ) {
+      return;
+    }
+    origError.apply(console, args);
+  };
+}
 export const auth = getAuth(app);
 
 export const initAuth = (

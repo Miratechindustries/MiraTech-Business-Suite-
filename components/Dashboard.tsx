@@ -199,7 +199,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
     } finally {
       setLoading(false);
     }
-  }, [currentUser?.companyId, currentUser?.businessId, importAuth.currentUser?.uid]);
+  }, [currentUser?.companyId, currentUser?.businessId, currentUser?.id]);
 
   useEffect(() => {
     loadData();
@@ -371,6 +371,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
     if (company && !aiInsights && !loadingInsights) {
       generateAiInsights();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [company, invoices]);
 
   // Computed values for collections pie chart
