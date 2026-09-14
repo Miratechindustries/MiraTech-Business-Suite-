@@ -6,30 +6,30 @@ import { Building2, ShieldCheck, Mail, Globe, Lock, ExternalLink } from 'lucide-
 
 export default function PublicFooter() {
   return (
-    <footer className="bg-[#070D1E] border-t border-slate-800 text-slate-400 text-xs font-sans">
+    <footer className="bg-slate-50 border-t border-slate-200 text-slate-600 text-xs font-sans">
       {/* Merchant of Record & Trust Highlight Strip */}
-      <div className="border-b border-slate-800/80 bg-[#0B132B]/60 py-6 px-4 sm:px-6 lg:px-8">
+      <div className="border-b border-blue-100 bg-blue-50/70 py-6 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20 flex-shrink-0">
+            <div className="p-2 bg-blue-600 text-white rounded-xl shadow-xs flex-shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="text-white font-bold text-xs">Paddle Merchant of Record Protection</h4>
-              <p className="text-[11px] text-slate-400 max-w-2xl mt-0.5">
+              <h4 className="text-slate-900 font-bold text-xs">Paddle Merchant of Record Protection</h4>
+              <p className="text-[11px] text-slate-600 max-w-2xl mt-0.5">
                 Payments, recurring subscriptions, and global tax compliance (VAT, GST, Sales Tax) are processed securely by Paddle.com Market Ltd as the Merchant of Record for MiraTech Business Suite.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-4 text-[11px] text-slate-400 shrink-0">
+          <div className="flex items-center gap-4 text-[11px] text-slate-600 shrink-0 font-medium">
             <span className="flex items-center gap-1">
-              <Lock className="w-3.5 h-3.5 text-emerald-400" />
-              <span>TLS 1.3 & AES-256</span>
+              <Lock className="w-3.5 h-3.5 text-emerald-600" />
+              <span>TLS 1.3 &amp; AES-256</span>
             </span>
-            <span className="text-slate-600">•</span>
+            <span className="text-slate-300">•</span>
             <span>14-Day Evaluation Trial</span>
-            <span className="text-slate-600">•</span>
-            <Link href="/refund" className="text-amber-400 hover:underline">
+            <span className="text-slate-300">•</span>
+            <Link href="/refund" className="text-blue-600 hover:underline font-semibold">
               Refund Policy
             </Link>
           </div>
@@ -42,77 +42,75 @@ export default function PublicFooter() {
           {/* Brand & Mission */}
           <div className="md:col-span-2 space-y-4">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500 to-amber-700 p-0.5 flex items-center justify-center">
-                <div className="h-full w-full bg-[#0B132B] rounded-[6px] flex items-center justify-center">
-                  <Building2 className="w-4 h-4 text-amber-400" />
-                </div>
+              <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center shadow-xs">
+                <Building2 className="w-4 h-4 text-white" />
               </div>
-              <span className="font-bold text-base text-white tracking-tight">MiraTech Business Suite</span>
+              <span className="font-bold text-base text-slate-900 tracking-tight">MiraTech Business Suite</span>
             </Link>
-            <p className="text-slate-400 text-xs leading-relaxed max-w-sm">
-              Institutional-grade cloud business management & ERP SaaS engineered for agile, scaling enterprises. Unify Sales & CRM, Dual-Entry Accounting, Invoicing, Payroll, Multi-Warehouse Inventory, and Operations under a single resilient architecture.
+            <p className="text-slate-600 text-xs leading-relaxed max-w-sm">
+              Institutional-grade cloud business management &amp; ERP SaaS engineered for agile, scaling enterprises. Unify Sales &amp; CRM, Dual-Entry Accounting, Invoicing, Payroll, Multi-Warehouse Inventory, and Operations under a single resilient architecture.
             </p>
-            <div className="pt-2 text-[11px] text-slate-400 space-y-1">
-              <p><strong className="text-slate-300">Corporate Entity:</strong> MiraTech Industries</p>
-              <p><strong className="text-slate-300">Support Desk:</strong> <a href="mailto:miratechindustries@gmail.com" className="text-amber-400 hover:underline">miratechindustries@gmail.com</a></p>
-              <p><strong className="text-slate-300">Headquarters:</strong> Global Cloud Infrastructure (Google Cloud Run & Multi-Region Clusters)</p>
+            <div className="pt-2 text-[11px] text-slate-600 space-y-1">
+              <p><strong className="text-slate-800">Corporate Entity:</strong> MiraTech Industries</p>
+              <p><strong className="text-slate-800">Support Desk:</strong> <a href="mailto:miratechindustries@gmail.com" className="text-blue-600 hover:underline">miratechindustries@gmail.com</a></p>
+              <p><strong className="text-slate-800">Headquarters:</strong> Global Cloud Infrastructure (Google Cloud Run &amp; Multi-Region Clusters)</p>
             </div>
           </div>
 
           {/* Column: Core Modules */}
           <div className="space-y-3">
-            <h5 className="text-white font-bold text-xs tracking-wider uppercase">ERP Modules</h5>
+            <h5 className="text-slate-900 font-bold text-xs tracking-wider uppercase">ERP Modules</h5>
             <ul className="space-y-2 text-xs">
-              <li><Link href="/features#sales" className="hover:text-amber-400 transition-colors">Sales & CRM Directory</Link></li>
-              <li><Link href="/features#finance" className="hover:text-amber-400 transition-colors">Finance & Double Ledger</Link></li>
-              <li><Link href="/features#invoicing" className="hover:text-amber-400 transition-colors">Invoices & Quotations</Link></li>
-              <li><Link href="/features#payroll" className="hover:text-amber-400 transition-colors">HR & Automated Payroll</Link></li>
-              <li><Link href="/features#inventory" className="hover:text-amber-400 transition-colors">Multi-Warehouse Inventory</Link></li>
-              <li><Link href="/features#procurement" className="hover:text-amber-400 transition-colors">Procurement & 3-Way Match</Link></li>
-              <li><Link href="/features#projects" className="hover:text-amber-400 transition-colors">Project Workspaces</Link></li>
+              <li><Link href="/features#sales" className="hover:text-blue-600 transition-colors">Sales &amp; CRM Directory</Link></li>
+              <li><Link href="/features#finance" className="hover:text-blue-600 transition-colors">Finance &amp; Double Ledger</Link></li>
+              <li><Link href="/features#invoicing" className="hover:text-blue-600 transition-colors">Invoices &amp; Quotations</Link></li>
+              <li><Link href="/features#payroll" className="hover:text-blue-600 transition-colors">HR &amp; Automated Payroll</Link></li>
+              <li><Link href="/features#inventory" className="hover:text-blue-600 transition-colors">Multi-Warehouse Inventory</Link></li>
+              <li><Link href="/features#procurement" className="hover:text-blue-600 transition-colors">Procurement &amp; 3-Way Match</Link></li>
+              <li><Link href="/features#projects" className="hover:text-blue-600 transition-colors">Project Workspaces</Link></li>
             </ul>
           </div>
 
           {/* Column: Pricing & Tiers */}
           <div className="space-y-3">
-            <h5 className="text-white font-bold text-xs tracking-wider uppercase">Subscriptions</h5>
+            <h5 className="text-slate-900 font-bold text-xs tracking-wider uppercase">Subscriptions</h5>
             <ul className="space-y-2 text-xs">
-              <li><Link href="/pricing" className="hover:text-amber-400 transition-colors">Starter Plan ($49/mo)</Link></li>
-              <li><Link href="/pricing" className="hover:text-amber-400 transition-colors">Growth Plan ($99/mo)</Link></li>
-              <li><Link href="/pricing" className="hover:text-amber-400 transition-colors">Professional Plan ($199/mo)</Link></li>
-              <li><Link href="/pricing" className="hover:text-amber-400 transition-colors">Elite Plan ($349/mo)</Link></li>
-              <li><Link href="/pricing" className="hover:text-amber-400 transition-colors">Enterprise Plan ($599/mo)</Link></li>
-              <li><Link href="/pricing" className="hover:text-amber-400 transition-colors">Compare All Features</Link></li>
-              <li><Link href="/register" className="text-amber-400 font-bold hover:underline">Start 14-Day Free Trial</Link></li>
+              <li><Link href="/pricing" className="hover:text-blue-600 transition-colors">Starter Plan ($49/mo)</Link></li>
+              <li><Link href="/pricing" className="hover:text-blue-600 transition-colors">Growth Plan ($99/mo)</Link></li>
+              <li><Link href="/pricing" className="hover:text-blue-600 transition-colors">Professional Plan ($199/mo)</Link></li>
+              <li><Link href="/pricing" className="hover:text-blue-600 transition-colors">Elite Plan ($349/mo)</Link></li>
+              <li><Link href="/pricing" className="hover:text-blue-600 transition-colors">Enterprise Plan ($599/mo)</Link></li>
+              <li><Link href="/pricing" className="hover:text-blue-600 transition-colors">Compare All Features</Link></li>
+              <li><Link href="/register" className="text-blue-600 font-bold hover:underline">Start 14-Day Free Trial</Link></li>
             </ul>
           </div>
 
           {/* Column: Legal & Compliance */}
           <div className="space-y-3">
-            <h5 className="text-white font-bold text-xs tracking-wider uppercase">Legal & Governance</h5>
+            <h5 className="text-slate-900 font-bold text-xs tracking-wider uppercase">Legal &amp; Governance</h5>
             <ul className="space-y-2 text-xs">
-              <li><Link href="/terms" className="hover:text-amber-400 transition-colors">Terms of Service</Link></li>
-              <li><Link href="/privacy" className="hover:text-amber-400 transition-colors">Privacy Policy</Link></li>
-              <li><Link href="/refund" className="hover:text-amber-400 transition-colors font-semibold text-amber-400/90">Refund & Cancellation Policy</Link></li>
-              <li><Link href="/legal?doc=cookie-policy" className="hover:text-amber-400 transition-colors">Cookie Policy</Link></li>
-              <li><Link href="/legal?doc=security-notice" className="hover:text-amber-400 transition-colors">Security Architecture</Link></li>
-              <li><Link href="/legal?doc=data-processing-agreement" className="hover:text-amber-400 transition-colors">Data Processing (DPA)</Link></li>
-              <li><Link href="/support" className="hover:text-amber-400 transition-colors">Customer Support Desk</Link></li>
+              <li><Link href="/terms" className="hover:text-blue-600 transition-colors">Terms of Service</Link></li>
+              <li><Link href="/privacy" className="hover:text-blue-600 transition-colors">Privacy Policy</Link></li>
+              <li><Link href="/refund" className="hover:text-blue-600 transition-colors font-semibold text-blue-600">Refund &amp; Cancellation Policy</Link></li>
+              <li><Link href="/legal?doc=cookie-policy" className="hover:text-blue-600 transition-colors">Cookie Policy</Link></li>
+              <li><Link href="/legal?doc=security-notice" className="hover:text-blue-600 transition-colors">Security Architecture</Link></li>
+              <li><Link href="/legal?doc=data-processing-agreement" className="hover:text-blue-600 transition-colors">Data Processing (DPA)</Link></li>
+              <li><Link href="/support" className="hover:text-blue-600 transition-colors">Customer Support Desk</Link></li>
             </ul>
           </div>
         </div>
 
         {/* Bottom Legal & Paddle Reseller Notice */}
-        <div className="mt-12 pt-8 border-t border-slate-800/80 flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] text-slate-400">
+        <div className="mt-12 pt-8 border-t border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] text-slate-500">
           <p>
             © {new Date().getFullYear()} MiraTech Industries. All rights reserved. MiraTech Business Suite is a trademark of MiraTech Industries.
           </p>
           <div className="flex flex-wrap items-center gap-6">
-            <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
-            <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
-            <Link href="/refund" className="hover:text-white transition-colors">Refunds & Cancellations</Link>
-            <Link href="/support" className="hover:text-white transition-colors">Support</Link>
-            <Link href="/login" className="hover:text-white transition-colors">Workspace Login</Link>
+            <Link href="/terms" className="hover:text-slate-900 transition-colors">Terms</Link>
+            <Link href="/privacy" className="hover:text-slate-900 transition-colors">Privacy</Link>
+            <Link href="/refund" className="hover:text-slate-900 transition-colors">Refunds &amp; Cancellations</Link>
+            <Link href="/support" className="hover:text-slate-900 transition-colors">Support</Link>
+            <Link href="/login" className="hover:text-slate-900 transition-colors">Workspace Login</Link>
           </div>
         </div>
       </div>

@@ -13,6 +13,15 @@ export default function RegisterPage() {
 
       <main className="flex-1 py-10 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto space-y-6">
+          <div className="flex items-center justify-between">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Landing Page</span>
+            </Link>
+          </div>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#0B132B] p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-xl">
             <div className="flex items-center gap-3">
               <span className="p-2.5 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">

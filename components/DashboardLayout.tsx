@@ -818,6 +818,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     setUser(null);
     setGoogleToken(null);
     setAuthLoading(false);
+    window.location.href = '/login';
   };
 
   if (authLoading) {

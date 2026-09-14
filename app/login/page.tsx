@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Building2, Mail, Lock, Loader2, ArrowRight, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Building2, Mail, Lock, Loader2, ArrowRight, ShieldCheck, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { auth, emailSignIn, googleSignIn } from '../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import PublicHeader from '../../components/public/PublicHeader';
@@ -85,7 +85,16 @@ export default function LoginPage() {
       <PublicHeader />
 
       <main className="flex-1 flex items-center justify-center px-4 py-16 sm:px-6 lg:px-8">
-        <div className="w-full max-w-md bg-[#0B132B] border border-slate-800 rounded-2xl shadow-2xl p-8 space-y-6">
+        <div className="w-full max-w-md bg-[#0B132B] border border-slate-800 rounded-2xl shadow-2xl p-8 space-y-6 relative">
+          <div className="mb-2">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Landing Page</span>
+            </Link>
+          </div>
           {/* Header */}
           <div className="text-center space-y-2">
             <div className="inline-flex p-3 bg-amber-500/10 text-amber-400 rounded-2xl border border-amber-500/20 mb-2">
