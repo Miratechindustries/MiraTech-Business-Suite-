@@ -23,7 +23,8 @@ import {
   Sparkles,
   Search,
   FileCheck2,
-  Cpu
+  Cpu,
+  Check
 } from 'lucide-react';
 
 export default function FeaturesPage() {
@@ -148,88 +149,71 @@ export default function FeaturesPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#070D1E] text-white flex flex-col justify-between font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between font-sans">
       <PublicHeader />
 
       <main className="flex-1 py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto space-y-16">
-          {/* Header Banner */}
+          {/* Header */}
           <div className="text-center max-w-3xl mx-auto space-y-4">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Modular Enterprise Cloud Architecture</span>
+              <span>Enterprise Software Capabilities</span>
             </div>
-            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white">
-              Every Workflow You Need to Run Your Enterprise
+            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900">
+              Comprehensive ERP Features &amp; Modules
             </h1>
-            <p className="text-sm sm:text-base text-slate-400 leading-relaxed">
-              MiraTech Business Suite replaces fragmented point solutions with a unified, modular ERP platform. Built on Google Cloud with Paddle Merchant of Record billing.
+            <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+              MiraTech Business Suite is a cloud-based business management SaaS platform for small and medium-sized businesses. It provides tools for CRM and sales, invoicing and finance, inventory, human resources, projects, procurement, marketing, operations, and business reporting through a single web application.
             </p>
-            <div className="pt-2 flex flex-wrap justify-center gap-3">
-              <Link
-                href="/register"
-                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-all"
-              >
-                Start 14-Day Free Trial
-              </Link>
-              <Link
-                href="/pricing"
-                className="px-6 py-2.5 bg-[#0B132B] hover:bg-slate-800 border border-slate-700 text-white font-semibold text-xs rounded-xl transition-all"
-              >
-                View Subscription Plans
-              </Link>
-            </div>
           </div>
 
-          {/* Core Modules Grid */}
+          {/* Features Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {modules.map((mod) => {
-              const IconComponent = mod.icon;
+              const IconComp = mod.icon;
               return (
-                <div
+                <div 
                   key={mod.id}
                   id={mod.id}
-                  className="bg-[#0B132B] border border-slate-800 rounded-2xl p-7 space-y-5 hover:border-slate-700 transition-all flex flex-col justify-between shadow-xl"
+                  className="bg-white border border-slate-200 rounded-2xl p-7 space-y-5 shadow-xs hover:border-blue-300 transition-all flex flex-col justify-between"
                 >
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <div className="p-3 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
-                        <IconComponent className="w-6 h-6" />
+                      <div className="p-3 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
+                        <IconComp className="w-6 h-6" />
                       </div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-full">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                         {mod.badge}
                       </span>
                     </div>
 
-                    <div>
-                      <h3 className="font-bold text-lg text-white">{mod.title}</h3>
-                      <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                    <div className="space-y-2">
+                      <h3 className="font-bold text-lg text-slate-900">{mod.title}</h3>
+                      <p className="text-xs text-slate-600 leading-relaxed">
                         {mod.description}
                       </p>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-800/80 space-y-2">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                        Key Capabilities:
-                      </span>
-                      <ul className="space-y-2 text-xs text-slate-300">
-                        {mod.capabilities.map((cap, i) => (
-                          <li key={i} className="flex items-start gap-2">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                            <span className="leading-snug">{cap}</span>
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Key Capabilities:</span>
+                      <ul className="space-y-1.5 text-xs text-slate-600">
+                        {mod.capabilities.map((cap, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                            <span>{cap}</span>
                           </li>
                         ))}
                       </ul>
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs">
+                  <div className="pt-4 border-t border-slate-100">
                     <Link
-                      href="/pricing"
-                      className="font-bold text-amber-400 hover:text-amber-300 inline-flex items-center gap-1"
+                      href="/register"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
                     >
-                      <span>Check Plan Inclusions</span>
-                      <ArrowRight className="w-3 h-3" />
+                      <span>Get started with {mod.title} &rarr;</span>
                     </Link>
                   </div>
                 </div>
@@ -237,71 +221,28 @@ export default function FeaturesPage() {
             })}
           </div>
 
-          {/* Architecture & Infrastructure Section */}
-          <div className="bg-[#0B132B] border border-slate-800 rounded-2xl p-8 sm:p-12 shadow-2xl space-y-8">
-            <div className="max-w-2xl space-y-2">
-              <span className="text-amber-400 text-xs font-bold uppercase tracking-wider">
-                Enterprise Infrastructure
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-                Resilient Cloud Architecture Engineered for Enterprise Trust
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                MiraTech Business Suite is deployed on institutional-grade Google Cloud multi-region clusters with zero-trust security principles.
-              </p>
+          {/* Bottom CTA */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 text-center max-w-4xl mx-auto space-y-6 shadow-xs">
+            <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+              Ready to unify your business operations?
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 max-w-2xl mx-auto">
+              Provision your isolated corporate workspace with a 14-day free evaluation trial. Secure recurring billing handled by Paddle.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <Link
+                href="/register"
+                className="px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition active:scale-95"
+              >
+                Start 14-Day Free Trial
+              </Link>
+              <Link
+                href="/pricing"
+                className="px-6 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl border border-slate-200 transition"
+              >
+                View Pricing &amp; Plans
+              </Link>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="p-5 bg-[#111A38] border border-slate-800 rounded-xl space-y-2">
-                <Database className="w-5 h-5 text-amber-400" />
-                <h4 className="font-bold text-white text-sm">Tenant Isolation</h4>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Every company workspace operates within a cryptographically isolated partition preventing cross-tenant leakage.
-                </p>
-              </div>
-
-              <div className="p-5 bg-[#111A38] border border-slate-800 rounded-xl space-y-2">
-                <Lock className="w-5 h-5 text-emerald-400" />
-                <h4 className="font-bold text-white text-sm">AES-256 & TLS 1.3</h4>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Hardware-backed AES-256 GCM encryption at rest with automated key rotation and mandatory TLS 1.3 in transit.
-                </p>
-              </div>
-
-              <div className="p-5 bg-[#111A38] border border-slate-800 rounded-xl space-y-2">
-                <ShieldCheck className="w-5 h-5 text-blue-400" />
-                <h4 className="font-bold text-white text-sm">Paddle MoR Billing</h4>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Level 1 PCI-DSS certified payment processing with automated global VAT/Sales tax calculation and self-service portal.
-                </p>
-              </div>
-
-              <div className="p-5 bg-[#111A38] border border-slate-800 rounded-xl space-y-2">
-                <Cpu className="w-5 h-5 text-purple-400" />
-                <h4 className="font-bold text-white text-sm">99.95% Availability SLA</h4>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Continuous hot-failover replication across redundant cloud zones with automated daily transactional rollbacks.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* CTA Strip */}
-          <div className="bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 rounded-2xl p-8 sm:p-10 text-slate-950 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl">
-            <div className="space-y-2 text-center md:text-left">
-              <h3 className="text-2xl font-black tracking-tight">
-                Ready to explore all modules live?
-              </h3>
-              <p className="text-xs font-semibold text-slate-900 max-w-xl">
-                Start your 14-day free trial today. Explore CRM, Invoices, Payroll, Inventory, and Projects with zero upfront charges.
-              </p>
-            </div>
-            <Link
-              href="/register"
-              className="px-6 py-3 bg-[#0B132B] hover:bg-[#111A38] text-white font-bold text-xs rounded-xl shadow-xl transition-all cursor-pointer whitespace-nowrap"
-            >
-              Start 14-Day Free Trial
-            </Link>
           </div>
         </div>
       </main>

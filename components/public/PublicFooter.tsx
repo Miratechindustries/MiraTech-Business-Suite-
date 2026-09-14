@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Building2, ShieldCheck, Mail, Globe, Lock, ExternalLink } from 'lucide-react';
+import { Building2, ShieldCheck, Mail, Globe, Lock, ExternalLink, PhoneCall } from 'lucide-react';
 
 export default function PublicFooter() {
   return (
@@ -53,7 +53,7 @@ export default function PublicFooter() {
             <div className="pt-2 text-[11px] text-slate-600 space-y-1">
               <p><strong className="text-slate-800">Corporate Entity:</strong> MiraTech Industries</p>
               <p><strong className="text-slate-800">Support Desk:</strong> <a href="mailto:miratechindustries@gmail.com" className="text-blue-600 hover:underline">miratechindustries@gmail.com</a></p>
-              <p><strong className="text-slate-800">Headquarters:</strong> Global Cloud Infrastructure (Google Cloud Run &amp; Multi-Region Clusters)</p>
+              <p><strong className="text-slate-800">Business Phone:</strong> <a href="tel:+26879427339" className="text-blue-600 hover:underline font-mono">+268 7942 7339</a> / <a href="tel:+26876427339" className="text-blue-600 hover:underline font-mono">+268 7642 7339</a></p>
             </div>
           </div>
 
@@ -92,9 +92,6 @@ export default function PublicFooter() {
               <li><Link href="/terms" className="hover:text-blue-600 transition-colors">Terms of Service</Link></li>
               <li><Link href="/privacy" className="hover:text-blue-600 transition-colors">Privacy Policy</Link></li>
               <li><Link href="/refund" className="hover:text-blue-600 transition-colors font-semibold text-blue-600">Refund &amp; Cancellation Policy</Link></li>
-              <li><Link href="/legal?doc=cookie-policy" className="hover:text-blue-600 transition-colors">Cookie Policy</Link></li>
-              <li><Link href="/legal?doc=security-notice" className="hover:text-blue-600 transition-colors">Security Architecture</Link></li>
-              <li><Link href="/legal?doc=data-processing-agreement" className="hover:text-blue-600 transition-colors">Data Processing (DPA)</Link></li>
               <li><Link href="/support" className="hover:text-blue-600 transition-colors">Customer Support Desk</Link></li>
             </ul>
           </div>

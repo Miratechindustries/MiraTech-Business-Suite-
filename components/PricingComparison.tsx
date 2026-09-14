@@ -5,6 +5,7 @@ import { SUBSCRIPTION_PLANS, SubscriptionPlan, getPlanPrice, formatPlanPrice } f
 import { PADDLE_PRICE_MAP, isPaddleConfigured, getPaddle } from '../lib/paddle-client';
 import { useUserStore } from '../lib/store';
 import { Check, Sparkles, Loader2, ShieldCheck, Zap, ArrowRight, HelpCircle } from 'lucide-react';
+import PaddleCheckoutModal from './PaddleCheckoutModal';
 
 interface PricingComparisonProps {
   onSelectPlan?: (plan: SubscriptionPlan, billingCycle: 'monthly' | 'annual') => void;
@@ -18,14 +19,22 @@ export default function PricingComparison({ onSelectPlan, className = '' }: Pric
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [paddleConfigured, setPaddleConfigured] = useState(false);
+  const [checkoutModalPlan, setCheckoutModalPlan] = useState<SubscriptionPlan | null>(null);
 
   useEffect(() => {
     setPaddleConfigured(isPaddleConfigured());
   }, []);
 
-  const handleCheckout = async (plan: SubscriptionPlan) => {
+  const handleOpenCheckoutModal = (plan: SubscriptionPlan) => {
     setError(null);
     setSuccess(null);
+    setCheckoutModalPlan(plan);
+  };
+
+  const handleConfirmCheckout = async () => {
+    const plan = checkoutModalPlan;
+    if (!plan) return;
+    setCheckoutModalPlan(null);
     setLoadingPlanId(plan.id);
 
     if (onSelectPlan) {
@@ -37,7 +46,6 @@ export default function PricingComparison({ onSelectPlan, className = '' }: Pric
     // Default checkout handler using Paddle if configured
     try {
       if (!paddleConfigured) {
-        // Fallback simulated success or alert if Paddle token is not configured
         setSuccess(`Selected ${plan.name} (${billingCycle}). Configure NEXT_PUBLIC_PADDLE_CLIENT_TOKEN to launch live Paddle checkout.`);
         setLoadingPlanId(null);
         return;
@@ -209,7 +217,7 @@ export default function PricingComparison({ onSelectPlan, className = '' }: Pric
                 </div>
 
                 <button
-                  onClick={() => handleCheckout(plan)}
+                  onClick={() => handleOpenCheckoutModal(plan)}
                   disabled={loadingPlanId === plan.id}
                   className={`w-full py-2.5 px-4 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
                     isPopular
@@ -240,6 +248,15 @@ export default function PricingComparison({ onSelectPlan, className = '' }: Pric
           <span>Secure checkout powered by Paddle Merchant of Record. All major credit cards, PayPal, and local bank transfers accepted.</span>
         </div>
       </div>
+
+      <PaddleCheckoutModal
+        isOpen={Boolean(checkoutModalPlan)}
+        plan={checkoutModalPlan}
+        billingCycle={billingCycle}
+        onClose={() => setCheckoutModalPlan(null)}
+        onConfirm={handleConfirmCheckout}
+        loading={Boolean(loadingPlanId)}
+      />
     </div>
   );
 }

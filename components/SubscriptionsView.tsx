@@ -16,6 +16,7 @@ import {
 } from '../lib/subscriptions';
 import { logAction } from '../lib/audit';
 import { getPaddle, PADDLE_PRICE_MAP, isPaddleConfigured, getPaddleEnvironment, getPaddleEventLogs, PaddleEventLog } from '../lib/paddle-client';
+import PaddleCheckoutModal from './PaddleCheckoutModal';
 import { 
   Check, 
   AlertTriangle, 
@@ -188,6 +189,8 @@ export default function SubscriptionsView() {
   };
 
   // Check Paddle configuration on mount
+  const [checkoutModalPlan, setCheckoutModalPlan] = useState<SubscriptionPlan | null>(null);
+
   useEffect(() => {
     const configured = isPaddleConfigured();
     setPaddleConfigured(configured);
@@ -197,6 +200,13 @@ export default function SubscriptionsView() {
       });
     }
   }, []);
+
+  const handleConfirmModalCheckout = () => {
+    if (!checkoutModalPlan) return;
+    const plan = checkoutModalPlan;
+    setCheckoutModalPlan(null);
+    handleOpenCheckout(plan);
+  };
 
   const handleOpenCheckout = async (plan: SubscriptionPlan) => {
     if (!currentUser?.companyId || !company) return;
@@ -907,7 +917,7 @@ export default function SubscriptionsView() {
                 <button
                   type="button"
                   disabled={isCurrent || isProcessing}
-                  onClick={() => handleOpenCheckout(plan)}
+                  onClick={() => setCheckoutModalPlan(plan)}
                   className={`w-full py-2 font-bold text-[11px] rounded-lg cursor-pointer transition shadow-3xs flex items-center justify-center gap-1.5 ${
                     isCurrent 
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-150 cursor-default' 
@@ -1073,6 +1083,15 @@ export default function SubscriptionsView() {
           </div>
         </div>
       )}
+      {/* Pre-Checkout Confirmation Modal */}
+      <PaddleCheckoutModal
+        isOpen={Boolean(checkoutModalPlan)}
+        plan={checkoutModalPlan}
+        billingCycle={billingCycle}
+        onClose={() => setCheckoutModalPlan(null)}
+        onConfirm={handleConfirmModalCheckout}
+        loading={isProcessing}
+      />
     </div>
   );
 }
