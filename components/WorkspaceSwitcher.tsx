@@ -360,15 +360,17 @@ export default function WorkspaceSwitcher({
     );
   }, [organizations, searchQuery]);
 
-  const currentOrg = useMemo(() => {
+  const currentOrg: WorkspaceOrg = useMemo(() => {
     return organizations.find(o => o.id === activeCompanyId) || {
       id: activeCompanyId,
       name: currentCompany?.name || "Mira Workspace",
       plan: currentCompany?.subscriptionPlanId || "Active",
       role: isMasterAdmin ? "MASTER_ADMIN" : "ADMIN",
       primaryColor: currentCompany?.primaryColor || "#0F172A",
+      letterheadLogo: (currentCompany as any)?.letterheadLogo,
+      isOwner: currentCompany?.ownerId === currentUser?.id,
     };
-  }, [organizations, activeCompanyId, currentCompany, isMasterAdmin]);
+  }, [organizations, activeCompanyId, currentCompany, isMasterAdmin, currentUser?.id]);
 
   // Generate initials for organization
   const getInitials = (name: string) => {

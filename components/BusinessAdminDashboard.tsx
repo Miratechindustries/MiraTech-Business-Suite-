@@ -252,15 +252,17 @@ export default function BusinessAdminDashboard({
       const updatePayload = {
         subscriptionPlanId: newPlanId,
         subscriptionPlan: targetPlan.name,
+        plan: newPlanId,
+        tier: newPlanId,
         subscriptionStatus: "active",
         subscriptionBillingCycle: billingCycle,
         lockedFeatures,
         updatedAt: new Date().toISOString()
       };
 
-      await updateDoc(doc(db, "companies", companyId), updatePayload);
+      await setDoc(doc(db, "companies", companyId), updatePayload, { merge: true });
       try {
-        await updateDoc(doc(db, "businesses", companyId), updatePayload);
+        await setDoc(doc(db, "businesses", companyId), updatePayload, { merge: true });
       } catch (e) {}
 
       await logAction(

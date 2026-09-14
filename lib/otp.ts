@@ -14,11 +14,11 @@ const otpStore = new Map<string, StoredOtpRecord>();
 
 function pruneExpired() {
   const now = Date.now();
-  for (const [email, record] of otpStore.entries()) {
+  otpStore.forEach((record, email) => {
     if (now > record.expiresAt) {
       otpStore.delete(email);
     }
-  }
+  });
 }
 
 const OTP_SECRET = process.env.OTP_SECRET || "miratech_corporate_otp_hmac_secret_key_default";

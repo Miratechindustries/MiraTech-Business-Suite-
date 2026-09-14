@@ -124,6 +124,8 @@ export default function CompaniesTable() {
         secondaryColor: editSecondaryColor,
         lockedFeatures: getLockedFeaturesForPlan(editSubscriptionPlanId),
         subscriptionPlanId: editSubscriptionPlanId,
+        plan: editSubscriptionPlanId,
+        tier: editSubscriptionPlanId,
         subscriptionStatus: editSubscriptionStatus,
         logo: editLogo,
         letterheadLogo: editLetterheadLogo,

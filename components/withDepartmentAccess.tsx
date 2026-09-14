@@ -27,15 +27,17 @@ export function useDepartmentAccess(departmentType: string): DepartmentAccessRes
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!currentUser) {
+    const user = currentUser;
+    if (!user) {
       setLoading(false);
       setHasAccess(false);
       return;
     }
 
     async function checkAccess() {
+      if (!user) return;
       try {
-        const businessId = currentUser.businessId;
+        const businessId = user.businessId || user.companyId;
         if (!businessId) {
           setHasAccess(false);
           setLoading(false);
@@ -65,7 +67,7 @@ export function useDepartmentAccess(departmentType: string): DepartmentAccessRes
         const isModuleEnabled = isCoreModule || modules.includes(depLower);
 
         // 2. Query individual User-specific department rights
-        const userRef = doc(db, "users", currentUser.id);
+        const userRef = doc(db, "users", user.id);
         const userSnap = await getDoc(userRef);
         let allowedDepts: string[] = [];
 
@@ -76,7 +78,7 @@ export function useDepartmentAccess(departmentType: string): DepartmentAccessRes
         setUserDepartments(allowedDepts);
 
         // 3. Execute RBAC evaluation rules
-        const userRole = (currentUser.role || "").toUpperCase();
+        const userRole = (user.role || "").toUpperCase();
         const isMasterOrBusinessAdmin = userRole === "MASTER_ADMIN" || userRole === "SUPER_ADMIN" || userRole === "BUSINESS_ADMIN" || userRole === "COMPANY_OWNER";
         
         let hasPerm = false;

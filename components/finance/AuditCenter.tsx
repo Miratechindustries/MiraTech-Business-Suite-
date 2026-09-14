@@ -279,11 +279,6 @@ export default function AuditCenter() {
     loadTenantProfile();
   }, [currentUser, isMasterAdmin]);
 
-  // Load accounting data whenever targets change
-  useEffect(() => {
-    fetchAccountingLogs();
-  }, [fetchAccountingLogs]);
-
   const syncDatabaseTransactionsToLedger = async (targetScope: string) => {
     try {
       // 1. Fetch existing ledger entries to prevent duplicates
@@ -498,6 +493,11 @@ export default function AuditCenter() {
       setLoading(false);
     }
   }, [isMasterAdmin, businessId, isSuperAdminView, selectedTenantId, tenants, addToast]);
+
+  // Load accounting data whenever targets change
+  useEffect(() => {
+    fetchAccountingLogs();
+  }, [fetchAccountingLogs]);
 
   const handleSaveBalanceForward = async (e: React.FormEvent) => {
     e.preventDefault();

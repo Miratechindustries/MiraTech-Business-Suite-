@@ -970,6 +970,8 @@ export default function CompanyCreation() {
       argon2SaltLength: 16,
       subscriptionPlanId,
       subscriptionPlan: selectedPlanObj.name,
+      plan: subscriptionPlanId,
+      tier: subscriptionPlanId,
       subscriptionStatus: subscriptionPlanId === 'free' ? 'active' : 'trialing',
       subscriptionBillingCycle: billingCycle,
       subscriptionTrialEndsAt: trialEndDate,

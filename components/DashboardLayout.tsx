@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Image from "next/image";
 import { User } from "firebase/auth";
 import { googleSignIn, logout, auth, initAuth, emailSignIn, emailSignUp, handleFirestoreError, OperationType } from "../lib/firebase";
@@ -66,6 +66,7 @@ import SubscriptionsView from "./SubscriptionsView";
 import DepartmentDashboard from "./DepartmentDashboard";
 import { withDepartmentAccess } from "./withDepartmentAccess";
 import { withPlanAccess } from "./withPlanAccess";
+import { checkCompanyPlanAccess } from "../lib/planAccess";
 import DepartmentsHub from "./DepartmentsHub";
 import POSHub from "./POSHub";
 import CompanyCreation from "./CompanyCreation";
@@ -203,6 +204,13 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     currentUser?.role?.toUpperCase() === 'COMPANY_ADMIN' ||
     company?.ownerId === user?.uid ||
     company?.ownerId === currentUser?.id;
+
+  const isCurrentTabLocked = useMemo(() => {
+    if (isMasterAdmin) return false;
+    if (!company) return false;
+    const access = checkCompanyPlanAccess(company, activeTab);
+    return !access.allowed;
+  }, [company, activeTab, isMasterAdmin]);
 
   // Handle post-registration auto-redirect to Business Admin Dashboard
   useEffect(() => {
@@ -1351,7 +1359,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
             </div>
           ) : (
             <div className="relative">
-              {company?.lockedFeatures?.includes(activeTab) && !isMasterAdmin && (
+              {isCurrentTabLocked && (
                 <div className="absolute inset-x-0 top-0 bottom-0 min-h-[450px] bg-sky-550/10 backdrop-blur-lg rounded-2xl flex flex-col items-center justify-center p-8 text-center z-30 border border-blue-200/50 shadow-md animate-fade-in">
                   <div className="p-4 bg-blue-600 text-white rounded-full border-4 border-white shadow-xl mb-4 animate-pulse flex items-center justify-center">
                     <Lock className="h-8 w-8" />
@@ -1367,7 +1375,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                 </div>
               )}
 
-              <div className={company?.lockedFeatures?.includes(activeTab) && !isMasterAdmin ? "blur-md pointer-events-none select-none transition-all duration-300" : ""}>
+              <div className={isCurrentTabLocked ? "blur-md pointer-events-none select-none transition-all duration-300" : ""}>
                 {/* Render Active View Tab */}
                 {activeTab === "business_admin" && (
                   <BusinessAdminDashboard

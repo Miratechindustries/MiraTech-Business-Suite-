@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useUserStore } from "../lib/store";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { checkCompanyPlanAccess, PlanAccessCheckResult } from "../lib/planAccess";
 import { Lock, Sparkles, ArrowRight, ShieldCheck, Loader2 } from "lucide-react";
@@ -23,58 +23,87 @@ export function usePlanAccess(moduleKey: string) {
 
   useEffect(() => {
     let isMounted = true;
+    const targetCompanyId = 
+      currentUser?.businessId || 
+      currentUser?.companyId || 
+      (typeof window !== "undefined" ? localStorage.getItem("mira_active_workspace_id") : null);
 
-    async function evaluatePlan() {
-      if (!currentUser?.businessId) {
+    if (!targetCompanyId) {
+      if (isMounted) {
+        setAccessResult(checkCompanyPlanAccess(null, moduleKey));
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Master admin bypasses all subscription locks
+    const roleUpper = (currentUser?.role || "").toUpperCase();
+    const emailLower = (currentUser?.email || "").toLowerCase();
+    if (roleUpper === "MASTER_ADMIN" || emailLower === "miratechindustries@gmail.com") {
+      if (isMounted) {
+        setAccessResult({
+          allowed: true,
+          currentPlanId: "enterprise",
+          currentPlanName: "Master Administrator",
+          requiredPlanId: "starter",
+          requiredPlanName: "Starter",
+          requiredPlanPrice: 0,
+          featureLabel: moduleKey,
+          featureDescription: "Full administrative access granted.",
+        });
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Subscribe in real-time to the company document
+    const unsub = onSnapshot(
+      doc(db, "companies", targetCompanyId),
+      (compSnap) => {
+        if (compSnap.exists()) {
+          const compData = compSnap.data();
+          if (isMounted) {
+            setAccessResult(checkCompanyPlanAccess(compData, moduleKey));
+            setLoading(false);
+          }
+        } else {
+          // Fallback check in businesses collection
+          getDoc(doc(db, "businesses", targetCompanyId))
+            .then((bizSnap) => {
+              if (bizSnap.exists()) {
+                if (isMounted) {
+                  setAccessResult(checkCompanyPlanAccess(bizSnap.data(), moduleKey));
+                  setLoading(false);
+                }
+              } else {
+                if (isMounted) {
+                  setAccessResult(checkCompanyPlanAccess(null, moduleKey));
+                  setLoading(false);
+                }
+              }
+            })
+            .catch(() => {
+              if (isMounted) {
+                setAccessResult(checkCompanyPlanAccess(null, moduleKey));
+                setLoading(false);
+              }
+            });
+        }
+      },
+      (err) => {
+        console.warn("[usePlanAccess Info] Error reading company profile:", err.message);
         if (isMounted) {
           setAccessResult(checkCompanyPlanAccess(null, moduleKey));
           setLoading(false);
         }
-        return;
       }
-
-      // Master admin bypasses all subscription locks
-      if (currentUser.role === "MASTER_ADMIN" || currentUser.email === "miratechindustries@gmail.com") {
-        if (isMounted) {
-          setAccessResult({
-            allowed: true,
-            currentPlanId: "enterprise",
-            currentPlanName: "Master Administrator",
-            requiredPlanId: "starter",
-            requiredPlanName: "Starter",
-            requiredPlanPrice: 0,
-            featureLabel: moduleKey,
-            featureDescription: "Full administrative access granted.",
-          });
-          setLoading(false);
-        }
-        return;
-      }
-
-      try {
-        const companyRef = doc(db, "companies", currentUser.businessId);
-        const snap = await getDoc(companyRef);
-        if (snap.exists()) {
-          const compData = snap.data();
-          const result = checkCompanyPlanAccess(compData, moduleKey);
-          if (isMounted) setAccessResult(result);
-        } else {
-          if (isMounted) setAccessResult(checkCompanyPlanAccess(null, moduleKey));
-        }
-      } catch (err) {
-        console.error("Plan access check error:", err);
-        if (isMounted) setAccessResult(checkCompanyPlanAccess(null, moduleKey));
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-
-    evaluatePlan();
+    );
 
     return () => {
       isMounted = false;
+      unsub();
     };
-  }, [currentUser, moduleKey]);
+  }, [currentUser?.businessId, currentUser?.companyId, currentUser?.role, currentUser?.email, moduleKey]);
 
   return { loading, accessResult, allowed: accessResult?.allowed ?? false };
 }

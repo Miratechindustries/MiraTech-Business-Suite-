@@ -75,6 +75,8 @@ export async function POST(req: NextRequest) {
             nextBillingDate: nextBillingDate,
             subscriptionPlanId: matchedPlan.id,
             subscriptionPlan: matchedPlan.name,
+            tier: matchedPlan.id,
+            plan: matchedPlan.id,
             lockedFeatures: lockedFeats,
             paddleSubscriptionId: subId,
             paddleCustomerId: customerId,
@@ -121,6 +123,8 @@ export async function POST(req: NextRequest) {
             lockedFeatures: defaultStarterLocked,
             subscriptionPlanId: "starter",
             subscriptionPlan: "Small Business (Starter)",
+            tier: "starter",
+            plan: "starter",
             updatedAt: new Date().toISOString(),
           };
 

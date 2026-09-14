@@ -49,16 +49,16 @@ export interface PlanAccessCheckResult {
 
 /**
  * Normalizes subscription plan input from company records.
- * Supports plan ID strings, legacy names, or defaults to "starter".
+ * Supports plan ID strings, legacy names, case variations, or defaults to "starter".
  */
 export function normalizePlanId(planInput?: string | null): SubscriptionTier {
   if (!planInput) return "starter";
-  const lower = planInput.toLowerCase().trim();
-  if (lower.includes("enterprise") || lower === "enterprise") return "enterprise";
-  if (lower.includes("elite") || lower === "elite") return "elite";
-  if (lower.includes("professional") || lower.includes("pro") || lower === "professional") return "professional";
-  if (lower.includes("growth") || lower === "growth") return "growth";
-  if (lower.includes("starter") || lower.includes("small") || lower === "starter") return "starter";
+  const lower = String(planInput).toLowerCase().trim();
+  if (lower.includes("enterprise")) return "enterprise";
+  if (lower.includes("elite")) return "elite";
+  if (lower.includes("professional") || lower.includes("pro") || lower.includes("standard")) return "professional";
+  if (lower.includes("growth")) return "growth";
+  if (lower.includes("starter") || lower.includes("small") || lower.includes("basic") || lower.includes("free")) return "starter";
   return "starter";
 }
 
@@ -69,6 +69,8 @@ export function checkCompanyPlanAccess(
   company: {
     subscriptionPlanId?: string;
     subscriptionPlan?: string;
+    plan?: string;
+    tier?: string;
     lockedFeatures?: string[];
     [key: string]: any;
   } | null | undefined,
@@ -85,7 +87,7 @@ export function checkCompanyPlanAccess(
     minimumPlanId: "professional" as const,
   };
 
-  const rawPlan = company?.subscriptionPlanId || company?.subscriptionPlan || "starter";
+  const rawPlan = company?.subscriptionPlanId || company?.subscriptionPlan || company?.plan || company?.tier || "starter";
   const currentTier = normalizePlanId(rawPlan);
   const currentPlanObj = SUBSCRIPTION_PLANS.find(p => p.id === currentTier) || SUBSCRIPTION_PLANS[0];
 
@@ -95,12 +97,16 @@ export function checkCompanyPlanAccess(
   const currentRank = PLAN_TIER_ORDER[currentTier] || 1;
   const requiredRank = PLAN_TIER_ORDER[requiredTier] || 1;
 
-  // Check explicit lockedFeatures array if present on company record
+  // Entitled by feature list in current plan or tier rank
+  const isFeatureInActivePlan = currentPlanObj.features.includes(featureId) || currentPlanObj.features.includes(normalizedKey);
+  const isRankSufficient = currentRank >= requiredRank;
+  
+  // Stale lockedFeatures from a lower plan should never lock out legitimately entitled features
   const isExplicitlyLocked = company?.lockedFeatures && Array.isArray(company.lockedFeatures)
-    ? company.lockedFeatures.includes(normalizedKey) || company.lockedFeatures.includes(featureId)
+    ? (company.lockedFeatures.includes(normalizedKey) || company.lockedFeatures.includes(featureId)) && !isFeatureInActivePlan
     : false;
 
-  const allowed = currentRank >= requiredRank && !isExplicitlyLocked;
+  const allowed = (isFeatureInActivePlan || isRankSufficient) && !isExplicitlyLocked;
 
   return {
     allowed,

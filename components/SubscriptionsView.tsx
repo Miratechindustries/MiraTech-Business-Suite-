@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '../lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { useUserStore } from '../lib/store';
+import { normalizePlanId } from '../lib/planAccess';
 import { 
   SUBSCRIPTION_PLANS, 
   SubscriptionPlan, 
@@ -38,7 +39,7 @@ import {
 } from 'lucide-react';
 
 export default function SubscriptionsView() {
-  const { currentUser } = useUserStore();
+  const { currentUser, setCurrentUser } = useUserStore();
   const [company, setCompany] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,9 +63,14 @@ export default function SubscriptionsView() {
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
   const [historyTab, setHistoryTab] = useState<'invoices' | 'logs'>('invoices');
 
+  const targetCompanyId = 
+    currentUser?.companyId || 
+    currentUser?.businessId || 
+    (typeof window !== 'undefined' ? localStorage.getItem("mira_active_workspace_id") : null);
+
   // Fetch past invoices/receipts using Paddle API data
-  const fetchPaymentHistory = useCallback(async (targetCompanyId?: string) => {
-    const compId = targetCompanyId || currentUser?.companyId;
+  const fetchPaymentHistory = useCallback(async (compIdParam?: string) => {
+    const compId = compIdParam || targetCompanyId;
     if (!compId) return;
     setLoadingInvoices(true);
     setInvoicesError(null);
@@ -83,7 +89,7 @@ export default function SubscriptionsView() {
     } finally {
       setLoadingInvoices(false);
     }
-  }, [currentUser?.companyId]);
+  }, [targetCompanyId]);
 
   const handleDownloadInvoice = async (txnId: string) => {
     try {
@@ -103,33 +109,52 @@ export default function SubscriptionsView() {
     }
   };
 
-  // Background sync hook verifying current user's Paddle subscription status against Firestore on page load
+  // Real-time synchronization of company subscription metrics
   useEffect(() => {
     setPaymentLogs(getPaddleEventLogs());
-    const syncSubscriptionStatus = async () => {
-      if (!currentUser?.companyId) return;
-      try {
-        const docRef = doc(db, 'companies', currentUser.companyId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const remoteData = docSnap.data();
-          setCompany((prev: any) => {
-            if (remoteData.subscriptionStatus && prev && remoteData.subscriptionStatus !== prev.subscriptionStatus) {
-              return { ...prev, ...remoteData };
-            }
-            return prev;
-          });
+    if (!targetCompanyId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const unsub = onSnapshot(
+      doc(db, 'companies', targetCompanyId),
+      (compSnap) => {
+        if (compSnap.exists()) {
+          setCompany({ id: compSnap.id, ...compSnap.data() });
+          setLoading(false);
+        } else {
+          // Fallback to businesses collection
+          getDoc(doc(db, 'businesses', targetCompanyId))
+            .then((bizSnap) => {
+              if (bizSnap.exists()) {
+                setCompany({ id: bizSnap.id, ...bizSnap.data() });
+              } else {
+                setError("Company record not found in system.");
+              }
+            })
+            .catch((err) => {
+              console.warn("Error finding company fallback:", err);
+              setError("Failed to load subscriber metrics.");
+            })
+            .finally(() => setLoading(false));
         }
-      } catch (err) {
-        console.warn("Background subscription status sync failed:", err);
+      },
+      (err) => {
+        console.warn("Subscriptions real-time listener error:", err);
+        setLoading(false);
       }
-    };
-    syncSubscriptionStatus();
-  }, [currentUser?.companyId]);
+    );
+
+    fetchPaymentHistory(targetCompanyId);
+
+    return () => unsub();
+  }, [targetCompanyId, fetchPaymentHistory]);
 
   const handleToggleAutoRenew = async (newVal: boolean) => {
-    if (!currentUser?.companyId) return;
-    if (currentUser.role !== 'BUSINESS_ADMIN' && currentUser.role !== 'MASTER_ADMIN') {
+    if (!targetCompanyId) return;
+    if (currentUser?.role !== 'BUSINESS_ADMIN' && currentUser?.role !== 'MASTER_ADMIN') {
       setError("Only Corporate Administrators can modify subscription continuity settings.");
       return;
     }
@@ -137,9 +162,9 @@ export default function SubscriptionsView() {
     setError(null);
     try {
       const updateData = { autoRenew: newVal };
-      await updateDoc(doc(db, 'companies', currentUser.companyId), updateData);
+      await setDoc(doc(db, 'companies', targetCompanyId), updateData, { merge: true });
       try {
-        await updateDoc(doc(db, 'businesses', currentUser.companyId), updateData);
+        await setDoc(doc(db, 'businesses', targetCompanyId), updateData, { merge: true });
       } catch (e) {}
 
       setCompany((prev: any) => ({ ...prev, autoRenew: newVal }));
@@ -147,7 +172,7 @@ export default function SubscriptionsView() {
       await logAction(
         'Subscription Auto-Renew Updated',
         `Auto-renew continuity toggled to ${newVal ? 'ON' : 'OFF'}`,
-        currentUser.companyId
+        targetCompanyId
       );
     } catch (err: any) {
       console.error(err);
@@ -156,36 +181,6 @@ export default function SubscriptionsView() {
       setAutoRenewUpdating(false);
     }
   };
-
-  const fetchCompanyDetails = useCallback(async () => {
-    if (!currentUser?.companyId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const docRef = doc(db, 'companies', currentUser.companyId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setCompany(data);
-      } else {
-        setError("Company record not found in system.");
-      }
-    } catch (err: any) {
-      console.error(err);
-      setError("Failed to load subscriber metrics.");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser?.companyId]);
-
-  useEffect(() => {
-    fetchCompanyDetails();
-    if (currentUser?.companyId) {
-      fetchPaymentHistory(currentUser.companyId);
-    }
-  }, [fetchCompanyDetails, fetchPaymentHistory, currentUser?.companyId]);
 
   // Check Paddle configuration on mount
   useEffect(() => {
@@ -229,13 +224,13 @@ export default function SubscriptionsView() {
           paddle.Checkout.open({
             items: [{ priceId, quantity: 1 }],
             customData: {
-              companyId: currentUser.companyId,
-              userId: currentUser.id,
-              userEmail: currentUser.email,
+              companyId: targetCompanyId,
+              userId: currentUser?.id,
+              userEmail: currentUser?.email,
               tier: plan.id,
             },
             customer: {
-              email: currentUser.email,
+              email: currentUser?.email,
             },
             settings: {
               variant: 'one-page',
@@ -258,7 +253,7 @@ export default function SubscriptionsView() {
   };
 
   const handlePaddleCheckoutSuccess = async (plan: SubscriptionPlan, eventData?: any) => {
-    if (!currentUser?.companyId) return;
+    if (!targetCompanyId) return;
 
     try {
       const planLockedFeats = getLockedFeaturesForPlan(plan.id);
@@ -279,6 +274,8 @@ export default function SubscriptionsView() {
       const updateData: any = {
         subscriptionPlanId: plan.id,
         subscriptionPlan: plan.name,
+        plan: plan.id,
+        tier: plan.id,
         subscriptionBillingCycle: billingCycle,
         lockedFeatures: planLockedFeats,
         status: 'active',
@@ -292,26 +289,37 @@ export default function SubscriptionsView() {
         lastPaymentAmount: calculatedPrice,
         paddleSubscriptionId: subId,
         paddleCustomerId: customerId,
+        updatedAt: new Date().toISOString(),
       };
 
-      await updateDoc(doc(db, 'companies', currentUser.companyId), updateData);
+      await setDoc(doc(db, 'companies', targetCompanyId), updateData, { merge: true });
       
       try {
-        await updateDoc(doc(db, 'businesses', currentUser.companyId), updateData);
+        await setDoc(doc(db, 'businesses', targetCompanyId), updateData, { merge: true });
       } catch (err) {
         console.warn("Businesses mirror reference not present.");
+      }
+
+      if (currentUser) {
+        setCurrentUser({
+          ...currentUser,
+          companyId: targetCompanyId,
+          businessId: targetCompanyId,
+          subscriptionPlanId: plan.id,
+          subscriptionPlan: plan.name,
+        });
       }
 
       await logAction(
         'Paddle Subscription Activated',
         `Workspace upgraded to "${plan.name}" (${formattedPrice}/${billingCycle === 'annual' ? 'yr' : 'mo'}) via Paddle Billing. Subscription ID: ${subId}`,
-        currentUser.companyId
+        targetCompanyId
       );
 
       setCompany((prev: any) => ({ ...prev, ...updateData }));
       setSuccess(`Transaction Processed via Paddle! Workspace upgraded to "${plan.name}" with real-time provisioning.`);
       setSelectedPlan(null);
-      fetchPaymentHistory(currentUser.companyId);
+      fetchPaymentHistory(targetCompanyId);
     } catch (err: any) {
       console.error(err);
       setError("Failed to record Paddle upgrade in workspace: " + err.message);
@@ -319,7 +327,7 @@ export default function SubscriptionsView() {
   };
 
   const handleSimulatePaddleSandboxUpgrade = async () => {
-    if (!selectedPlan || !currentUser?.companyId) return;
+    if (!selectedPlan || !targetCompanyId) return;
     setIsProcessing(true);
     setError(null);
 
@@ -337,7 +345,7 @@ export default function SubscriptionsView() {
   };
 
   const handleOpenCustomerPortal = async () => {
-    if (!currentUser?.companyId) return;
+    if (!targetCompanyId) return;
     setIsOpeningPortal(true);
     setError(null);
 
@@ -345,7 +353,7 @@ export default function SubscriptionsView() {
       const res = await fetch('/api/paddle/portal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId: currentUser.companyId }),
+        body: JSON.stringify({ companyId: targetCompanyId }),
       });
 
       const data = await res.json();
@@ -386,7 +394,7 @@ export default function SubscriptionsView() {
     };
   };
 
-  if (loading) {
+  if (loading && !company) {
     return (
       <div className="flex flex-col items-center justify-center p-12 bg-white border border-slate-200 rounded-2xl h-64">
         <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
@@ -395,7 +403,7 @@ export default function SubscriptionsView() {
     );
   }
 
-  const currentPlanId = company?.subscriptionPlanId || 'starter';
+  const currentPlanId = normalizePlanId(company?.subscriptionPlanId || company?.subscriptionPlan || company?.plan || company?.tier || 'starter');
   const currentPlan = SUBSCRIPTION_PLANS.find(p => p.id === currentPlanId) || SUBSCRIPTION_PLANS[0];
   const trial = getTrialDetails();
   const isTrial = company?.subscriptionStatus === 'trialing' || !company?.subscriptionStatus;

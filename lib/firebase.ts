@@ -12,7 +12,8 @@ import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/fire
 import firebaseConfig from "../firebase-applet-config.json";
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-export const db = getFirestore(app, (firebaseConfig.firestoreDatabaseId as string) || undefined);
+const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId;
+export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
 export const auth = getAuth(app);
 
 export const initAuth = (
