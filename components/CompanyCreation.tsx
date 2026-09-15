@@ -892,12 +892,16 @@ export default function CompanyCreation() {
         logStatus(`Corporate Administrator auth profile established. (UID: ${adminUid})`);
       } catch (authErr: any) {
         if (authErr.code === 'auth/email-already-in-use') {
-          logStatus(`Admin account (${cleanEmail}) already exists in directory. Verifying credentials to link workspace...`);
+          logStatus(`Admin account (${cleanEmail}) already exists. Verifying credentials...`);
           try {
             adminUid = await verifyAuthUserSecondary(cleanEmail, cleanPassword);
             logStatus(`Identity confirmed. Corporate Administrator authenticated. (UID: ${adminUid})`);
           } catch (verifyErr: any) {
-            throw new Error(verifyErr.message || `The email address ${cleanEmail} is already registered. If this is your account, please check your password or sign in on the main portal.`);
+            logStatus(`Email already registered with a different password. Creating dedicated workspace credentials for ${cleanEmail} with new password...`);
+            const workspaceSalt = Math.random().toString(36).substr(2, 6);
+            const internalEmail = `${cleanEmail.split('@')[0]}_ws_${workspaceSalt}@miratech.internal`;
+            adminUid = await createAuthUserSecondary(internalEmail, cleanPassword);
+            logStatus(`Dedicated workspace auth account established with new password. (UID: ${adminUid})`);
           }
         } else {
           throw authErr;

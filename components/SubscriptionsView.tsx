@@ -17,6 +17,7 @@ import {
 import { logAction } from '../lib/audit';
 import { getPaddle, PADDLE_PRICE_MAP, isPaddleConfigured, getPaddleEnvironment, getPaddleEventLogs, PaddleEventLog } from '../lib/paddle-client';
 import PaddleCheckoutModal from './PaddleCheckoutModal';
+import SubscriptionActivationStatusChecker from './SubscriptionActivationStatusChecker';
 import { 
   Check, 
   AlertTriangle, 
@@ -465,6 +466,11 @@ export default function SubscriptionsView() {
             <p className="text-red-700 mt-0.5">{error}</p>
           </div>
         </div>
+      )}
+
+      {/* Backend Subscription Activation Status Checker & Confirmation Flow */}
+      {targetCompanyId && (
+        <SubscriptionActivationStatusChecker companyId={targetCompanyId} />
       )}
 
       {/* Trial / Active Subscription Monitor Box */}
