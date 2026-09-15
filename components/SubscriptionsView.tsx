@@ -277,7 +277,7 @@ export default function SubscriptionsView() {
       const customerId = eventData?.customer_id || `ctm_pdl_${Date.now()}`;
       
       const calculatedPrice = getPlanPrice(plan, billingCycle);
-      const formattedPrice = formatPlanPrice(plan, billingCycle, company?.currency || 'USD');
+      const formattedPrice = formatPlanPrice(plan, billingCycle, 'ZAR');
 
       const nextRenewal = new Date();
       if (billingCycle === 'annual') {
@@ -896,7 +896,7 @@ export default function SubscriptionsView() {
                   <h4 className="font-extrabold text-slate-900 text-xs tracking-tight line-clamp-1">{plan.name}</h4>
                   <div className="pt-2">
                     <span className="text-xl font-black text-slate-900">
-                      {formatPlanPrice(plan, billingCycle, company?.currency || 'USD')}
+                      {formatPlanPrice(plan, billingCycle, 'ZAR')}
                     </span>
                     <span className="text-[10px] font-bold text-slate-400">
                       /{billingCycle === 'annual' ? 'yr' : 'mo'}
@@ -1004,7 +1004,7 @@ export default function SubscriptionsView() {
                 <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Paddle Billing Gateway</span>
                 <h3 className="text-lg font-bold mt-1">Upgrade to {selectedPlan.name}</h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {formatPlanPrice(selectedPlan, billingCycle, company?.currency || 'USD')} / {billingCycle === 'annual' ? 'year' : 'month'} • Merchant of Record checkout
+                  {formatPlanPrice(selectedPlan, billingCycle, 'ZAR')} / {billingCycle === 'annual' ? 'year' : 'month'} • Merchant of Record checkout
                 </p>
               </div>
               <button

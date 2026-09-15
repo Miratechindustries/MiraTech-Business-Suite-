@@ -1397,7 +1397,6 @@ export default function CompanyCreation() {
                 </div>
               </div>
             </div>
-
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 flex items-center gap-3">
               <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
               <span>Passwords are encrypted using modern cryptographic standards and securely isolated per corporate tenant.</span>

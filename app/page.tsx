@@ -218,12 +218,12 @@ export default function HomePage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs">
                     <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Gross Billings</span>
-                    <p className="text-xl sm:text-2xl font-black text-slate-900 mt-1">E3,255.00</p>
+                    <p className="text-xl sm:text-2xl font-black text-slate-900 mt-1">R3,255.00</p>
                     <span className="text-[10px] text-emerald-600 font-bold mt-1 block">Active Quotations</span>
                   </div>
                   <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs">
                     <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Invoiced Receivables</span>
-                    <p className="text-xl sm:text-2xl font-black text-blue-600 mt-1">E4,611.00</p>
+                    <p className="text-xl sm:text-2xl font-black text-blue-600 mt-1">R4,611.00</p>
                     <span className="text-[10px] text-slate-500 font-medium mt-1 block">Across Issued Invoices</span>
                   </div>
                   <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs">
@@ -247,7 +247,7 @@ export default function HomePage() {
                     <div className="space-y-2 text-xs text-slate-600">
                       <div className="flex justify-between py-1 border-b border-slate-100">
                         <span>QT-FINANCE-1001</span>
-                        <span className="font-bold text-slate-900">E358.00</span>
+                        <span className="font-bold text-slate-900">R358.00</span>
                       </div>
                       <div className="flex justify-between py-1 border-b border-slate-100">
                         <span>Client: Mira Mazibuko</span>
@@ -435,7 +435,7 @@ export default function HomePage() {
                       </p>
                     </div>
                     <div>
-                      <span className="text-3xl font-black text-slate-900">${plan.price}</span>
+                      <span className="text-3xl font-black text-slate-900">R{plan.price}</span>
                       <span className="text-xs text-slate-500">/mo</span>
                     </div>
                     <div className="text-xs text-slate-600 space-y-1 border-t border-slate-100 pt-3">

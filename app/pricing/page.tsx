@@ -134,7 +134,7 @@ export default function PricingPage() {
 
                     <div className="pt-2">
                       <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-black text-slate-900">${price}</span>
+                        <span className="text-3xl font-black text-slate-900">R{price}</span>
                         <span className="text-xs text-slate-500 font-medium">/{billingCycle === 'annual' ? 'year' : 'month'}</span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-0.5">

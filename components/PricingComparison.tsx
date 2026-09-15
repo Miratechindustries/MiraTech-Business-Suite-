@@ -184,7 +184,7 @@ export default function PricingComparison({ onSelectPlan, className = '' }: Pric
                   <div className="mb-6">
                     <div className="flex items-baseline gap-1">
                       <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
-                        R{price.toLocaleString()}
+                        {formatPlanPrice(plan, billingCycle, 'ZAR')}
                       </span>
                       <span className="text-xs text-slate-500 dark:text-slate-400">
                         /{billingCycle === 'annual' ? 'yr' : 'mo'}
