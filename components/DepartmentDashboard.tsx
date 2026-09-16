@@ -1218,7 +1218,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
                 Manage your project tasks and milestones.
               </p>
             </div>
-            <ProjectTaskDashboard departmentId={depLower} />
+            <ProjectTaskDashboard companyId={businessId!} projectId="active-project-id" />
           </div>
         )}
 

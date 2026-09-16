@@ -170,7 +170,11 @@
         "endDate": { "type": "string" },
         "clientId": { "type": "string" },
         "budget": { "type": "number" },
-        "createdAt": { "type": "string" }
+        "createdAt": { "type": "string" },
+        "completedTaskCount": { "type": "number" },
+        "totalTaskCount": { "type": "number" },
+        "budgetUsed": { "type": "number" },
+        "lastUpdatedAt": { "type": "string" }
       },
       "required": ["ownerId", "name", "status", "startDate", "budget", "createdAt"]
     },

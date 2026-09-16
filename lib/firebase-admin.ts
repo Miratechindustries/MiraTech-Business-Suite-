@@ -12,6 +12,7 @@ import {
   limit, 
   orderBy, 
   writeBatch, 
+  runTransaction,
   Query, 
   WhereFilterOp,
   OrderByDirection
@@ -154,6 +155,30 @@ export const adminDb = {
   },
   batch: () => {
     return new AdminBatchWrapper();
+  },
+  runTransaction: async (updateFunction: (transaction: any) => Promise<any>) => {
+    return await runTransaction(db, async (transaction) => {
+      const wrappedTransaction = {
+        get: async (docRef: any) => {
+          const rawRef = docRef._ref || docRef;
+          const snap = await transaction.get(rawRef);
+          return wrapDocSnapshot(snap);
+        },
+        update: (docRef: any, data: any) => {
+          const rawRef = docRef._ref || docRef;
+          transaction.update(rawRef, data);
+        },
+        set: (docRef: any, data: any, options?: { merge?: boolean }) => {
+          const rawRef = docRef._ref || docRef;
+          transaction.set(rawRef, data, options || {});
+        },
+        delete: (docRef: any) => {
+          const rawRef = docRef._ref || docRef;
+          transaction.delete(rawRef);
+        }
+      };
+      return await updateFunction(wrappedTransaction);
+    });
   }
 };
 

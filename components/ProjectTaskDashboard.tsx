@@ -15,17 +15,16 @@ interface Task {
   createdAt: string;
 }
 
-export default function ProjectTaskDashboard({ departmentId }: { departmentId: string }) {
+export default function ProjectTaskDashboard({ companyId, projectId }: { companyId: string; projectId: string }) {
   const { currentUser } = useUserStore();
-  const businessId = currentUser?.businessId;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    if (!businessId) return;
-    const tasksRef = collection(db, "companies", businessId, "tasks");
+    if (!companyId || !projectId) return;
+    const tasksRef = collection(db, "companies", companyId, "tasks");
     const q = query(tasksRef, orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list: Task[] = [];
@@ -36,22 +35,23 @@ export default function ProjectTaskDashboard({ departmentId }: { departmentId: s
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [businessId]);
+  }, [companyId, projectId]);
 
   const addTask = async () => {
-    if (!newTaskTitle.trim() || !businessId || !currentUser?.uid) {
+    if (!newTaskTitle.trim() || !companyId || !currentUser?.uid) {
       console.error("Missing required information to add task");
       return;
     }
     setAdding(true);
     try {
-      await addDoc(collection(db, "companies", businessId, "tasks"), {
+      await addDoc(collection(db, "companies", companyId, "tasks"), {
         title: newTaskTitle,
         description: "",
         status: "todo",
         priority: "medium",
         createdAt: new Date().toISOString(),
-        ownerId: currentUser.uid
+        ownerId: currentUser.uid,
+        projectId: projectId
       });
       setNewTaskTitle("");
     } catch (err) {
@@ -61,19 +61,27 @@ export default function ProjectTaskDashboard({ departmentId }: { departmentId: s
     }
   };
 
-  const updateTaskStatus = async (id: string, status: "todo" | "in-progress" | "done") => {
-    if (!businessId) return;
+  const updateTaskStatus = async (id: string, newStatus: "todo" | "in-progress" | "done") => {
+    if (!companyId || !projectId) return;
     try {
-      await updateDoc(doc(db, "companies", businessId, "tasks", id), { status });
+      const response = await fetch('/api/projects/update-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId, projectId, taskId: id, newStatus }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update task');
+      }
     } catch (err) {
       console.error("Failed to update task:", err);
     }
   };
 
   const deleteTask = async (id: string) => {
-    if (!businessId) return;
+    if (!companyId) return;
     try {
-      await deleteDoc(doc(db, "companies", businessId, "tasks", id));
+      await deleteDoc(doc(db, "companies", companyId, "tasks", id));
     } catch (err) {
       console.error("Failed to delete task:", err);
     }

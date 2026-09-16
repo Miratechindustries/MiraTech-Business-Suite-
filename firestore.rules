@@ -92,6 +92,24 @@ service cloud.firestore {
                       exists(/databases/$(database)/documents/companies/$(companyId)/campaigns/$(request.resource.data.campaignId));
       }
 
+      // Tasks (Action-Based Updates)
+      match /tasks/{taskId} {
+        allow read: if verifyTenant(companyId);
+        allow create: if verifyTenant(companyId);
+        allow update: if verifyTenant(companyId) && 
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']);
+        allow delete: if verifyTenant(companyId);
+      }
+
+      // Projects (Hardened)
+      match /projects/{projectId} {
+        allow read: if verifyTenant(companyId);
+        allow create: if verifyTenant(companyId);
+        allow update: if verifyTenant(companyId) && 
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId']);
+        allow delete: if verifyTenant(companyId);
+      }
+
       match /{subcollection}/{docId} {
         allow read: if verifyTenant(companyId) && (verifyResourceTenant() || true);
         allow create: if verifyTenant(companyId) && verifyCreationTenant();
