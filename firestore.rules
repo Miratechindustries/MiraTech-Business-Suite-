@@ -18,6 +18,16 @@ service cloud.firestore {
       );
     }
 
+    function isOwnerOrAdmin(companyId) {
+      let userRef = /databases/$(database)/documents/users/$(request.auth.uid);
+      return isMasterAdmin() || (
+        isSignedIn() &&
+        exists(userRef) &&
+        get(userRef).data.companyId == companyId &&
+        (get(userRef).data.role == 'SUPER_ADMIN' || get(userRef).data.role == 'BUSINESS_ADMIN')
+      );
+    }
+
     function getUserCompanyId() {
       return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) ?
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId : null;
@@ -64,7 +74,9 @@ service cloud.firestore {
 
     // Companies & Subcollections
     match /companies/{companyId} {
-      allow read, write: if verifyTenant(companyId);
+      allow read: if verifyTenant(companyId);
+      allow create: if verifyTenant(companyId);
+      allow update: if isOwnerOrAdmin(companyId);
 
       match /{subcollection}/{docId} {
         allow read: if verifyTenant(companyId) && (verifyResourceTenant() || true);

@@ -17,6 +17,7 @@ import {
 } from '../lib/subscriptions';
 import { getPaddle, PADDLE_PRICE_MAP, isPaddleConfigured } from '../lib/paddle-client';
 import { useToastStore } from '../lib/store';
+import ProvisioningSuccessModal from './ProvisioningSuccessModal';
 import { 
   Building2, 
   User, 
@@ -164,6 +165,7 @@ export default function CompanyCreation() {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusLogs, setStatusLogs] = useState<string[]>([]);
@@ -1052,21 +1054,8 @@ export default function CompanyCreation() {
       }
     } catch (_) {}
     localStorage.setItem('mira_post_register_redirect', 'business_admin');
-    setSuccess(true);
-    addToast("Company workspace created successfully! Directing to Business Admin Dashboard...", "success");
-
-    // Auto sign-in to seamlessly enter Business Admin Dashboard
-    setTimeout(async () => {
-      try {
-        if (!isMatchingActiveSession && cleanPassword) {
-          await emailSignIn(cleanEmail, cleanPassword);
-        }
-        window.location.href = '/';
-      } catch (signInErr) {
-        console.warn("Auto-signin redirected to manual gateway:", signInErr);
-        window.location.href = '/';
-      }
-    }, 1500);
+    setShowSuccessModal(true);
+    addToast("Company workspace created successfully!", "success");
   };
 
   // Final Registration Submission with Mandatory Paddle Billing Checkout Step
@@ -2735,6 +2724,26 @@ export default function CompanyCreation() {
         </div>
       </div>
 
+      {/* Registration Modals */}
+      <ProvisioningSuccessModal 
+        isOpen={showSuccessModal} 
+        onComplete={async () => {
+          try {
+            const cleanEmail = (accountEmail || '').trim();
+            const cleanPassword = (accountPassword || '').trim();
+            const isMatchingActiveSession = Boolean(
+              auth?.currentUser?.email && 
+              auth.currentUser.email.toLowerCase() === cleanEmail.toLowerCase()
+            );
+            if (!isMatchingActiveSession && cleanPassword) {
+              await emailSignIn(cleanEmail, cleanPassword);
+            }
+            window.location.href = '/dashboard';
+          } catch (e) {
+            window.location.href = '/dashboard';
+          }
+        }} 
+      />
     </div>
   );
 }
