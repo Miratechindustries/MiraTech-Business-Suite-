@@ -43,6 +43,8 @@ import {
 } from "recharts";
 import { motion } from "motion/react";
 import { useUserStore, useToastStore } from "../lib/store";
+import { db } from "../lib/firebase";
+import { collection, onSnapshot, query } from "firebase/firestore";
 
 interface SocialAccount {
   id: string;
@@ -144,9 +146,28 @@ const PLATFORM_BREAKDOWN = [
 export default function SocialMediaHub({ companyId }: { companyId: string }) {
   const addToast = useToastStore((state) => state.addToast);
   const [activeTab, setActiveTab] = useState<"posts" | "analytics" | "accounts">("posts");
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
   const [posts, setPosts] = useState<ScheduledPost[]>(INITIAL_POSTS);
   const [accounts, setAccounts] = useState<SocialAccount[]>(INITIAL_ACCOUNTS);
   
+  useEffect(() => {
+    const qCampaigns = query(collection(db, 'companies', companyId, 'campaigns'));
+    const qLeads = query(collection(db, 'companies', companyId, 'leads'));
+    
+    const unsubCampaigns = onSnapshot(qCampaigns, (snapshot) => {
+      setCampaigns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    const unsubLeads = onSnapshot(qLeads, (snapshot) => {
+      setLeads(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    
+    return () => {
+      unsubCampaigns();
+      unsubLeads();
+    };
+  }, [companyId]);
+
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [platformFilter, setPlatformFilter] = useState<string>("all");

@@ -78,6 +78,20 @@ service cloud.firestore {
       allow create: if verifyTenant(companyId);
       allow update: if isOwnerOrAdmin(companyId);
 
+      // Marketing Module
+      match /campaigns/{campaignId} {
+        allow read: if verifyTenant(companyId);
+        allow create, update: if verifyTenant(companyId) && verifyCreationTenant();
+        allow delete: if verifyTenant(companyId) && verifyResourceTenant();
+      }
+      
+      match /leads/{leadId} {
+        allow list: if verifyTenant(companyId) && resource.data.companyId == request.auth.token.companyId;
+        // Master Gate: Leads can only be written if the campaign belongs to the authenticated companyId.
+        allow create: if verifyTenant(companyId) && 
+                      exists(/databases/$(database)/documents/companies/$(companyId)/campaigns/$(request.resource.data.campaignId));
+      }
+
       match /{subcollection}/{docId} {
         allow read: if verifyTenant(companyId) && (verifyResourceTenant() || true);
         allow create: if verifyTenant(companyId) && verifyCreationTenant();
