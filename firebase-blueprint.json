@@ -153,6 +153,9 @@
         "description": { "type": "string" },
         "status": { "type": "string", "enum": ["todo", "in-progress", "done"] },
         "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "projectId": { "type": "string", "description": "Associated project ID." },
+        "departmentId": { "type": "string", "description": "Associated department ID." },
+        "assignedEmployeeId": { "type": "string", "description": "ID of the assigned employee." },
         "createdAt": { "type": "string" }
       },
       "required": ["ownerId", "title", "status", "priority", "createdAt"]
@@ -163,6 +166,7 @@
       "type": "object",
       "properties": {
         "ownerId": { "type": "string" },
+        "departmentId": { "type": "string", "description": "Associated department ID." },
         "name": { "type": "string" },
         "description": { "type": "string" },
         "status": { "type": "string", "enum": ["planning", "in-progress", "completed", "on-hold"] },
@@ -215,6 +219,18 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["title", "slug", "currentVersion", "effectiveDate", "content"]
+    },
+    "Department": {
+      "title": "Department",
+      "description": "HR and Operations department definition.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "name": { "type": "string" },
+        "totalCapacity": { "type": "number" },
+        "assignedBudget": { "type": "number" }
+      },
+      "required": ["companyId", "name", "totalCapacity", "assignedBudget"]
     },
     "Campaign": {
       "title": "Campaign",
@@ -298,6 +314,10 @@
     "/companies/{companyId}/support_tickets/{ticketId}": {
       "schema": "SupportTicket",
       "description": "Support tickets sub-directory."
+    },
+    "/companies/{companyId}/departments/{departmentId}": {
+      "schema": "Department",
+      "description": "Departments sub-directory."
     },
     "/companies/{companyId}/campaigns/{campaignId}": {
       "schema": "Campaign",

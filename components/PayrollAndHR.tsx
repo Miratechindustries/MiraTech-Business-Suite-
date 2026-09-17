@@ -98,7 +98,7 @@ interface Employee {
   };
 }
 
-const HRManagement = () => {
+const HRManagement = ({ operationalData }: { operationalData: any }) => {
   const { currentUser } = useUserStore();
   const addToast = useToastStore((state) => state.addToast);
   
@@ -111,6 +111,7 @@ const HRManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDeptFilter, setSelectedDeptFilter] = useState("All");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState("All");
+
 
   // Selected employee in active modal
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
@@ -1329,7 +1330,7 @@ const HRManagement = () => {
   );
 };
 
-export default function PayrollAndHR() {
+export default function PayrollAndHR({ operationalData }: { operationalData?: any }) {
   const [activeModule, setActiveModule] = useState<"payroll" | "hr" | "history">("payroll");
 
   return (
@@ -1362,7 +1363,7 @@ export default function PayrollAndHR() {
         {activeModule === "payroll" ? (
           <Payroll />
         ) : activeModule === "hr" ? (
-          <HRManagement />
+          <HRManagement operationalData={operationalData} />
         ) : (
           <PayrollHistoricalLogs />
         )}

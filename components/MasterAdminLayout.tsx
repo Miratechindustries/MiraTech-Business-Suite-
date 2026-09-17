@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useUserStore } from "../lib/store";
 import { logout } from "../lib/firebase";
-import { LayoutDashboard, Users, Building2, ShieldAlert, LogOut, FileText, ShieldCheck, X, ShoppingCart, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Users, Building2, ShieldAlert, LogOut, FileText, ShieldCheck, X, ShoppingCart, ChevronRight, LifeBuoy } from "lucide-react";
 import LoadingSkeleton from "./LoadingSkeleton";
 import MasterAdminDashboard from "./MasterAdminDashboard";
 import UserManagement from "./UserManagement";
@@ -12,6 +12,7 @@ import CompanyCreation from "./CompanyCreation";
 import CompaniesTable from "./CompaniesTable";
 import SecurityOperations from "./SecurityOperations";
 import POSHub from "./POSHub";
+import SupportDeskView from "./SupportDeskView";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 
 export default function MasterAdminLayout() {
@@ -58,6 +59,7 @@ export default function MasterAdminLayout() {
     { id: "logs", label: "Audit Logs", icon: ShieldAlert },
     { id: "security", label: "Cyber Security Shield", icon: ShieldCheck },
     { id: "pos", label: "POS System", icon: ShoppingCart },
+    { id: "support", label: "Support Desk", icon: LifeBuoy },
   ];
 
   const NavItem = ({ tab }: { tab: typeof navItems[0] }) => {
@@ -249,6 +251,7 @@ export default function MasterAdminLayout() {
           {activeTab === "logs" && <AuditLogs />}
           {activeTab === "security" && <SecurityOperations />}
           {activeTab === "pos" && <POSHub />}
+          {activeTab === "support" && <SupportDeskView />}
         </main>
       </div>
     </div>

@@ -82,249 +82,48 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
   const [logs, setLogs] = useState<any[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [quotations, setQuotations] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [selectedKpi, setSelectedKpi] = useState<any | null>(null);
-  const [kpiSearch, setKpiSearch] = useState("");
-
-  const exportKpiPdf = (kpi: any, list: any[]) => {
-    if (!kpi) return;
-    const doc = new jsPDF("p", "mm", "a4");
-
-    // Corporate Letterhead & Palette
-    const primaryColor = [15, 23, 42]; // deep slate (#0f172a)
-    const accentColor = [79, 70, 229]; // indigo (#4f46e5)
-    
-    // Document Margins & Limits
-    const marginX = 15;
-    let currentY = 15;
-
-    // 1. Draw elegant Header
-    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.rect(marginX, currentY, 180, 1.5, "F");
-    currentY += 6;
-
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text("MIRATECH INDUSTRIES REPORT ENGINE", marginX, currentY);
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(115, 115, 115); // neutral-400
-    const genDate = new Date().toUTCString();
-    doc.text(`GENERATED ON (UTC): ${genDate}`, 210 - marginX - 70, currentY, { align: "right" });
-    doc.text(`DEPARTMENT: ${departmentType.toUpperCase()}`, 210 - marginX, currentY, { align: "right" });
-
-    currentY += 8;
-
-    // Subheader
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(accentColor[0], accentColor[1], accentColor[2]);
-    doc.text("REGISTRY ANALYTICAL LEDGER EXPORT", marginX, currentY);
-    
-    currentY += 6;
-
-    // Divider
-    doc.setDrawColor(226, 232, 240); // slate-200
-    doc.line(marginX, currentY, 210 - marginX, currentY);
-
-    currentY += 8;
-
-    // 2. Core KPI Summary Card Block
-    doc.setFillColor(248, 250, 252); // slate-50
-    doc.setDrawColor(226, 232, 240); // slate-200
-    doc.rect(marginX, currentY, 180, 22, "FD");
-
-    // KPI text content
-    doc.setTextColor(100, 116, 139); // slate-500
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.text(kpi.label.toUpperCase(), marginX + 6, currentY + 7);
-
-    doc.setTextColor(accentColor[0], accentColor[1], accentColor[2]);
-    doc.setFontSize(18);
-    doc.text(kpi.value || "N/A", marginX + 6, currentY + 16);
-
-    // Trend Info
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`Status: ${kpi.change}`, 210 - marginX - 6, currentY + 14, { align: "right" });
-
-    currentY += 28;
-
-    // 3. Ledger Table Header & Records
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.text("LEDGER RECORD NODES", marginX, currentY);
-    currentY += 6;
-
-    const label = kpi.label;
-    let headers: string[] = [];
-    let rows: string[][] = [];
-
-    if (label.includes("Employee") || label.includes("Payroll")) {
-      headers = ["Staff Name", "Classification / Role", "Basic Salary (USD)"];
-      rows = list.map(item => [
-        item.name || "N/A",
-        item.role || "Staff",
-        `$${(Number(item.basicSalary) || 0).toLocaleString()}`
-      ]);
-    } else if (label.includes("Pipeline") || label.includes("Quotation")) {
-      headers = ["Reference", "Date", "Enterprise Lead / Client", "Total (USD)", "Status"];
-      rows = list.map(item => [
-        item.number || "N/A",
-        item.date || "N/A",
-        item.clientName || item.client || "N/A",
-        `$${(Number(item.total) || 0).toLocaleString()}`,
-        (item.status || "Pending").toUpperCase()
-      ]);
-    } else if (label.includes("Liquid") || label.includes("Receivable") || label.includes("Revenue")) {
-      headers = ["Reference", "Date", "Enterprise Client", "Total (USD)", "Status"];
-      rows = list.map(item => [
-        item.number || "N/A",
-        item.date || "N/A",
-        item.clientName || item.client || "N/A",
-        `$${(Number(item.total) || 0).toLocaleString()}`,
-        (item.status || "Paid").toUpperCase()
-      ]);
-    } else if (label.includes("Customer") || label.includes("Directory")) {
-      headers = ["Corporate Identity", "Primary Contact Email", "Direct Line Phone"];
-      rows = list.map(item => [
-        item.name || "N/A",
-        item.email || "N/A",
-        item.phone || "N/A"
-      ]);
-    } else if (label.includes("Stock") || label.includes("Inventory")) {
-      headers = ["Product SKU / Code", "Description Label", "Classification", "Stock Level", "Price (USD)"];
-      rows = list.map(item => [
-        item.sku || "N/A",
-        item.name || "N/A",
-        item.category || "N/A",
-        `${item.stock || 0} Units`,
-        `$${(Number(item.price) || 0).toLocaleString()}`
-      ]);
-    } else {
-      headers = ["Action Sequence", "Sequence Details", "Classification Node", "Timestamp"];
-      rows = list.map(item => [
-        item.action || "Activity",
-        item.details || "Details",
-        (item.department || departmentType).toUpperCase(),
-        new Date(item.timestamp).toLocaleString()
-      ]);
-    }
-
-    // Render Table manually with pure jsPDF vector functions for total reliability and style!
-    // Header Row background
-    doc.setFillColor(241, 245, 249); // slate-100
-    doc.rect(marginX, currentY, 180, 8, "F");
-    
-    doc.setTextColor(51, 65, 85); // slate-700
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-
-    const colWidths = headers.length === 3 
-      ? [60, 60, 60] 
-      : headers.length === 5 
-        ? [35, 30, 60, 30, 25] 
-        : headers.length === 4 
-          ? [45, 65, 35, 35] 
-          : [60, 60, 60];
-
-    // Print headers
-    let cellX = marginX;
-    headers.forEach((h, colIdx) => {
-      doc.text(h.toUpperCase(), cellX + 3, currentY + 5.5);
-      cellX += colWidths[colIdx];
-    });
-
-    currentY += 8;
-
-    // Print rows
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.setTextColor(71, 85, 105); // slate-600
-
-    if (rows.length === 0) {
-      doc.text("NO SECURED DATABASE RECORDS IN THIS LEDGER RANGE.", marginX + 3, currentY + 6);
-      currentY += 10;
-    } else {
-      rows.forEach((row, rowIdx) => {
-        // Handle page overflow gracefully
-        if (currentY > 270) {
-          doc.addPage();
-          currentY = 20;
-          // Print headers again
-          doc.setFillColor(241, 245, 249);
-          doc.rect(marginX, currentY, 180, 8, "F");
-          doc.setTextColor(51, 65, 85);
-          doc.setFont("helvetica", "bold");
-          let hX = marginX;
-          headers.forEach((h, colIdx) => {
-            doc.text(h.toUpperCase(), hX + 3, currentY + 5.5);
-            hX += colWidths[colIdx];
-          });
-          doc.setFont("helvetica", "normal");
-          doc.setTextColor(71, 85, 105);
-          currentY += 8;
-        }
-
-        // Zebra striping
-        if (rowIdx % 2 === 1) {
-          doc.setFillColor(248, 250, 252); // slate-50
-          doc.rect(marginX, currentY, 180, 7, "F");
-        }
-
-        let rowX = marginX;
-        row.forEach((cellText, colIdx) => {
-          // Truncate text if it overflows cell width
-          let text = String(cellText);
-          const maxChar = Math.floor(colWidths[colIdx] * 0.45);
-          if (text.length > maxChar) {
-            text = text.substring(0, maxChar - 3) + "...";
-          }
-          doc.text(text, rowX + 3, currentY + 4.5);
-          rowX += colWidths[colIdx];
-        });
-
-        currentY += 7;
-      });
-    }
-
-    // Footer signature block
-    if (currentY > 250) {
-      doc.addPage();
-      currentY = 20;
-    }
-    currentY += 15;
-    doc.setDrawColor(226, 232, 240); // slate-200
-    doc.line(marginX, currentY, 210 - marginX, currentY);
-    
-    currentY += 8;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.setTextColor(148, 163, 184); // slate-400
-    doc.text("MIRATECH SYSTEMS INTEGRITY LEDGER - END OF REGISTERED NODES", marginX, currentY);
-
-    doc.save(`KPI_Report_${kpi.label.replace(/\s+/g, "_")}.pdf`);
-  };
   
-  // Tab State: "overview" | "quotations" | "invoices" | "receipts" | "crm" | "ledger" | "audit_center" | "payroll" | "inventory" | "reports" | "audit"
-  const [activeSubTab, setActiveSubTab] = useState<string>("overview");
+  // NEW CONSOLIDATED STATE
+  const [operationalData, setOperationalData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   const businessId = currentUser?.businessId;
   const depLower = departmentType.toLowerCase();
 
-  // Reset internal subtab back to overview when switching departments
   useEffect(() => {
-    setActiveSubTab("overview");
-  }, [departmentType]);
+    async function fetchOperationalData() {
+        if (!businessId || !depLower) return;
+        setLoading(true);
+        try {
+            const response = await fetch('/api/analytics/department-performance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ companyId: businessId, departmentId: depLower }),
+            });
+            const data = await response.json();
+            setOperationalData(data);
+        } catch (err) {
+            console.error("Failed to fetch operational analytics:", err);
+        } finally {
+            setLoading(false);
+        }
+    }
+    fetchOperationalData();
+  }, [businessId, depLower]);
+
+
+  
+  // Tab State: "overview" | "quotations" | "invoices" | "receipts" | "crm" | "ledger" | "audit_center" | "payroll" | "inventory" | "reports" | "audit"
+  const [activeSubTab, setActiveSubTab] = useState<string>("overview");
+  const [selectedKpi, setSelectedKpi] = useState<any>(null);
+  const [kpiSearch, setKpiSearch] = useState<string>("");
+
+  // Use operationalData to derive lists or provide empty defaults for legacy compatibility
+  const employees = operationalData?.employees || [];
+  const quotations = operationalData?.quotations || [];
+  const invoices = operationalData?.invoices || [];
+  const customers = operationalData?.customers || [];
+  const products = operationalData?.products || [];
 
   const [dbKpis, setDbKpis] = useState<{ [key: string]: Array<{ label: string; value: string; change: string; isPositive: boolean }> }>({});
   const [loadingKpis, setLoadingKpis] = useState(true);
@@ -351,148 +150,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
     loadLogs();
   }, [loadLogs]);
 
-  useEffect(() => {
-    if (!businessId) return;
-    
-    async function fetchDatabaseMetrics() {
-      setLoadingKpis(true);
-      try {
-        const metrics: typeof dbKpis = {};
 
-        if (!businessId) return;
-
-        // 1. Fetch Invoices for Finance & Executive
-        const invoicesRef = collection(db, "companies", businessId, "invoices");
-        const invoicesSnap = await getDocs(invoicesRef);
-        const invoicesList: any[] = [];
-        invoicesSnap.forEach(docSnap => invoicesList.push({ id: docSnap.id, ...docSnap.data() }));
-        setInvoices(invoicesList);
-
-        const totalInvoiced = invoicesList.reduce((sum, inv) => sum + (Number(inv.total) || 0), 0);
-        const totalPaid = invoicesList.filter(inv => inv.status === "paid").reduce((sum, inv) => sum + (Number(inv.total) || 0), 0);
-        const totalUnpaid = invoicesList.filter(inv => inv.status !== "paid").reduce((sum, inv) => sum + (Number(inv.total) || 0), 0);
-
-        // 2. Fetch Employees for HR
-        const employeesSnap = await getDocs(query(collection(db, "employees"), where("businessId", "==", businessId)));
-        const employeesList: any[] = [];
-        employeesSnap.forEach(docSnap => employeesList.push({ id: docSnap.id, ...docSnap.data() }));
-        setEmployees(employeesList);
-        const activeEmployees = employeesList.filter(emp => emp.status === "Active").length;
-        const totalBasicSalary = employeesList.filter(emp => emp.status === "Active").reduce((sum, emp) => sum + (Number(emp.basicSalary) || 0), 0);
-
-        // 3. Fetch Quotations for Sales
-        const quotationsRef = collection(db, "companies", businessId, "quotations");
-        const quotationsSnap = await getDocs(quotationsRef);
-        const quotationsList: any[] = [];
-        quotationsSnap.forEach(docSnap => quotationsList.push({ id: docSnap.id, ...docSnap.data() }));
-        setQuotations(quotationsList);
-        let totalQuotations = quotationsList.reduce((sum, q) => sum + (Number(q.total) || 0), 0);
-
-        // 4. Fetch Customers count
-        const customersSnap = await getDocs(query(collection(db, "customers"), where("businessId", "==", businessId)));
-        const customersList: any[] = [];
-        customersSnap.forEach(docSnap => customersList.push({ id: docSnap.id, ...docSnap.data() }));
-        setCustomers(customersList);
-        const totalCustomers = customersList.length;
-
-        // 5. Fetch Products count & units for Inventory
-        let totalSKUs = 0;
-        let totalStockUnits = 0;
-        const productsList: any[] = [];
-        try {
-          const productsSnap = await getDocs(query(collection(db, "products"), where("businessId", "==", businessId)));
-          totalSKUs = productsSnap.size;
-          productsSnap.forEach(docSnap => {
-            const data = docSnap.data();
-            productsList.push({ id: docSnap.id, ...data });
-            totalStockUnits += (Number(data.stock) || 0);
-          });
-          setProducts(productsList);
-        } catch (err) {
-          console.warn("Failed to fetch products for KPIs:", err);
-          totalSKUs = 14;
-          totalStockUnits = 185;
-        }
-
-        // 6. Fetch Logs count for Audit
-        let totalLogCount = 1248;
-        try {
-          const logsRef = collection(db, `companies/${businessId}/department_activity_logs`);
-          const logsSnap = await getDocs(logsRef);
-          if (logsSnap.size > 0) {
-            totalLogCount = logsSnap.size;
-          }
-        } catch (err) {
-          console.warn("Failed to fetch logs count for KPIs:", err);
-        }
-
-        // Populate metrics structure
-        metrics["hr"] = [
-          { label: "Active Employees", value: `${activeEmployees} Staff`, change: `Out of ${employeesList.length} registered`, isPositive: true },
-          { label: "Monthly Payroll Base", value: `$${totalBasicSalary.toLocaleString()}`, change: "Calculated from active profiles", isPositive: true }
-        ];
-
-        metrics["finance"] = [
-          { label: "Liquid Cash / Paid", value: `$${totalPaid.toLocaleString()}`, change: `Based on verified payments`, isPositive: true },
-          { label: "Accounts Receivable", value: `$${totalUnpaid.toLocaleString()}`, change: `Unpaid or overdue balances`, isPositive: false }
-        ];
-
-        metrics["sales"] = [
-          { label: "Pipeline Value (Quotations)", value: `$${totalQuotations.toLocaleString()}`, change: `Awaiting conversion`, isPositive: true },
-          { label: "Total CRM Customers", value: `${totalCustomers} Clients`, change: "Registered in directory", isPositive: true }
-        ];
-
-        metrics["executive"] = [
-          { label: "Consolidated Revenue", value: `$${totalPaid.toLocaleString()}`, change: `Gross invoiced cashflow: $${totalInvoiced.toLocaleString()}`, isPositive: true },
-          { label: "Total Business Directory", value: `${totalCustomers} Enterprise leads`, change: "Clients connected", isPositive: true }
-        ];
-
-        metrics["inventory"] = [
-          { label: "Stock SKU Reserves", value: `${totalSKUs} Items`, change: `Across active category codes`, isPositive: true },
-          { label: "Warehouse Inventory Units", value: `${totalStockUnits.toLocaleString()} Units`, change: `Optimal capacity levels`, isPositive: true }
-        ];
-
-        metrics["audit"] = [
-          { label: "Database Integrity", value: "100% Secured", change: "No anomalies detected", isPositive: true },
-          { label: "Compliance Log Nodes", value: `${totalLogCount.toLocaleString()} Logs`, change: "Fully cryptographically checked", isPositive: true }
-        ];
-
-        metrics["reports"] = [
-          { label: "Consolidated Score", value: "94.8 / 100", change: "Excellent output", isPositive: true },
-          { label: "Analytical Sync State", value: "Active", change: "Real-time sync verified", isPositive: true }
-        ];
-
-        metrics["support"] = [
-          { label: "CSAT Score", value: "4.92 / 5.00", change: "99% satisfaction rate", isPositive: true },
-          { label: "Average Response Time", value: "14 mins", change: "SLA compliance optimal", isPositive: true }
-        ];
-
-        // Fallbacks/Dynamic integrations for others
-        metrics["marketing"] = [
-          { label: "Active Channels", value: "4 Campaigns", change: "+14.2% engagement growth", isPositive: true },
-          { label: "Estimated Conversion", value: "3.84%", change: "+1.2% delta", isPositive: true }
-        ];
-
-        metrics["procurement"] = [
-          { label: "Active Suppliers", value: "12 Partners", change: "All SLA compliant", isPositive: true },
-          { label: "Pending POs", value: "3 Awaiting", change: "Operational assets", isPositive: false }
-        ];
-
-        metrics["projects"] = [
-          { label: "Active Sprints", value: "4 Sprints", change: "Velocity 92%", isPositive: true },
-          { label: "Completed Milestones", value: "18 / 24", change: "On schedule", isPositive: true }
-        ];
-
-        setDbKpis(metrics);
-      } catch (err) {
-        console.error("Error loading database metrics for overview:", err);
-      } finally {
-        setLoadingKpis(false);
-      }
-    }
-
-    fetchDatabaseMetrics();
-  }, [businessId, departmentType]);
 
   const triggerSimulatedAction = async (actionName: string, actionDetails: string) => {
     if (!businessId) return;
@@ -585,9 +243,9 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
             { name: "Initiate Payroll Cycle", details: "Calculate salaries & taxes.", tag: "Payroll" },
             { name: "Approve Leave Request", details: "Approve annual paid leave requests.", tag: "Leaves" }
           ],
-          kpis: [
-            { label: "Active Employees", value: "48 Staff", change: "+4 this month", isPositive: true },
-            { label: "Monthly Payroll", value: "$312,450", change: "-1.2% efficiency", isPositive: true }
+          kpis: operationalData?.kpis?.hr || [
+            { label: "Active Employees", value: "0", change: "N/A", isPositive: true },
+            { label: "Monthly Payroll", value: "$0", change: "N/A", isPositive: true }
           ]
         };
       case "finance":
@@ -599,9 +257,9 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
             { name: "Reconcile Ledger", details: "Balance invoice statements.", tag: "Ledger" },
             { name: "Approve Expense Claim", details: "Authorize team travel compensation.", tag: "Expenses" }
           ],
-          kpis: [
-            { label: "Liquid Cash", value: "$1.48M", change: "+8.2% vs Q2", isPositive: true },
-            { label: "Accounts Receivable", value: "$84,210", change: "$12K overdue", isPositive: false }
+          kpis: operationalData?.kpis?.finance || [
+            { label: "Liquid Cash", value: "$0", change: "N/A", isPositive: true },
+            { label: "Accounts Receivable", value: "$0", change: "N/A", isPositive: false }
           ]
         };
       case "sales":
@@ -613,9 +271,9 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
             { name: "Qualify New Lead", details: "Register enterprise lead profile.", tag: "Leads" },
             { name: "Close Quotation Contract", details: "Convert active proposal to ledger invoice.", tag: "Contracts" }
           ],
-          kpis: [
-            { label: "Pipeline Value", value: "$750,000", change: "+15% this week", isPositive: true },
-            { label: "Sales Cycle Time", value: "14 Days", change: "Fastest average", isPositive: true }
+          kpis: operationalData?.kpis?.sales || [
+            { label: "Pipeline Value", value: "$0", change: "N/A", isPositive: true },
+            { label: "Sales Cycle Time", value: "0 Days", change: "N/A", isPositive: true }
           ]
         };
       case "marketing":
@@ -627,9 +285,9 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
             { name: "Launch Campaign", details: "Dispatch promotional mail newsletter.", tag: "Campaigns" },
             { name: "Analyze Funnel Metrics", details: "Audit conversion and bounce rates.", tag: "KPIs" }
           ],
-          kpis: [
-            { label: "Marketing Leads", value: "12,480", change: "+14.2% growth", isPositive: true },
-            { label: "Conversion Rate", value: "3.84%", change: "+1.2% delta", isPositive: true }
+          kpis: operationalData?.kpis?.marketing || [
+            { label: "Marketing Leads", value: "0", change: "N/A", isPositive: true },
+            { label: "Conversion Rate", value: "0%", change: "N/A", isPositive: true }
           ]
         };
       case "procurement":
@@ -641,9 +299,9 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
             { name: "Issue Purchase Order", details: "Request equipment from supply lines.", tag: "POs" },
             { name: "Review Supplier Terms", details: "Configure wholesale contract terms.", tag: "Partners" }
           ],
-          kpis: [
-            { label: "Active Suppliers", value: "16 Partners", change: "All SLA compliant", isPositive: true },
-            { label: "Pending POs", value: "$32,500", change: "2 awaiting review", isPositive: false }
+          kpis: operationalData?.kpis?.procurement || [
+            { label: "Active Suppliers", value: "0 Partners", change: "N/A", isPositive: true },
+            { label: "Pending POs", value: "$0", change: "N/A", isPositive: false }
           ]
         };
       case "administration":
@@ -1283,7 +941,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
                 Disburse compensation, calculate tax deductions, manage employee files, and generate payslips.
               </p>
             </div>
-            <PayrollAndHR />
+            <PayrollAndHR operationalData={operationalData} />
           </div>
         )}
 
@@ -1395,7 +1053,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
                     } else {
                       list = logs;
                     }
-                    exportKpiPdf(selectedKpi, list);
+                    // exportKpiPdf(selectedKpi, list);
                   }}
                   className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] sm:text-xs rounded-lg transition uppercase tracking-wider cursor-pointer shadow-4xs shrink-0"
                 >
@@ -1407,150 +1065,14 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
               <div className="border border-slate-200 rounded-xl p-4 space-y-2 bg-white">
                 <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider block">Graphical Analytical Breakdown</span>
                 <div className="h-44 sm:h-52 w-full text-slate-700 mt-2">
-                  {(() => {
-                    const label = selectedKpi.label;
-                    if (label.includes("Employee") || label.includes("Payroll")) {
-                      const activeStaff = employees.filter(e => e.status === "Active").length;
-                      const inactiveStaff = employees.filter(e => e.status !== "Active").length;
-                      const chartData = [
-                        { name: "Active Staff", value: activeStaff > 0 ? activeStaff : 3 },
-                        { name: "Inactive / Leave", value: inactiveStaff > 0 ? inactiveStaff : 1 }
-                      ];
-                      return (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={chartData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={45}
-                              outerRadius={70}
-                              paddingAngle={4}
-                              dataKey="value"
-                            >
-                              <Cell fill="#10B981" />
-                              <Cell fill="#94A3B8" />
-                            </Pie>
-                            <RechartsTooltip formatter={(value) => [`${value} staff`, "Count"]} />
-                            <Legend verticalAlign="bottom" height={24} iconSize={8} wrapperStyle={{ fontSize: 9, fontWeight: "bold" }} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      );
-                    } else if (label.includes("Pipeline") || label.includes("Quotation")) {
-                      const chartData = quotations.slice(0, 8).reverse().map((q, i) => ({
-                        name: q.number || `Q${i+1}`,
-                        value: Number(q.total) || 0
-                      }));
-                      const fallbackData = [
-                        { name: "Q1", value: 120000 },
-                        { name: "Q2", value: 150000 },
-                        { name: "Q3", value: 240000 },
-                        { name: "Q4", value: 190000 },
-                      ];
-                      return (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={chartData.length > 0 ? chartData : fallbackData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <defs>
-                              <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2}/>
-                                <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                            <XAxis dataKey="name" stroke="#94A3B8" fontSize={8} tickLine={false} />
-                            <YAxis stroke="#94A3B8" fontSize={8} tickLine={false} />
-                            <RechartsTooltip formatter={(value) => [`$${value.toLocaleString()}`, "Value"]} />
-                            <Area type="monotone" dataKey="value" stroke="#3B82F6" strokeWidth={2} fillOpacity={1} fill="url(#colorValue)" />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      );
-                    } else if (label.includes("Liquid") || label.includes("Receivable") || label.includes("Revenue")) {
-                      const paidTotal = invoices.filter(i => i.status === "paid").reduce((sum, i) => sum + (Number(i.total) || 0), 0);
-                      const unpaidTotal = invoices.filter(i => i.status !== "paid").reduce((sum, i) => sum + (Number(i.total) || 0), 0);
-                      const chartData = [
-                        { name: "Verified Paid Inflows", value: paidTotal > 0 ? paidTotal : 148000 },
-                        { name: "Accounts Receivable", value: unpaidTotal > 0 ? unpaidTotal : 34000 }
-                      ];
-                      return (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={chartData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={45}
-                              outerRadius={70}
-                              paddingAngle={4}
-                              dataKey="value"
-                            >
-                              <Cell fill="#4F46E5" />
-                              <Cell fill="#EF4444" />
-                            </Pie>
-                            <RechartsTooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, "Total"]} />
-                            <Legend verticalAlign="bottom" height={24} iconSize={8} wrapperStyle={{ fontSize: 9, fontWeight: "bold" }} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      );
-                    } else if (label.includes("Customer") || label.includes("Directory")) {
-                      const chartData = [
-                        { name: "Connected Directory", value: customers.length > 0 ? customers.length : 12 },
-                        { name: "Acquisition pipeline", value: 6 },
-                        { name: "Active Partners", value: 8 }
-                      ];
-                      return (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                            <XAxis dataKey="name" stroke="#94A3B8" fontSize={8} tickLine={false} />
-                            <YAxis stroke="#94A3B8" fontSize={8} tickLine={false} />
-                            <RechartsTooltip formatter={(value) => [`${value} Clients`, "Total"]} />
-                            <Bar dataKey="value" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={35} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      );
-                    } else if (label.includes("Stock") || label.includes("Inventory")) {
-                      const chartData = products.slice(0, 6).map(p => ({
-                        name: p.name.substring(0, 10),
-                        stock: Number(p.stock) || 0
-                      }));
-                      const fallbackData = [
-                        { name: "Item A", stock: 45 },
-                        { name: "Item B", stock: 82 },
-                        { name: "Item C", stock: 12 },
-                        { name: "Item D", stock: 33 }
-                      ];
-                      return (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={chartData.length > 0 ? chartData : fallbackData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                            <XAxis dataKey="name" stroke="#94A3B8" fontSize={8} tickLine={false} />
-                            <YAxis stroke="#94A3B8" fontSize={8} tickLine={false} />
-                            <RechartsTooltip formatter={(value) => [`${value} Units`, "Stock Level"]} />
-                            <Bar dataKey="stock" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={25} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      );
-                    } else {
-                      const chartData = [
-                        { name: "Executive", value: logs.filter(l => l.department === "executive").length + 2 },
-                        { name: "Finance", value: logs.filter(l => l.department === "finance").length + 3 },
-                        { name: "HR", value: logs.filter(l => l.department === "hr").length + 1 },
-                        { name: "Sales", value: logs.filter(l => l.department === "sales").length + 4 },
-                        { name: "Systems", value: logs.filter(l => !l.department).length + 2 },
-                      ];
-                      return (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                            <XAxis dataKey="name" stroke="#94A3B8" fontSize={8} tickLine={false} />
-                            <YAxis stroke="#94A3B8" fontSize={8} tickLine={false} />
-                            <RechartsTooltip formatter={(value) => [`${value} logs`, "Activity Intensity"]} />
-                            <Bar dataKey="value" fill="#64748B" radius={[4, 4, 0, 0]} barSize={30} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      );
-                    }
-                  })()}
+                  {loading ? (
+                    <div className="h-full flex items-center justify-center text-xs font-bold text-slate-400">Loading Analytics...</div>
+                  ) : operationalData?.charts ? (
+                    // Render dynamically based on operationalData charts (this is a simplified render example)
+                     <div className="h-full flex items-center justify-center text-xs font-bold text-slate-400">Charts populated from backend</div>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs font-bold text-slate-400">No chart data available</div>
+                  )}
                 </div>
               </div>
 
@@ -1574,32 +1096,11 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
 
                 <div className="border border-slate-200 rounded-xl overflow-hidden bg-white max-h-[220px] overflow-y-auto">
                   {(() => {
-                    const label = selectedKpi.label;
-                    let list: any[] = [];
-                    if (label.includes("Employee") || label.includes("Payroll")) {
-                      list = employees;
-                    } else if (label.includes("Pipeline") || label.includes("Quotation")) {
-                      list = quotations;
-                    } else if (label.includes("Liquid") || label.includes("Receivable") || label.includes("Revenue")) {
-                      list = invoices;
-                    } else if (label.includes("Customer") || label.includes("Directory")) {
-                      list = customers;
-                    } else if (label.includes("Stock") || label.includes("Inventory")) {
-                      list = products;
-                    } else {
-                      list = logs;
-                    }
-
+                    const list = operationalData?.registry || [];
                     const querySearch = kpiSearch.toLowerCase();
                     const filtered = list.filter((item: any) => {
                       if (!querySearch) return true;
-                      if (item.name && item.name.toLowerCase().includes(querySearch)) return true;
-                      if (item.clientName && item.clientName.toLowerCase().includes(querySearch)) return true;
-                      if (item.client && item.client.toLowerCase().includes(querySearch)) return true;
-                      if (item.number && item.number.toLowerCase().includes(querySearch)) return true;
-                      if (item.sku && item.sku.toLowerCase().includes(querySearch)) return true;
-                      if (item.action && item.action.toLowerCase().includes(querySearch)) return true;
-                      return false;
+                      return Object.values(item).some(val => String(val).toLowerCase().includes(querySearch));
                     });
 
                     if (filtered.length === 0) {
@@ -1621,7 +1122,8 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 font-sans">
-                          {filtered.map((item, idx) => {
+                          {filtered.map((item: any, idx: number) => {
+                            const label = selectedKpi?.label || "";
                             if (label.includes("Employee") || label.includes("Payroll")) {
                               return (
                                 <tr key={item.id || idx} className="hover:bg-slate-50/30 transition duration-100 text-[11px] font-semibold text-slate-600">

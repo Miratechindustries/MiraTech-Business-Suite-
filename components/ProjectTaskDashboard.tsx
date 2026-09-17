@@ -1,58 +1,63 @@
 "use client";
-import { useState, useEffect } from "react";
-import { db } from "../lib/firebase";
-import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc } from "firebase/firestore";
-import { Plus, Trash2, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { Plus, Trash2, CheckCircle2, Loader2 } from "lucide-react";
 import { useUserStore } from "../lib/store";
 import { motion } from "motion/react";
 
-interface Task {
+export interface TaskItem {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   status: "todo" | "in-progress" | "done";
-  priority: "low" | "medium" | "high";
-  createdAt: string;
+  priority?: "low" | "medium" | "high";
+  projectId?: string;
+  departmentId?: string;
+  assignedEmployeeId?: string;
+  createdAt?: string;
 }
 
-export default function ProjectTaskDashboard({ companyId, projectId }: { companyId: string; projectId: string }) {
+interface ProjectTaskDashboardProps {
+  companyId?: string;
+  projectId?: string;
+  tasks?: TaskItem[];
+  loading?: boolean;
+  onAddTask?: (title: string, projectId?: string) => Promise<void> | void;
+  onUpdateTaskStatus?: (id: string, newStatus: "todo" | "in-progress" | "done") => Promise<void> | void;
+  onDeleteTask?: (id: string) => Promise<void> | void;
+}
+
+export default function ProjectTaskDashboard({
+  companyId,
+  projectId = "default",
+  tasks = [],
+  loading = false,
+  onAddTask,
+  onUpdateTaskStatus,
+  onDeleteTask
+}: ProjectTaskDashboardProps) {
   const { currentUser } = useUserStore();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [adding, setAdding] = useState(false);
 
-  useEffect(() => {
-    if (!companyId || !projectId) return;
-    const tasksRef = collection(db, "companies", companyId, "tasks");
-    const q = query(tasksRef, orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list: Task[] = [];
-      snapshot.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as Task);
-      });
-      setTasks(list);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [companyId, projectId]);
-
-  const addTask = async () => {
-    if (!newTaskTitle.trim() || !companyId || !currentUser?.uid) {
-      console.error("Missing required information to add task");
-      return;
-    }
+  const handleAdd = async () => {
+    if (!newTaskTitle.trim()) return;
     setAdding(true);
     try {
-      await addDoc(collection(db, "companies", companyId, "tasks"), {
-        title: newTaskTitle,
-        description: "",
-        status: "todo",
-        priority: "medium",
-        createdAt: new Date().toISOString(),
-        ownerId: currentUser.uid,
-        projectId: projectId
-      });
+      if (onAddTask) {
+        await onAddTask(newTaskTitle.trim(), projectId);
+      } else if (companyId && currentUser?.uid) {
+        // Fallback API / fetch
+        await fetch('/api/projects/update-task', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companyId,
+            projectId,
+            title: newTaskTitle.trim(),
+            action: 'create'
+          })
+        }).catch(() => null);
+      }
       setNewTaskTitle("");
     } catch (err) {
       console.error("Failed to add task:", err);
@@ -61,33 +66,27 @@ export default function ProjectTaskDashboard({ companyId, projectId }: { company
     }
   };
 
-  const updateTaskStatus = async (id: string, newStatus: "todo" | "in-progress" | "done") => {
-    if (!companyId || !projectId) return;
-    try {
-      const response = await fetch('/api/projects/update-task', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId, projectId, taskId: id, newStatus }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update task');
-      }
-    } catch (err) {
-      console.error("Failed to update task:", err);
+  const handleStatusToggle = (task: TaskItem) => {
+    const newStatus = task.status === "done" ? "todo" : "done";
+    if (onUpdateTaskStatus) {
+      onUpdateTaskStatus(task.id, newStatus);
     }
   };
 
-  const deleteTask = async (id: string) => {
-    if (!companyId) return;
-    try {
-      await deleteDoc(doc(db, "companies", companyId, "tasks", id));
-    } catch (err) {
-      console.error("Failed to delete task:", err);
+  const handleDelete = (id: string) => {
+    if (onDeleteTask) {
+      onDeleteTask(id);
     }
   };
 
-  if (loading) return <div className="p-4 text-xs">Loading tasks...</div>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8 text-xs text-slate-500 gap-2">
+        <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+        <span>Loading operational tasks...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -96,44 +95,64 @@ export default function ProjectTaskDashboard({ companyId, projectId }: { company
           type="text"
           value={newTaskTitle}
           onChange={(e) => setNewTaskTitle(e.target.value)}
-          placeholder="New task title..."
-          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs"
+          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+          placeholder="Enter new operational task title..."
+          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
         />
         <button
-          onClick={addTask}
-          disabled={adding}
-          className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"
+          onClick={handleAdd}
+          disabled={adding || !newTaskTitle.trim()}
+          className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
         >
           {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
           Add Task
         </button>
       </div>
       
-      <div className="space-y-2">
-        {tasks.map((task) => (
-          <motion.div
-            key={task.id}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-4xs"
-          >
-            <div className="flex items-center gap-3">
+      {tasks.length === 0 ? (
+        <div className="text-center py-6 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+          <p className="text-xs text-slate-500 font-medium">No tasks recorded for this department scope yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {tasks.map((task) => (
+            <motion.div
+              key={task.id}
+              initial={{ opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center justify-between p-3 bg-white border border-slate-200/80 rounded-xl shadow-4xs hover:border-slate-300 transition"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <button 
+                  onClick={() => handleStatusToggle(task)}
+                  className={`p-1 rounded-full transition cursor-pointer ${task.status === 'done' ? 'text-emerald-500 hover:text-emerald-600' : 'text-slate-300 hover:text-slate-400'}`}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                </button>
+                <span className={`text-xs font-medium truncate ${task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                  {task.title}
+                </span>
+                {task.priority && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                    task.priority === 'high' ? 'bg-red-50 text-red-600' :
+                    task.priority === 'medium' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {task.priority}
+                  </span>
+                )}
+              </div>
               <button 
-                onClick={() => updateTaskStatus(task.id, task.status === 'done' ? 'todo' : 'done')}
-                className={`p-1 rounded-full ${task.status === 'done' ? 'text-emerald-500' : 'text-slate-300'}`}
+                onClick={() => handleDelete(task.id)} 
+                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                title="Delete task"
               >
-                <CheckCircle2 className="w-5 h-5" />
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
-              <span className={`text-xs ${task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-                {task.title}
-              </span>
-            </div>
-            <button onClick={() => deleteTask(task.id)} className="text-slate-400 hover:text-red-500">
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </motion.div>
-        ))}
-      </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+

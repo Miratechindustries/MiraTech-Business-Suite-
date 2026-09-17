@@ -54,6 +54,7 @@ import Invoices from "./Invoices";
 import Receipts from "./Receipts";
 import CompanyProfile from "./CompanyProfile";
 import ToastContainer from "./ToastContainer";
+import MiraTechSupportChat from "./MiraTechSupportChat";
 import Inventory from "./Inventory";
 import Customers from "./Customers";
 import Transactions from "./Transactions";
@@ -1492,6 +1493,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
         </div>
       )}
       <ToastContainer />
+      <MiraTechSupportChat />
     </>
   );
 }
