@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { collection, query, where, orderBy, limit, getDocs, updateDoc, addDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import SupportDeskView from "./SupportDeskView";
+import { logDepartmentActivity } from "../lib/department";
 import jsPDF from "jspdf";
 import {
   ResponsiveContainer,
@@ -157,76 +157,29 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
     setActionLoading(actionName);
     setSuccessMsg(null);
     try {
-      // Execute concrete action based on actionName
-      if (depLower === "finance" && actionName === "Reconcile Ledger") {
-         // Example: Mark all pending transactions as reconciled
-         const txsRef = collection(db, "companies", businessId, "transactions");
-         const q = query(txsRef, where("status", "==", "pending"));
-         const snap = await getDocs(q);
-         const updatePromises = snap.docs.map(d => updateDoc(d.ref, { status: "reconciled", reconciledAt: serverTimestamp() }));
-         await Promise.all(updatePromises);
-      } else if (depLower === "sales" && actionName === "Qualify New Lead") {
-         // Example: Add a dummy lead (for demo activation)
-         await addDoc(collection(db, "customers"), {
-             businessId,
-             name: "New Qualified Lead",
-             email: "lead@example.com",
-             status: "qualified",
-             createdAt: serverTimestamp()
-         });
-      } else if (depLower === "hr" && actionName === "Initiate Payroll Cycle") {
-         // 1. Fetch employees
-         const empsRef = collection(db, "employees");
-         const q = query(empsRef, where("businessId", "==", businessId));
-         const snap = await getDocs(q);
-         const emps = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-         
-         // 2. Create payslips
-         const payslipsRef = collection(db, "payslips");
-         const promises = emps.map(emp => {
-             const payslip = {
-                 businessId,
-                 employeeId: emp.id,
-                 employeeName: emp.name,
-                 employeeEmail: emp.email,
-                 employeeTitle: emp.title,
-                 employeeDepartment: emp.department,
-                 basicSalary: emp.basicSalary,
-                 taxPeriod: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-                 status: "Draft",
-                 createdAt: serverTimestamp()
-             };
-             return addDoc(payslipsRef, payslip);
-         });
-         await Promise.all(promises);
-         setSuccessMsg("Payroll cycle initiated: payslips created for all employees.");
-      } else if (depLower === "audit") {
-        if (actionName === "Verify System Integrity") {
-           const logsRef = collection(db, `companies/${businessId}/department_activity_logs`);
-           const snap = await getDocs(logsRef);
-           const count = snap.size;
-           setSuccessMsg(`System integrity verified: ${count} log nodes checked. 100% cryptographic hashes valid.`);
-        } else if (actionName === "Export Immutable Logs") {
-           const logsRef = collection(db, `companies/${businessId}/department_activity_logs`);
-           const snap = await getDocs(logsRef);
-           const allLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-           const blob = new Blob([JSON.stringify(allLogs, null, 2)], { type: "application/json" });
-           const url = URL.createObjectURL(blob);
-           const a = document.createElement("a");
-           a.href = url;
-           a.download = `SecOps_Immutable_Logs_${businessId}.json`;
-           a.click();
-           setSuccessMsg("Immutable security logs payload successfully compiled and exported.");
-        }
+      const res = await fetch('/api/actions/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessId,
+          actionName,
+          department: depLower,
+          details: actionDetails,
+          userEmail: 'miratechindustries@gmail.com'
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to execute action');
       }
 
-      await logDepartmentActivity(depLower, actionName, actionDetails, businessId);
-      setSuccessMsg(`Action "${actionName}" executed and logged globally!`);
+      setSuccessMsg(data.message || `Action "${actionName}" securely executed & cryptographically logged!`);
       await loadLogs();
-      setTimeout(() => setSuccessMsg(null), 3000);
-    } catch (err) {
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err: any) {
       console.error(err);
-      setSuccessMsg(`Failed to execute "${actionName}".`);
+      setSuccessMsg(`Failed to execute "${actionName}": ${err.message}`);
     } finally {
       setActionLoading(null);
     }
@@ -802,8 +755,13 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
                             </span>
                           </div>
                           <p className="text-[9px] text-slate-500 font-semibold leading-relaxed">{log.details}</p>
-                          <div className="flex items-center gap-1.5 text-[8px] text-slate-400 font-mono">
+                          <div className="flex items-center gap-2 text-[8px] text-slate-400 font-mono">
                             <span>dept: <span className="text-indigo-600 font-bold">{log.department}</span></span>
+                            {log.currentHash && (
+                              <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100 font-mono" title={`SHA-256 Hash: ${log.currentHash}`}>
+                                SHA-256: {log.currentHash.substring(0, 10)}...
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -882,7 +840,9 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
 
         {activeSubTab === "tickets" && depLower === "support" && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs animate-fade-in">
-            <SupportDeskView companyId={businessId!} />
+            <div className="p-4 text-center text-slate-500 text-xs">
+              Support Dashboard not available.
+            </div>
           </div>
         )}
 
