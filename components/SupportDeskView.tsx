@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { db, auth } from "../lib/firebase";
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from "firebase/firestore";
 import { LifeBuoy, Send, Trash2, CheckCircle2, MessageSquare, ShieldCheck, Sparkles, UserCheck } from "lucide-react";
 import { motion } from "motion/react";
 
@@ -13,7 +13,6 @@ interface SupportMessage {
   userName: string;
   message: string;
   isAdminReply?: boolean;
-  status?: "open" | "in-progress" | "resolved";
   createdAt?: any;
 }
 
@@ -45,6 +44,16 @@ export default function SupportDeskView() {
     }
   }, []);
 
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const copyPortalLink = () => {
+    const companyId = auth.currentUser?.uid || "miratech-default";
+    const url = `${window.location.origin}/portal/${companyId}`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
   const sendAdminReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!replyText.trim() || sending) return;
@@ -52,12 +61,15 @@ export default function SupportDeskView() {
     setSending(true);
     try {
       const adminUser = auth.currentUser;
+      const companyId = adminUser?.uid || "miratech-default";
       await addDoc(collection(db, "SupportMessages"), {
+        companyId,
         userId: adminUser?.uid || "master-admin",
         userEmail: adminUser?.email || "admin@miratech.internal",
         userName: "MiraTech Support Agent",
         message: replyText.trim(),
         isAdminReply: true,
+        status: "in-progress",
         createdAt: serverTimestamp()
       });
       setReplyText("");
@@ -73,14 +85,6 @@ export default function SupportDeskView() {
       await deleteDoc(doc(db, "SupportMessages", id));
     } catch (err) {
       console.error("Failed to delete support message:", err);
-    }
-  };
-
-  const updateTicketStatus = async (id: string, status: "open" | "in-progress" | "resolved") => {
-    try {
-      await updateDoc(doc(db, "SupportMessages", id), { status });
-    } catch (err) {
-      console.error("Failed to update ticket status:", err);
     }
   };
 
@@ -108,8 +112,15 @@ export default function SupportDeskView() {
             Monitor incoming client queries, respond in real-time, and provide enterprise-grade assistance across all active tenants.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={copyPortalLink}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs cursor-pointer"
+          >
+            {copiedLink ? <CheckCircle2 className="w-4 h-4 text-emerald-300" /> : <MessageSquare className="w-4 h-4" />}
+            <span>{copiedLink ? "Link Copied to Clipboard!" : "Copy Client Support Link"}</span>
+          </button>
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4" />
             <span>Secure Chat Relay Active</span>
           </div>
@@ -199,23 +210,14 @@ export default function SupportDeskView() {
                   animate={{ opacity: 1, y: 0 }}
                   className={`flex flex-col ${msg.isAdminReply ? 'items-end' : 'items-start'} space-y-1`}
                 >
-                  <div className="flex items-center gap-2 px-1 flex-wrap">
+                  <div className="flex items-center gap-2 px-1">
                     <span className="text-[11px] font-bold text-slate-700">{msg.userName}</span>
-                    <span className="text-[10px] text-slate-400 font-mono">ID: {msg.id}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">({msg.userEmail})</span>
                     {msg.isAdminReply && (
                       <span className="text-[9px] bg-indigo-100 text-indigo-700 font-extrabold px-1.5 py-0.5 rounded">
                         Support Agent
                       </span>
                     )}
-                    <select
-                      value={msg.status || "open"}
-                      onChange={(e) => updateTicketStatus(msg.id, e.target.value as any)}
-                      className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 cursor-pointer"
-                    >
-                      <option value="open">Open</option>
-                      <option value="in-progress">In Progress</option>
-                      <option value="resolved">Resolved</option>
-                    </select>
                     <button
                       onClick={() => deleteMessage(msg.id)}
                       className="text-slate-300 hover:text-red-500 transition p-1"
@@ -232,9 +234,18 @@ export default function SupportDeskView() {
                     }`}
                   >
                     {msg.message}
-                    <div className="mt-1 flex items-center justify-end gap-1 text-[9px] opacity-75 font-mono">
-                      <span>Status: {msg.status || 'open'}</span>
-                    </div>
+                    {msg.imageUrl && (
+                      <div className="mt-2.5">
+                        <a href={msg.imageUrl} target="_blank" rel="noopener noreferrer">
+                          <img
+                            src={msg.imageUrl}
+                            alt="Attached screenshot"
+                            className="max-h-48 rounded-xl object-cover border border-white/20 hover:opacity-95 transition shadow-sm"
+                            referrerPolicy="no-referrer"
+                          />
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               ))
