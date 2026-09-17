@@ -8,11 +8,14 @@ import { motion } from "motion/react";
 
 interface SupportMessage {
   id: string;
+  companyId?: string;
   userId: string;
   userEmail: string;
   userName: string;
   message: string;
   isAdminReply?: boolean;
+  status?: string;
+  imageUrl?: string;
   createdAt?: any;
 }
 

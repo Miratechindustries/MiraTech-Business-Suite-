@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { collection, query, where, orderBy, limit, getDocs, updateDoc, addDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { logDepartmentActivity } from "../lib/department";
+import SupportDeskView from "./SupportDeskView";
 import jsPDF from "jspdf";
 import {
   ResponsiveContainer,
@@ -882,9 +882,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
 
         {activeSubTab === "tickets" && depLower === "support" && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs animate-fade-in">
-            <div className="p-4 text-center text-slate-500 text-xs">
-              Support Dashboard not available.
-            </div>
+            <SupportDeskView companyId={businessId!} />
           </div>
         )}
 
