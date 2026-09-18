@@ -60,6 +60,9 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import AuditLogs from './AuditLogs';
 import PaddleNotificationsDashboard from './PaddleNotificationsDashboard';
+import EmailPreferenceAdmin from './EmailPreferenceAdmin';
+import SubscriptionEmailAdmin from './SubscriptionEmailAdmin';
+import { Mail, Send } from 'lucide-react';
 
 const PIE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
@@ -69,7 +72,7 @@ export default function MasterAdminDashboard() {
 
   const [counts, setCounts] = useState({ companies: 0, users: 0, alerts: 0, errors: 0 });
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<'overview' | 'health' | 'errors' | 'apm' | 'audit' | 'backup' | 'maintenance' | 'paddle'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'health' | 'errors' | 'apm' | 'audit' | 'backup' | 'maintenance' | 'paddle' | 'emails' | 'sub_emails'>('overview');
   const [isAuditDrawerOpen, setIsAuditDrawerOpen] = useState(false);
   
   // Error state
@@ -525,6 +528,8 @@ export default function MasterAdminDashboard() {
           { id: 'audit', label: 'Security Audit', icon: ShieldAlert },
           { id: 'backup', label: 'Data & Recovery', icon: HardDrive },
           { id: 'paddle', label: 'Paddle Notifications', icon: Bell },
+          { id: 'emails', label: 'Email Governance & Opt-Outs', icon: Mail },
+          { id: 'sub_emails', label: 'Subscription Transactional Emails', icon: Send },
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeView === tab.id;
@@ -1006,6 +1011,20 @@ export default function MasterAdminDashboard() {
       {activeView === 'paddle' && (
         <motion.div variants={itemVariants}>
           <PaddleNotificationsDashboard />
+        </motion.div>
+      )}
+
+      {/* VIEW: EMAIL PREFERENCE & GOVERNANCE */}
+      {activeView === 'emails' && (
+        <motion.div variants={itemVariants}>
+          <EmailPreferenceAdmin />
+        </motion.div>
+      )}
+
+      {/* VIEW: SUBSCRIPTION TRANSACTIONAL EMAILS */}
+      {activeView === 'sub_emails' && (
+        <motion.div variants={itemVariants}>
+          <SubscriptionEmailAdmin />
         </motion.div>
       )}
       

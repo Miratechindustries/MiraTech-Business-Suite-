@@ -260,9 +260,72 @@
         "timestamp": { "type": "string" }
       },
       "required": ["companyId", "campaignId", "sourcePlatform", "conversionType", "timestamp"]
+    },
+    "EmailPreference": {
+      "title": "Email Preference",
+      "description": "Customer communication preferences and marketing opt-out settings.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "userId": { "type": "string" },
+        "companyId": { "type": "string" },
+        "marketingEnabled": { "type": "boolean" },
+        "productUpdatesEnabled": { "type": "boolean" },
+        "newsletterEnabled": { "type": "boolean" },
+        "featureAnnouncementsEnabled": { "type": "boolean" },
+        "educationalContentEnabled": { "type": "boolean" },
+        "promotionalOffersEnabled": { "type": "boolean" },
+        "unsubscribedAt": { "type": "string" },
+        "unsubscribeSource": { "type": "string" },
+        "consentTimestamp": { "type": "string" },
+        "consentSource": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["email", "marketingEnabled", "updatedAt"]
+    },
+    "EmailAuditLog": {
+      "title": "Email Audit Log",
+      "description": "Immutable ledger of unsubscribe events, preference updates, and pre-send block decisions.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "action": { "type": "string" },
+        "preferenceCategory": { "type": "string" },
+        "source": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["email", "action", "timestamp", "source"]
+    },
+    "SubscriptionEmailEvent": {
+      "title": "Subscription Email Event",
+      "description": "Idempotent transactional email delivery record for subscription events.",
+      "type": "object",
+      "properties": {
+        "emailType": { "type": "string" },
+        "companyId": { "type": "string" },
+        "recipientEmail": { "type": "string" },
+        "deliveryStatus": { "type": "string", "enum": ["SENT", "FAILED", "PENDING", "BLOCKED"] },
+        "providerMessageId": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "retryCount": { "type": "number" }
+      },
+      "required": ["emailType", "companyId", "recipientEmail", "deliveryStatus", "timestamp"]
     }
   },
   "firestore": {
+    "/subscription_email_events/{eventId}": {
+      "schema": "SubscriptionEmailEvent",
+      "description": "Audit and idempotency ledger for subscription lifecycle transactional emails."
+    },
+    "/email_preferences/{prefId}": {
+      "schema": "EmailPreference",
+      "description": "Customer email preference directory."
+    },
+    "/email_audit_logs/{logId}": {
+      "schema": "EmailAuditLog",
+      "description": "Statutory email audit logs."
+    },
     "/legal_documents/{docId}": {
       "schema": "LegalDocument",
       "description": "Public and dynamic legal compliance documents registry."

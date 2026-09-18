@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import { generateEmailHtml } from "./email-templates";
+import { recordEmailAuditLog } from "./email-service";
 
 interface StoredOtpRecord {
   hashedOtp: string;
@@ -132,44 +134,30 @@ export async function createAndSendOtp(
 
   const emailSubject = `Your ${orgName} Verification Code: ${rawCode}`;
   const textContent = `Your ${orgName} 6-digit verification code is: ${rawCode}. This code expires in 10 minutes.`;
-  const emailHtml = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; }
-          .card { max-width: 520px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
-          .logo { font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; margin-bottom: 24px; }
-          .title { font-size: 20px; font-weight: 700; color: #0f172a; margin: 0 0 12px 0; }
-          .desc { font-size: 14px; color: #475569; line-height: 1.6; margin: 0 0 24px 0; }
-          .code-box { background: #f1f5f9; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 18px; text-align: center; margin: 24px 0; }
-          .code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #1e293b; }
-          .expiry { font-size: 12px; color: #64748b; margin-top: 8px; font-weight: 500; }
-          .footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid #f1f5f9; font-size: 12px; color: #94a3b8; line-height: 1.5; }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <div class="logo">⚡ MiraTech Business Suite</div>
-          <h1 class="title">Verify Corporate Email</h1>
-          <p class="desc">You are registering a workspace for <strong>${orgName}</strong>. Please enter the following 6-digit confirmation code in your onboarding window to complete corporate verification:</p>
-          
-          <div class="code-box">
-            <div class="code">${rawCode}</div>
-            <div class="expiry">Expires in 10 minutes • Single-use security code</div>
-          </div>
+  
+  const bodyContent = `
+    <p style="margin: 0 0 16px 0;">You are registering or verifying a corporate workspace for <strong>${orgName}</strong>. Please enter the following 6-digit confirmation code in your verification prompt to validate your corporate identity:</p>
+    
+    <div style="background-color: #f1f5f9; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+      <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #1e293b;">${rawCode}</div>
+      <div style="font-size: 12px; color: #64748b; margin-top: 8px; font-weight: 500;">Expires in 10 minutes • Single-use corporate security code</div>
+    </div>
 
-          <p class="desc">If you did not request this verification code, you can safely ignore this email. Do not share this code with anyone.</p>
-
-          <div class="footer">
-            MiraTech Enterprise Cloud Systems & Security Inc.<br>
-            Automated tenant identity verification service powered by Brevo.
-          </div>
-        </div>
-      </body>
-    </html>
+    <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b;">If you did not request this verification code, please ignore this notice or contact our security desk immediately. Never disclose this one-time code to third parties.</p>
   `;
+
+  const { html: emailHtml } = generateEmailHtml({
+    recipientEmail: normalizedEmail,
+    subject: emailSubject,
+    category: "TRANSACTIONAL",
+    emailType: "OTP_VERIFICATION",
+    headline: "Verify Corporate Identity",
+    bodyContent,
+    textContent,
+    companyDetails: {
+      name: orgName,
+    },
+  });
 
   // Dispatch solely via Brevo REST API
   const brevoResult = await dispatchBrevoEmail(
@@ -180,6 +168,17 @@ export async function createAndSendOtp(
     senderName,
     senderEmail
   );
+
+  // Record audit log
+  await recordEmailAuditLog({
+    email: normalizedEmail,
+    action: "SENT_TRANSACTIONAL",
+    preferenceCategory: "OTP_VERIFICATION",
+    previousValue: null,
+    newValue: brevoResult.success ? "DELIVERED" : "BREVO_OFFLINE",
+    source: "otp_verification_dispatcher",
+    details: `Transactional OTP security notice dispatched for company ${orgName}`,
+  });
 
   if (!brevoResult.success) {
     console.warn(`[Brevo Dispatch Warning]: ${brevoResult.error}`);

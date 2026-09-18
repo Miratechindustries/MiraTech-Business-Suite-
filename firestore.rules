@@ -49,11 +49,12 @@ service cloud.firestore {
       let userComp = getUserCompanyId();
       return isSignedIn() && (
         isMasterAdmin() ||
-        request.auth.uid == compId ||
-        request.auth.token.companyId == compId ||
-        request.auth.token.businessId == compId ||
-        (userComp != null && userComp == compId) ||
-        compId == null
+        (compId != null && (
+          request.auth.uid == compId ||
+          request.auth.token.companyId == compId ||
+          request.auth.token.businessId == compId ||
+          userComp == compId
+        ))
       );
     }
 
@@ -63,12 +64,12 @@ service cloud.firestore {
       let userComp = getUserCompanyId();
       return isSignedIn() && (
         isMasterAdmin() ||
-        request.auth.uid == compId ||
-        request.auth.token.companyId == compId ||
-        request.auth.token.businessId == compId ||
-        (userComp != null && userComp == compId) ||
-        compId == null ||
-        compId == request.auth.uid
+        (compId != null && (
+          request.auth.uid == compId ||
+          request.auth.token.companyId == compId ||
+          request.auth.token.businessId == compId ||
+          userComp == compId
+        ))
       );
     }
 
@@ -169,6 +170,25 @@ service cloud.firestore {
     // Backup History
     match /backup_history/{backupId} {
       allow read, write: if isMasterAdmin();
+    }
+
+    // Email Preferences Directory (Customer & Tenant Admin Governance)
+    match /email_preferences/{prefId} {
+      allow read: if true;
+      allow write: if isSignedIn() || isMasterAdmin();
+    }
+
+    // Subscription Transactional Email Events & Idempotency Ledger
+    match /subscription_email_events/{eventId} {
+      allow read: if isMasterAdmin() || isSignedIn();
+      allow write: if isMasterAdmin();
+    }
+
+    // Email Statutory Audit Logs (Append-only, strictly immutable)
+    match /email_audit_logs/{logId} {
+      allow read: if isMasterAdmin() || isSignedIn();
+      allow create: if true;
+      allow update, delete: if false;
     }
 
     // Legal Documents (Public read for statutory compliance, universal registry write)

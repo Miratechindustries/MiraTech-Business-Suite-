@@ -4,6 +4,13 @@ import { adminDb } from "@/lib/firebase-admin";
 import { logServerAction } from "@/lib/server-audit";
 import { getLockedFeaturesForPlan, SUBSCRIPTION_PLANS } from "@/lib/subscriptions";
 import { serverTimestamp } from "firebase/firestore";
+import {
+  sendSubscriptionConfirmation,
+  sendRenewalConfirmation,
+  sendPaymentFailed,
+  sendSubscriptionEnded,
+  resolveCompanyNotificationRecipient,
+} from "@/lib/subscription-email-service";
 
 export async function POST(req: NextRequest) {
   try {
@@ -113,6 +120,37 @@ export async function POST(req: NextRequest) {
             severity: "INFO",
             meta: { eventType, paddleSubId: subId, paddleCustomerId: customerId, status: resolvedStatus, next_billing_date: nextBillingDate }
           });
+
+          // Dispatch 1. SUBSCRIPTION CONFIRMED Transactional Notification
+          if (eventType === "subscription.created" || eventType === "subscription.activated") {
+            try {
+              const recipient = await resolveCompanyNotificationRecipient(companyId, eventData);
+              const isTrial = resolvedStatus === "trialing" || Boolean(data.trial_period);
+              const priceStr = data.items?.[0]?.price?.unit_price?.amount
+                ? `$${(Number(data.items[0].price.unit_price.amount) / 100).toFixed(2)}`
+                : String(matchedPlan.price || "$149.00");
+
+              await sendSubscriptionConfirmation({
+                companyId,
+                companyName: recipient.companyName,
+                recipientEmail: recipient.recipientEmail,
+                recipientName: recipient.recipientName,
+                planName: matchedPlan.name,
+                priceFormatted: priceStr,
+                billingInterval: data.billing_cycle?.interval || "monthly",
+                startDate: new Date().toLocaleDateString(),
+                nextBillingDate: nextBillingDate ? new Date(nextBillingDate).toLocaleDateString() : null,
+                isTrial,
+                trialDays: 14,
+                trialEndsAt: nextBillingDate ? new Date(nextBillingDate).toLocaleDateString() : null,
+                relatedEventId: eventData.event_id || data.id,
+                subscriptionId: subId,
+                customerId,
+              });
+            } catch (emailErr) {
+              console.error("[Paddle Webhook] Error dispatching subscription confirmation email:", emailErr);
+            }
+          }
           break;
         }
 
@@ -150,6 +188,26 @@ export async function POST(req: NextRequest) {
             severity: "WARNING",
             meta: { eventType, paddleSubId: data.id, status: newStatus, next_billing_date: null }
           });
+
+          // Dispatch 6. SUBSCRIPTION CANCELLED/EXPIRED Transactional Notification
+          try {
+            const recipient = await resolveCompanyNotificationRecipient(companyId, eventData);
+            const endedDate = new Date().toLocaleDateString();
+            await sendSubscriptionEnded({
+              companyId,
+              companyName: recipient.companyName,
+              recipientEmail: recipient.recipientEmail,
+              recipientName: recipient.recipientName,
+              planName: "Enterprise Plan",
+              endedDate,
+              effectiveAccessEndDate: endedDate,
+              reactivationUrl: "https://miratechsuite.com/dashboard?tab=admin&subtab=billing",
+              relatedEventId: eventData.event_id || data.id,
+              subscriptionId: data.id,
+            });
+          } catch (emailErr) {
+            console.error("[Paddle Webhook] Error dispatching subscription ended email:", emailErr);
+          }
           break;
         }
 
@@ -180,6 +238,27 @@ export async function POST(req: NextRequest) {
             severity: "WARNING",
             meta: { eventType, paddleSubId: data.id, status: newStatus, next_billing_date: nextBillingDate }
           });
+
+          // Dispatch 5. RENEWAL/PAYMENT FAILED Transactional Notification
+          try {
+            const recipient = await resolveCompanyNotificationRecipient(companyId, eventData);
+            const failureDate = new Date().toLocaleDateString();
+            await sendPaymentFailed({
+              companyId,
+              companyName: recipient.companyName,
+              recipientEmail: recipient.recipientEmail,
+              recipientName: recipient.recipientName,
+              planName: recipient.planName,
+              amountAttemptedFormatted: "$149.00",
+              failureDate,
+              retryPaymentUrl: "https://miratechsuite.com/dashboard?tab=admin&subtab=billing",
+              gracePeriodEndsAt: nextBillingDate ? new Date(nextBillingDate).toLocaleDateString() : "7 business days",
+              relatedEventId: eventData.event_id || data.id,
+              subscriptionId: data.id,
+            });
+          } catch (emailErr) {
+            console.error("[Paddle Webhook] Error dispatching payment failed email:", emailErr);
+          }
           break;
         }
 
@@ -194,6 +273,35 @@ export async function POST(req: NextRequest) {
             severity: "INFO",
             meta: { transactionId: data.id, totals: data.details?.totals }
           });
+
+          // Dispatch 4. SUBSCRIPTION RENEWAL SUCCESS (if recurring subscription payment)
+          const isRecurring = data.origin === "subscription_recurring" || Boolean(data.subscription_id);
+          if (isRecurring) {
+            try {
+              const recipient = await resolveCompanyNotificationRecipient(companyId, eventData);
+              const totalAmount = data.details?.totals?.total
+                ? `$${(Number(data.details.totals.total) / 100).toFixed(2)}`
+                : "$149.00";
+
+              await sendRenewalConfirmation({
+                companyId,
+                companyName: recipient.companyName,
+                recipientEmail: recipient.recipientEmail,
+                recipientName: recipient.recipientName,
+                planName: recipient.planName,
+                amountPaidFormatted: totalAmount,
+                paymentDate: new Date().toLocaleDateString(),
+                newBillingPeriod: "30-Day Billing Cycle",
+                nextRenewalDate: "Next Month",
+                transactionRef: data.id,
+                invoiceUrl: data.receipt_url || data.invoice_url || null,
+                relatedEventId: eventData.event_id || data.id,
+                subscriptionId: data.subscription_id,
+              });
+            } catch (emailErr) {
+              console.error("[Paddle Webhook] Error dispatching renewal confirmation email:", emailErr);
+            }
+          }
           break;
         }
 

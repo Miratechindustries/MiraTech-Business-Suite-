@@ -522,6 +522,7 @@ export default function AuditCenter() {
     try {
       const payload = {
         id: "opening_bf",
+        businessId: activeCorpId,
         date: "2026-01-01",
         cashBf: Number(bfForm.cashBf),
         receivablesBf: Number(bfForm.receivablesBf),

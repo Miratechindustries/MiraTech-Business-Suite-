@@ -92,6 +92,8 @@ export default function PublicFooter() {
               <li><Link href="/terms" className="hover:text-blue-600 transition-colors">Terms of Service</Link></li>
               <li><Link href="/privacy" className="hover:text-blue-600 transition-colors">Privacy Policy</Link></li>
               <li><Link href="/refund" className="hover:text-blue-600 transition-colors font-semibold text-blue-600">Refund &amp; Cancellation Policy</Link></li>
+              <li><Link href="/email-preferences" className="hover:text-blue-600 transition-colors">Email Preferences</Link></li>
+              <li><Link href="/unsubscribe" className="hover:text-blue-600 transition-colors">Marketing Unsubscribe</Link></li>
               <li><Link href="/support" className="hover:text-blue-600 transition-colors">Customer Support Desk</Link></li>
             </ul>
           </div>
@@ -106,6 +108,8 @@ export default function PublicFooter() {
             <Link href="/terms" className="hover:text-slate-900 transition-colors">Terms</Link>
             <Link href="/privacy" className="hover:text-slate-900 transition-colors">Privacy</Link>
             <Link href="/refund" className="hover:text-slate-900 transition-colors">Refunds &amp; Cancellations</Link>
+            <Link href="/email-preferences" className="hover:text-slate-900 transition-colors">Email Preferences</Link>
+            <Link href="/unsubscribe" className="hover:text-slate-900 transition-colors">Unsubscribe</Link>
             <Link href="/support" className="hover:text-slate-900 transition-colors">Support</Link>
             <Link href="/login" className="hover:text-slate-900 transition-colors">Workspace Login</Link>
           </div>

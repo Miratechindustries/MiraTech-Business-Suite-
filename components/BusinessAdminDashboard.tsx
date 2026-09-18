@@ -82,11 +82,12 @@ import EnterpriseSecurityPanel from "./governance/EnterpriseSecurityPanel";
 import DataPrivacyVault from "./governance/DataPrivacyVault";
 import ApiWebhookHub from "./governance/ApiWebhookHub";
 import DepartmentBudgetHub from "./governance/DepartmentBudgetHub";
+import EmailPreferenceAdmin from "./EmailPreferenceAdmin";
 
 interface BusinessAdminDashboardProps {
   onNavigateToCompanyDashboard: () => void;
   onNavigateTab?: (tabId: string) => void;
-  initialSubTab?: "overview" | "settings" | "employees" | "billing" | "hierarchy" | "security" | "compliance" | "integrations" | "budgets";
+  initialSubTab?: "overview" | "settings" | "employees" | "billing" | "hierarchy" | "security" | "compliance" | "integrations" | "budgets" | "emails";
 }
 
 interface EmployeeRecord {
@@ -109,7 +110,7 @@ export default function BusinessAdminDashboard({
   initialSubTab = "overview"
 }: BusinessAdminDashboardProps) {
   const { currentUser } = useUserStore();
-  const [activeSubTab, setActiveSubTab] = useState<"overview" | "settings" | "employees" | "billing" | "hierarchy" | "security" | "compliance" | "integrations" | "budgets">(initialSubTab);
+  const [activeSubTab, setActiveSubTab] = useState<"overview" | "settings" | "employees" | "billing" | "hierarchy" | "security" | "compliance" | "integrations" | "budgets" | "emails">(initialSubTab);
   const [isAuditDrawerOpen, setIsAuditDrawerOpen] = useState(false);
   
   const [company, setCompany] = useState<any | null>(null);
@@ -808,7 +809,25 @@ export default function BusinessAdminDashboard({
           <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
           <span>Budget Circuit Breakers</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("emails")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black tracking-wide transition cursor-pointer shrink-0 ${
+            activeSubTab === "emails"
+              ? "bg-slate-900 text-white shadow-xs"
+              : "bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200"
+          }`}
+        >
+          <Mail className="w-3.5 h-3.5 text-blue-500" />
+          <span>Email &amp; Opt-Outs</span>
+        </button>
       </div>
+
+      {/* TAB CONTENT: EMAIL & OPT-OUT GOVERNANCE */}
+      {activeSubTab === "emails" && (
+        <EmailPreferenceAdmin />
+      )}
 
       {/* TAB CONTENT: SECURITY */}
       {activeSubTab === "security" && (

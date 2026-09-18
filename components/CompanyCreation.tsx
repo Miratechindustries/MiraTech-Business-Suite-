@@ -1045,6 +1045,29 @@ export default function CompanyCreation() {
       department: 'executive'
     });
 
+    // Dispatch Company Provisioned Transactional Email Notification
+    try {
+      fetch('/api/email/company-provisioned', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId: adminUid,
+          companyName,
+          recipientEmail: accountEmail,
+          recipientName: accountFullName,
+          planName: selectedPlanObj.name,
+          enabledModules: [
+            'General Ledger & Chart of Accounts',
+            'Invoicing & Billing Automation',
+            'Staff & Payroll Governance',
+            'Audit Compliance & Security Logs'
+          ],
+          accountCreationDate: new Date().toLocaleDateString(),
+          loginUrl: typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://miratechsuite.com/login',
+        }),
+      }).catch((e) => console.warn('Non-blocking provisioning email dispatch:', e));
+    } catch (_) {}
+
     // 6. Direct sign-in with newly created administrator credentials
     logStatus(`6/6 Launching Business Administration Control Center...`);
     localStorage.removeItem(DRAFT_STORAGE_KEY);
