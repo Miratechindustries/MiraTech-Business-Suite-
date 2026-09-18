@@ -2,10 +2,20 @@
 
 import React from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Building2, ArrowLeft, ShieldCheck } from 'lucide-react';
-import CompanyCreation from '../../components/CompanyCreation';
 import PublicHeader from '../../components/public/PublicHeader';
 import PublicFooter from '../../components/public/PublicFooter';
+
+const CompanyCreation = dynamic(() => import('../../components/CompanyCreation'), {
+  ssr: false,
+  loading: () => (
+    <div className="py-20 text-center space-y-3">
+      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+      <p className="text-xs font-semibold text-slate-600">Loading MiraTech Registration &amp; Provisioning Suite...</p>
+    </div>
+  ),
+});
 
 export default function RegisterPage() {
   return (
