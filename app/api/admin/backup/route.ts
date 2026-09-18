@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "../../../../lib/firebase-admin";
+import { adminDb, adminAuth } from "../../../../lib/firebase-admin";
 import { logServerAction } from "../../../../lib/server-audit";
 
 export const dynamic = 'force-dynamic';
@@ -7,10 +7,28 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get("Authorization");
-    // Verify bearer token is provided
-    if (!authHeader || !authHeader.startsWith("Bearer ") || authHeader.length < 15) {
-      return NextResponse.json({ error: "Unauthorized: Missing or invalid authentication token" }, { status: 401 });
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized: Missing authentication bearer token." }, { status: 401 });
     }
+
+    const token = authHeader.split("Bearer ")[1]?.trim();
+    let decodedToken: any;
+    try {
+      decodedToken = await adminAuth.verifyIdToken(token);
+    } catch (err: any) {
+      return NextResponse.json({ error: `Unauthorized: ${err.message}` }, { status: 401 });
+    }
+
+    const isMasterAdmin = 
+      decodedToken.email === "miratechindustries@gmail.com" ||
+      decodedToken.role === "MASTER_ADMIN" ||
+      decodedToken.admin === true;
+
+    if (!isMasterAdmin) {
+      return NextResponse.json({ error: "Forbidden: Master Administrator privileges required." }, { status: 403 });
+    }
+
+    const verifiedEmail = decodedToken.email || "miratechindustries@gmail.com";
 
     const { 
       includeCollections = ["companies", "users", "audit_logs", "invoices", "customers", "employees", "expenses", "error_logs", "system_config"],
@@ -18,8 +36,7 @@ export async function POST(req: NextRequest) {
       driveFileId = null,
       driveUrl = null,
       status = "success",
-      errorMessage = null,
-      userEmail = "miratechindustries@gmail.com"
+      errorMessage = null
     } = await req.json().catch(() => ({}));
 
     // If client is just logging a backup attempt result
@@ -31,7 +48,7 @@ export async function POST(req: NextRequest) {
         driveUrl,
         errorMessage,
         timestamp: new Date(),
-        initiatedBy: userEmail
+        initiatedBy: verifiedEmail
       });
       return NextResponse.json({ success: true });
     }
@@ -65,7 +82,7 @@ export async function POST(req: NextRequest) {
       driveFileId,
       driveUrl,
       timestamp: new Date(),
-      initiatedBy: userEmail,
+      initiatedBy: verifiedEmail,
       recordCount: fullBackup.totalRecords
     }).catch((histErr: any) => console.warn("Failed to write to backup_history:", histErr));
 
@@ -73,8 +90,8 @@ export async function POST(req: NextRequest) {
       action: "DATA_BACKUP_EXPORT",
       detail: `Exported system backup (${backupType}) with ${fullBackup.totalRecords} records across collections: ${includeCollections.join(", ")}`,
       businessId: "system",
-      userId: "master_admin",
-      userEmail,
+      userId: decodedToken.uid || "master_admin",
+      userEmail: verifiedEmail,
       department: "governance",
       severity: "INFO"
     });

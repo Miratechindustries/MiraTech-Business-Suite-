@@ -62,7 +62,8 @@ import AuditLogs from './AuditLogs';
 import PaddleNotificationsDashboard from './PaddleNotificationsDashboard';
 import EmailPreferenceAdmin from './EmailPreferenceAdmin';
 import SubscriptionEmailAdmin from './SubscriptionEmailAdmin';
-import { Mail, Send } from 'lucide-react';
+import MarketingEmailPortal from './MarketingEmailPortal';
+import { Mail, Send, Megaphone } from 'lucide-react';
 
 const PIE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
@@ -72,7 +73,7 @@ export default function MasterAdminDashboard() {
 
   const [counts, setCounts] = useState({ companies: 0, users: 0, alerts: 0, errors: 0 });
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<'overview' | 'health' | 'errors' | 'apm' | 'audit' | 'backup' | 'maintenance' | 'paddle' | 'emails' | 'sub_emails'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'health' | 'errors' | 'apm' | 'audit' | 'backup' | 'maintenance' | 'paddle' | 'marketing_emails' | 'emails' | 'sub_emails'>('overview');
   const [isAuditDrawerOpen, setIsAuditDrawerOpen] = useState(false);
   
   // Error state
@@ -528,6 +529,7 @@ export default function MasterAdminDashboard() {
           { id: 'audit', label: 'Security Audit', icon: ShieldAlert },
           { id: 'backup', label: 'Data & Recovery', icon: HardDrive },
           { id: 'paddle', label: 'Paddle Notifications', icon: Bell },
+          { id: 'marketing_emails', label: 'Marketing Email Portal', icon: Megaphone },
           { id: 'emails', label: 'Email Governance & Opt-Outs', icon: Mail },
           { id: 'sub_emails', label: 'Subscription Transactional Emails', icon: Send },
         ].map(tab => {
@@ -1011,6 +1013,13 @@ export default function MasterAdminDashboard() {
       {activeView === 'paddle' && (
         <motion.div variants={itemVariants}>
           <PaddleNotificationsDashboard />
+        </motion.div>
+      )}
+
+      {/* VIEW: MARKETING EMAIL PORTAL */}
+      {activeView === 'marketing_emails' && (
+        <motion.div variants={itemVariants}>
+          <MarketingEmailPortal />
         </motion.div>
       )}
 

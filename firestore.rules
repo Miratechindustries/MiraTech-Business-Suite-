@@ -24,7 +24,12 @@ service cloud.firestore {
         isSignedIn() &&
         exists(userRef) &&
         get(userRef).data.companyId == companyId &&
-        (get(userRef).data.role == 'SUPER_ADMIN' || get(userRef).data.role == 'BUSINESS_ADMIN')
+        (
+          get(userRef).data.role == 'SUPER_ADMIN' ||
+          get(userRef).data.role == 'BUSINESS_ADMIN' ||
+          get(userRef).data.role == 'COMPANY_OWNER' ||
+          get(userRef).data.role == 'COMPANY_ADMIN'
+        )
       );
     }
 
@@ -198,6 +203,34 @@ service cloud.firestore {
       match /previous_versions/{versionId} {
         allow read, write: if true;
       }
+    }
+
+    // Support Messages (Public client portal submission, tenant or master admin management)
+    match /SupportMessages/{msgId} {
+      allow read: if isMasterAdmin() || (
+        isSignedIn() && (
+          request.auth.token.email == resource.data.userEmail ||
+          verifyTenant(resource.data.companyId)
+        )
+      ) || (
+        // Allow unauthenticated reading for the specific company portal
+        resource.data.companyId != null
+      );
+      allow create: if true; // Public portal users and admins can submit inquiries
+      allow update, delete: if isMasterAdmin() || (
+        isSignedIn() && verifyTenant(resource.data.companyId)
+      );
+    }
+
+    // Paddle Webhook Notifications (Read by Master Admin and Tenant Admins, Written via Server / Webhook)
+    match /paddle_notifications/{notifId} {
+      allow read: if isMasterAdmin() || isSignedIn();
+      allow write: if isMasterAdmin();
+    }
+
+    // OTP Verifications (Strictly private server-only collection)
+    match /_otp_verifications/{docId} {
+      allow read, write: if false; // Server SDK with Admin bypasses rules
     }
 
     // Root collections

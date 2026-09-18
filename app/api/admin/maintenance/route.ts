@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "../../../../lib/firebase-admin";
+import { adminDb, adminAuth } from "../../../../lib/firebase-admin";
 import { logServerAction } from "../../../../lib/server-audit";
 
 export const dynamic = 'force-dynamic';
@@ -30,8 +30,31 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized: Missing authentication bearer token." }, { status: 401 });
+    }
+
+    const token = authHeader.split("Bearer ")[1]?.trim();
+    let decodedToken: any;
+    try {
+      decodedToken = await adminAuth.verifyIdToken(token);
+    } catch (err: any) {
+      return NextResponse.json({ error: `Unauthorized: ${err.message}` }, { status: 401 });
+    }
+
+    const isMasterAdmin = 
+      decodedToken.email === "miratechindustries@gmail.com" ||
+      decodedToken.role === "MASTER_ADMIN" ||
+      decodedToken.admin === true;
+
+    if (!isMasterAdmin) {
+      return NextResponse.json({ error: "Forbidden: Master Administrator privileges required." }, { status: 403 });
+    }
+
+    const userEmail = decodedToken.email || "miratechindustries@gmail.com";
     const body = await req.json().catch(() => ({}));
-    const { action, enabled, message, scheduledEnd, errorIds, userEmail = "miratechindustries@gmail.com" } = body;
+    const { action, enabled, message, scheduledEnd, errorIds } = body;
 
     if (action === "toggle_mode") {
       const maintenanceData = {

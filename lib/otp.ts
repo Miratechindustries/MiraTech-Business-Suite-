@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import { generateEmailHtml } from "./email-templates";
 import { recordEmailAuditLog } from "./email-service";
+import { adminDb } from "./firebase-admin";
+import { sendViaBrevo } from "./brevo-client";
 
 interface StoredOtpRecord {
   hashedOtp: string;
@@ -9,18 +11,6 @@ interface StoredOtpRecord {
   attempts: number;
   lastSentAt: number;
   companyName?: string;
-}
-
-// In-memory store for hashed OTP records
-const otpStore = new Map<string, StoredOtpRecord>();
-
-function pruneExpired() {
-  const now = Date.now();
-  otpStore.forEach((record, email) => {
-    if (now > record.expiresAt) {
-      otpStore.delete(email);
-    }
-  });
 }
 
 const OTP_SECRET = process.env.OTP_SECRET || "miratech_corporate_otp_hmac_secret_key_default";
@@ -35,6 +25,10 @@ function hashOtp(code: string, salt: string): string {
     .digest("hex");
 }
 
+function getOtpDocId(email: string): string {
+  return crypto.createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
+}
+
 /**
  * Dispatches a transactional email using Brevo (formerly Sendinblue) v3 REST API.
  */
@@ -46,72 +40,45 @@ export async function dispatchBrevoEmail(
   senderName: string,
   senderEmail: string
 ): Promise<{ success: boolean; error?: string; messageId?: string }> {
-  const brevoApiKey = process.env.BREVO_API_KEY;
-  if (!brevoApiKey) {
-    console.warn("[Brevo Warning] BREVO_API_KEY is not configured in environment variables.");
-    return { success: false, error: "BREVO_API_KEY is not configured in environment variables" };
-  }
+  const result = await sendViaBrevo({
+    to: [{ email: toEmail }],
+    subject,
+    htmlContent,
+    textContent,
+    sender: { name: senderName, email: senderEmail },
+    tags: ["otp", "verification", "transactional"],
+  });
 
-  try {
-    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "api-key": brevoApiKey,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        sender: {
-          name: senderName,
-          email: senderEmail,
-        },
-        to: [
-          {
-            email: toEmail,
-          },
-        ],
-        subject,
-        htmlContent,
-        textContent,
-      }),
-    });
-
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      const errorMsg = errData.message || `Brevo API returned HTTP status ${response.status}`;
-      console.error(`[Brevo API Error] (${response.status}):`, errorMsg);
-      return { success: false, error: errorMsg };
-    }
-
-    const data = await response.json().catch(() => ({}));
-    const messageId = data.messageId || "dispatched";
-    console.log(`[Brevo API] Email successfully delivered to ${toEmail}. Message ID:`, messageId);
-    return { success: true, messageId };
-  } catch (err: any) {
-    const errorMsg = err?.message || "Network failure connecting to Brevo API";
-    console.error(`[Brevo API Exception] Failed to send email to ${toEmail}:`, errorMsg);
-    return { success: false, error: errorMsg };
-  }
+  return {
+    success: result.success,
+    error: result.error,
+    messageId: result.messageId,
+  };
 }
 
 export async function createAndSendOtp(
   email: string,
   companyName?: string
 ): Promise<{ success: boolean; cooldownSeconds: number; message: string }> {
-  pruneExpired();
   const normalizedEmail = email.trim().toLowerCase();
+  const docId = getOtpDocId(normalizedEmail);
   const now = Date.now();
 
-  const existing = otpStore.get(normalizedEmail);
-  if (existing && now - existing.lastSentAt < RESEND_COOLDOWN_MS) {
-    const remainingCooldown = Math.ceil(
-      (RESEND_COOLDOWN_MS - (now - existing.lastSentAt)) / 1000
-    );
-    return {
-      success: false,
-      cooldownSeconds: remainingCooldown,
-      message: `Please wait ${remainingCooldown} seconds before requesting a new verification code.`,
-    };
+  const docRef = adminDb.collection("_otp_verifications").doc(docId);
+  const snap = await docRef.get().catch(() => null);
+
+  if (snap && snap.exists) {
+    const existing = snap.data() as StoredOtpRecord;
+    if (existing && existing.lastSentAt && now - existing.lastSentAt < RESEND_COOLDOWN_MS) {
+      const remainingCooldown = Math.ceil(
+        (RESEND_COOLDOWN_MS - (now - existing.lastSentAt)) / 1000
+      );
+      return {
+        success: false,
+        cooldownSeconds: remainingCooldown,
+        message: `Please wait ${remainingCooldown} seconds before requesting a new verification code.`,
+      };
+    }
   }
 
   // Generate cryptographically secure 6-digit OTP
@@ -119,13 +86,15 @@ export async function createAndSendOtp(
   const salt = crypto.randomBytes(16).toString("hex");
   const hashedOtp = hashOtp(rawCode, salt);
 
-  otpStore.set(normalizedEmail, {
+  await docRef.set({
     hashedOtp,
     salt,
     expiresAt: now + OTP_EXPIRY_MS,
     attempts: 0,
     lastSentAt: now,
     companyName: companyName || "MiraTech Workspace",
+    email: normalizedEmail,
+    updatedAt: new Date().toISOString()
   });
 
   const orgName = companyName || "MiraTech Business Suite";
@@ -191,11 +160,10 @@ export async function createAndSendOtp(
   };
 }
 
-export function verifySubmittedOtp(
+export async function verifySubmittedOtp(
   email: string,
   submittedCode: string
-): { valid: boolean; error?: string; remainingAttempts?: number } {
-  pruneExpired();
+): Promise<{ valid: boolean; error?: string; remainingAttempts?: number }> {
   const normalizedEmail = email.trim().toLowerCase();
   const trimmedCode = submittedCode.trim();
 
@@ -203,17 +171,21 @@ export function verifySubmittedOtp(
     return { valid: false, error: "Verification code must be exactly 6 numerical digits." };
   }
 
-  const record = otpStore.get(normalizedEmail);
-  if (!record) {
+  const docId = getOtpDocId(normalizedEmail);
+  const docRef = adminDb.collection("_otp_verifications").doc(docId);
+  const snap = await docRef.get().catch(() => null);
+
+  if (!snap || !snap.exists) {
     return {
       valid: false,
       error: "No active verification code found for this email. Please request a new one.",
     };
   }
 
+  const record = snap.data() as StoredOtpRecord;
   const now = Date.now();
   if (now > record.expiresAt) {
-    otpStore.delete(normalizedEmail);
+    await docRef.delete().catch(() => {});
     return {
       valid: false,
       error: "Verification code has expired. Please request a new code.",
@@ -221,7 +193,7 @@ export function verifySubmittedOtp(
   }
 
   if (record.attempts >= MAX_ATTEMPTS) {
-    otpStore.delete(normalizedEmail);
+    await docRef.delete().catch(() => {});
     return {
       valid: false,
       error: "Maximum verification attempts exceeded (5). This code has been invalidated for security. Please request a new code.",
@@ -238,15 +210,16 @@ export function verifySubmittedOtp(
   }
 
   if (!isMatch) {
-    record.attempts += 1;
-    const remaining = MAX_ATTEMPTS - record.attempts;
+    const nextAttempts = (record.attempts || 0) + 1;
+    const remaining = MAX_ATTEMPTS - nextAttempts;
     if (remaining <= 0) {
-      otpStore.delete(normalizedEmail);
+      await docRef.delete().catch(() => {});
       return {
         valid: false,
         error: "Incorrect code. Maximum attempts reached (5). Please request a new code.",
       };
     }
+    await docRef.update({ attempts: nextAttempts }).catch(() => {});
     return {
       valid: false,
       error: `Incorrect verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
@@ -255,6 +228,6 @@ export function verifySubmittedOtp(
   }
 
   // Successful verification -> Invalidate immediately
-  otpStore.delete(normalizedEmail);
+  await docRef.delete().catch(() => {});
   return { valid: true };
 }

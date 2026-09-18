@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = verifySubmittedOtp(email, String(code));
+    const result = await verifySubmittedOtp(email, String(code));
 
     if (!result.valid) {
       return NextResponse.json(

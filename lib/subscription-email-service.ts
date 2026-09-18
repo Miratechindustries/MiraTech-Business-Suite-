@@ -6,6 +6,7 @@
  */
 
 import { adminDb } from "./firebase-admin";
+import { sendViaBrevo } from "./brevo-client";
 import {
   SubscriptionEmailEventType,
   SubscriptionEmailEventRecord,
@@ -51,77 +52,24 @@ async function sendRawBrevoEmail(params: {
   textContent: string;
   maxAttempts?: number;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const brevoApiKey = process.env.BREVO_API_KEY;
   const senderName = process.env.BREVO_SENDER_NAME || "MiraTech Business Suite";
   const senderEmail = process.env.BREVO_SENDER_EMAIL || "billing@miratechsuite.com";
-  const maxAttempts = params.maxAttempts || 2;
 
-  if (!brevoApiKey) {
-    // Development fallback simulation
-    console.log(
-      `[Subscription Email Service] BREVO_API_KEY not configured. Simulating delivery to: ${params.toEmail} | Subject: "${params.subject}"`
-    );
-    return {
-      success: true,
-      messageId: `sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    };
-  }
+  const result = await sendViaBrevo({
+    to: [{ email: params.toEmail }],
+    subject: params.subject,
+    htmlContent: params.htmlContent,
+    textContent: params.textContent,
+    sender: { name: senderName, email: senderEmail },
+    tags: ["subscription", "transactional", "billing"],
+    maxAttempts: params.maxAttempts || 2,
+  });
 
-  let lastError = "";
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "api-key": brevoApiKey,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          sender: {
-            name: senderName,
-            email: senderEmail,
-          },
-          to: [{ email: params.toEmail }],
-          subject: params.subject,
-          htmlContent: params.htmlContent,
-          textContent: params.textContent,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json().catch(() => ({}));
-        return {
-          success: true,
-          messageId: data.messageId || `msg_${Date.now()}`,
-        };
-      }
-
-      const errJson = await response.json().catch(() => ({}));
-      lastError = errJson.message || `Brevo returned HTTP ${response.status}`;
-      console.warn(
-        `[Subscription Email Brevo Attempt ${attempt}/${maxAttempts} Failed]:`,
-        lastError
-      );
-
-      if (attempt < maxAttempts) {
-        // Exponential backoff wait (e.g. 500ms)
-        await new Promise((r) => setTimeout(r, 500 * attempt));
-      }
-    } catch (err: any) {
-      lastError = err?.message || "Network exception reaching Brevo API";
-      console.warn(
-        `[Subscription Email Brevo Attempt ${attempt}/${maxAttempts} Exception]:`,
-        lastError
-      );
-      if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 500 * attempt));
-      }
-    }
-  }
-
-  return { success: false, error: lastError };
+  return {
+    success: result.success,
+    messageId: result.messageId,
+    error: result.error,
+  };
 }
 
 /**

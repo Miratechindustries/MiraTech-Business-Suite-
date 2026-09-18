@@ -307,14 +307,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 5);
     } else {
-      // Demo fallback items
-      return [
-        { name: "Mira Shield Pro V1", quantity: 185, revenue: 92500 },
-        { name: "SaaS Enterprise Sync License", quantity: 142, revenue: 71000 },
-        { name: "Miratech Security Router", quantity: 98, revenue: 49000 },
-        { name: "Fiber Patch Cord Multi-mode", quantity: 85, revenue: 4250 },
-        { name: "Ethernet Switch 24-Port", quantity: 64, revenue: 19200 },
-      ];
+      return [];
     }
   })();
 
@@ -327,11 +320,11 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
   const overdueCount = overdueInvoices.length;
   const overdueAmount = overdueInvoices.reduce((acc, i) => acc + (i.total || 0), 0);
 
-  // If empty, supply mock aging values
-  const displayUnpaidCount = invoices.length === 0 ? 12 : unpaidInvoicesCount;
-  const displayUnpaidAmount = invoices.length === 0 ? 25600 : unpaidInvoicesAmount;
-  const displayOverdueCount = invoices.length === 0 ? 5 : overdueCount;
-  const displayOverdueAmount = invoices.length === 0 ? 9600 : overdueAmount;
+  // Live values without fictitious mock amounts
+  const displayUnpaidCount = unpaidInvoicesCount;
+  const displayUnpaidAmount = unpaidInvoicesAmount;
+  const displayOverdueCount = overdueCount;
+  const displayOverdueAmount = overdueAmount;
 
   const generateAiInsights = async () => {
     setLoadingInsights(true);
@@ -1160,13 +1153,15 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                   Strategic volume and revenue rankings across all client accounts.
                 </p>
               </div>
-              {invoices.length === 0 && (
-                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded text-[9px] font-bold uppercase tracking-wider animate-pulse">
-                  Illustrative Demo
-                </span>
-              )}
             </div>
 
+            {topSellingItems.length === 0 ? (
+              <div className="h-44 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200 rounded-lg my-2">
+                <TrendingUp className="h-6 w-6 text-slate-300 mb-1.5" />
+                <p className="text-xs font-bold text-slate-600">No Item Data Available</p>
+                <p className="text-[10px] text-slate-400 max-w-xs mt-0.5">Item volume and revenue distribution will populate automatically once invoices with line items are issued.</p>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mt-2">
               <div className="h-44 md:col-span-7">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1240,6 +1235,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                 </div>
               </div>
             </div>
+            )}
           </div>
         </motion.div>
 
@@ -1262,11 +1258,6 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
                   Real-time visual tracker of outstanding financial receivables.
                 </p>
               </div>
-              {invoices.length === 0 && (
-                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded text-[9px] font-bold uppercase tracking-wider animate-pulse">
-                  Illustrative Demo
-                </span>
-              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3 mt-4">

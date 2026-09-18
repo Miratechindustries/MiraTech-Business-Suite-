@@ -1,6 +1,7 @@
 import { adminDb } from "./firebase-admin";
 import { getEmailPreferenceDocId, getEmailGovernanceUrls } from "./email-tokens";
 import { generateEmailHtml } from "./email-templates";
+import { sendViaBrevo, getBrevoSender } from "./brevo-client";
 import {
   EmailCategory,
   EmailDispatchPayload,
@@ -297,10 +298,6 @@ export async function sendEmail(payload: EmailDispatchPayload): Promise<EmailSen
     userId: payload.userId,
   });
 
-  const senderName = process.env.BREVO_SENDER_NAME || "MiraTech Business Suite";
-  const senderEmail = process.env.BREVO_SENDER_EMAIL || "no-reply@miratech.io";
-  const brevoApiKey = process.env.BREVO_API_KEY;
-
   // RFC 8058 One-Click Unsubscribe headers (only applicable to marketing emails)
   const headersPayload: Record<string, string> = {};
   if (payload.category === "MARKETING") {
@@ -308,53 +305,19 @@ export async function sendEmail(payload: EmailDispatchPayload): Promise<EmailSen
     headersPayload["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
   }
 
-  // 5. Dispatch via Brevo or safe fallback
-  let messageId = `sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  let dispatchSuccess = true;
-  let dispatchError: string | undefined;
+  // 5. Dispatch via Brevo SMTP API Client
+  const brevoResult = await sendViaBrevo({
+    to: [{ email: normalizedEmail }],
+    subject: payload.subject,
+    htmlContent: html,
+    textContent: text,
+    headers: headersPayload,
+    tags: [payload.category.toLowerCase(), payload.emailType.toLowerCase()],
+  });
 
-  if (brevoApiKey) {
-    try {
-      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "api-key": brevoApiKey,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          sender: {
-            name: senderName,
-            email: senderEmail,
-          },
-          to: [{ email: normalizedEmail }],
-          subject: payload.subject,
-          htmlContent: html,
-          textContent: text,
-          headers: headersPayload,
-        }),
-      });
-
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        dispatchError = errJson.message || `Brevo returned status ${response.status}`;
-        dispatchSuccess = false;
-        console.error(`[Brevo API Error] (${response.status}):`, dispatchError);
-      } else {
-        const data = await response.json().catch(() => ({}));
-        messageId = data.messageId || messageId;
-      }
-    } catch (err: any) {
-      dispatchError = err?.message || "Failed to reach Brevo API";
-      dispatchSuccess = false;
-      console.error("[Brevo Exception]", dispatchError);
-    }
-  } else {
-    // Simulated successful delivery in dev/preview
-    console.log(
-      `[EmailService Sandbox] (${payload.category}) Dispatched '${payload.subject}' to ${normalizedEmail}. MessageId: ${messageId}`
-    );
-  }
+  const messageId = brevoResult.messageId || `msg_${Date.now()}`;
+  const dispatchSuccess = brevoResult.success;
+  const dispatchError = brevoResult.error;
 
   // 6. Record Dispatch Audit Log
   const auditLogId = await recordEmailAuditLog({

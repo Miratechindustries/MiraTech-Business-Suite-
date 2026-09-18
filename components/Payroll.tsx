@@ -1459,9 +1459,9 @@ export default function Payroll() {
                                   />
                               </div>
                           ) : (
-                              <h2 className="text-lg font-black uppercase tracking-tight text-slate-900">{companyDetails?.name || "ABC Company"}</h2>
+                              <h2 className="text-lg font-black uppercase tracking-tight text-slate-900">{companyDetails?.name || "Corporate Workspace"}</h2>
                           )}
-                          <p className="text-[9px] text-slate-500 whitespace-pre-line leading-relaxed">{companyDetails?.address || "Street Address\nCity, State, Zip"}</p>
+                          <p className="text-[9px] text-slate-500 whitespace-pre-line leading-relaxed">{companyDetails?.address || "Company Address Pending in Settings"}</p>
                       </div>
                       <div className="text-right">
                         <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tighter text-slate-900 leading-tight">PAYSLIP</h2>
@@ -1798,9 +1798,9 @@ export default function Payroll() {
                               />
                           </div>
                       ) : (
-                          <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">{companyDetails?.name || "ABC Company"}</h2>
+                          <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">{companyDetails?.name || "Corporate Workspace"}</h2>
                       )}
-                      <p className="text-[10px] text-slate-500 whitespace-pre-line leading-relaxed">{companyDetails?.address || "Street Address\nCity, State, Zip"}</p>
+                      <p className="text-[10px] text-slate-500 whitespace-pre-line leading-relaxed">{companyDetails?.address || "Company Address Pending in Settings"}</p>
                   </div>
                   <div className="text-right">
                     <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900 leading-tight">PAYSLIP</h2>
