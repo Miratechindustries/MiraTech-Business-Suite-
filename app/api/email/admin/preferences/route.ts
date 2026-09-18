@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { adminAuth, adminDb, verifyAdminUser } from "@/lib/firebase-admin";
 
 /**
  * Admin view of customer email preferences and audit history.
@@ -17,8 +17,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid authentication credentials" }, { status: 401 });
     }
 
-    const isMasterAdmin =
-      decoded.email === "miratechindustries@gmail.com" || decoded.role === "MASTER_ADMIN";
+    const isMasterAdmin = await verifyAdminUser(decoded);
     const companyId = (decoded as any).companyId || (decoded as any).businessId;
 
     const url = new URL(req.url);

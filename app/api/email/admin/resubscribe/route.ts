@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { adminAuth, adminDb, verifyAdminUser } from "@/lib/firebase-admin";
 import { getEmailPreferenceDocId } from "@/lib/email-tokens";
 import { recordEmailAuditLog } from "@/lib/email-service";
 
@@ -21,11 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid admin authentication token" }, { status: 401 });
     }
 
-    const isAdmin =
-      decoded.email === "miratechindustries@gmail.com" ||
-      decoded.role === "MASTER_ADMIN" ||
-      decoded.role === "SUPER_ADMIN" ||
-      decoded.role === "BUSINESS_ADMIN";
+    const isAdmin = await verifyAdminUser(decoded);
 
     if (!isAdmin) {
       return NextResponse.json(

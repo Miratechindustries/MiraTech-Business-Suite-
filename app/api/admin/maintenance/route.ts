@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, adminAuth } from "../../../../lib/firebase-admin";
+import { adminDb, adminAuth, verifyAdminUser } from "../../../../lib/firebase-admin";
 import { logServerAction } from "../../../../lib/server-audit";
 
 export const dynamic = 'force-dynamic';
@@ -43,13 +43,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Unauthorized: ${err.message}` }, { status: 401 });
     }
 
-    const isMasterAdmin = 
-      decodedToken.email === "miratechindustries@gmail.com" ||
-      decodedToken.role === "MASTER_ADMIN" ||
-      decodedToken.admin === true;
+    const isMasterAdmin = await verifyAdminUser(decodedToken);
 
     if (!isMasterAdmin) {
-      return NextResponse.json({ error: "Forbidden: Master Administrator privileges required." }, { status: 403 });
+      return NextResponse.json({ error: "Forbidden: Administrator privileges required." }, { status: 403 });
     }
 
     const userEmail = decodedToken.email || "miratechindustries@gmail.com";

@@ -462,4 +462,41 @@ async function getGooglePublicKeys(): Promise<Record<string, string>> {
   }
 }
 
+export async function verifyAdminUser(decodedToken: any, requireMarketing = false): Promise<boolean> {
+  if (!decodedToken) return false;
+  const email = (decodedToken.email || "").toLowerCase();
+  if (email === "miratechindustries@gmail.com") return true;
+
+  const role = (decodedToken.role || "").toUpperCase();
+  const allowedRoles = requireMarketing
+    ? ["MASTER_ADMIN", "ADMIN", "SUPER_ADMIN", "COMPANY_ADMIN", "COMPANY_OWNER", "OWNER", "BUSINESS_ADMIN", "MARKETING", "MANAGER"]
+    : ["MASTER_ADMIN", "ADMIN", "SUPER_ADMIN", "COMPANY_ADMIN", "COMPANY_OWNER", "OWNER", "BUSINESS_ADMIN"];
+
+  if (allowedRoles.includes(role)) {
+    return true;
+  }
+
+  try {
+    const userDoc = await adminDb.collection("users").doc(decodedToken.uid).get();
+    if (userDoc.exists) {
+      const uData = userDoc.data();
+      const uRole = (uData?.role || "").toUpperCase();
+      const uDept = (uData?.department || "").toLowerCase();
+      if (
+        uData?.isMasterAdmin === true ||
+        uData?.isAdmin === true ||
+        allowedRoles.includes(uRole) ||
+        (requireMarketing && (uDept === "marketing" || uRole === "MARKETING")) ||
+        (uData?.email && uData.email.toLowerCase() === "miratechindustries@gmail.com")
+      ) {
+        return true;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return false;
+}
+
 export default adminDb;

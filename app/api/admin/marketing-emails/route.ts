@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { adminAuth, adminDb, verifyAdminUser } from "@/lib/firebase-admin";
 import { sendEmail, recordEmailAuditLog } from "@/lib/email-service";
 import { generateEmailHtml } from "@/lib/email-templates";
 import { MarketingEmailType } from "@/lib/email-types";
@@ -25,11 +25,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    const isMasterAdmin =
-      decoded.email === "miratechindustries@gmail.com" || decoded.role === "MASTER_ADMIN";
+    const isAuthorized = await verifyAdminUser(decoded, true);
 
-    if (!isMasterAdmin) {
-      return NextResponse.json({ error: "Access denied. Master Admin privileges required." }, { status: 403 });
+    if (!isAuthorized) {
+      return NextResponse.json({ error: "Access denied. Administrator or Marketing privileges required." }, { status: 403 });
     }
 
     // 1. Fetch recent marketing campaigns / audit dispatches
@@ -103,11 +102,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    const isMasterAdmin =
-      decoded.email === "miratechindustries@gmail.com" || decoded.role === "MASTER_ADMIN";
+    const isAuthorized = await verifyAdminUser(decoded, true);
 
-    if (!isMasterAdmin) {
-      return NextResponse.json({ error: "Access denied. Master Admin privileges required." }, { status: 403 });
+    if (!isAuthorized) {
+      return NextResponse.json({ error: "Access denied. Administrator or Marketing privileges required." }, { status: 403 });
     }
 
     const body = await req.json().catch(() => ({}));
