@@ -311,9 +311,34 @@
         "retryCount": { "type": "number" }
       },
       "required": ["emailType", "companyId", "recipientEmail", "deliveryStatus", "timestamp"]
+    },
+    "User": {
+      "title": "Workspace User Profile",
+      "description": "User identity and workspace profile record, including avatar/profile photo.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "businessId": { "type": "string" },
+        "companyId": { "type": "string" },
+        "name": { "type": "string" },
+        "displayName": { "type": "string" },
+        "positionTitle": { "type": "string" },
+        "phone": { "type": "string" },
+        "photoURL": { "type": "string", "description": "Profile photo stored as optimized Base64 data URI or image URL." },
+        "profilePic": { "type": "string", "description": "Workspace profile avatar image." },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["email", "role"]
     }
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Workspace user directory with profile and avatar image."
+    },
     "/subscription_email_events/{eventId}": {
       "schema": "SubscriptionEmailEvent",
       "description": "Audit and idempotency ledger for subscription lifecycle transactional emails."

@@ -73,6 +73,7 @@ import POSHub from "./POSHub";
 import CompanyCreation from "./CompanyCreation";
 import BusinessAdminDashboard from "./BusinessAdminDashboard";
 import WorkspaceSwitcher, { WorkspaceOrg } from "./WorkspaceSwitcher";
+import UserProfileModal from "./UserProfileModal";
 
 // Wrapped dynamic department dashboards with both Plan-level Gating & RBAC Department Security
 const ProtectedSales = withPlanAccess(
@@ -184,6 +185,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   const [authError, setAuthError] = useState("");
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isAddOrgModalOpen, setIsAddOrgModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [authSuccess, setAuthSuccess] = useState("");
 
   // Inactivity auto-logout states
@@ -1234,15 +1236,25 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
                 {notificationsOpen && renderNotificationsDropdown(false)}
               </div>
 
-              {/* User Profile circle */}
-              <div 
-                onClick={() => setActiveTab("settings")}
-                className="h-8 w-8 rounded-full text-white font-extrabold text-xs flex items-center justify-center cursor-pointer shadow-3xs transition hover:opacity-90"
+              {/* User Profile Avatar with Live Photo & Modal Trigger */}
+              <button 
+                type="button"
+                id="btn-desktop-user-profile-modal"
+                onClick={() => setIsProfileModalOpen(true)}
+                className="h-8 w-8 rounded-full text-white font-extrabold text-xs flex items-center justify-center cursor-pointer shadow-3xs transition hover:opacity-90 overflow-hidden border border-slate-200"
                 style={{ backgroundColor: company?.primaryColor || '#0066FF' }}
-                title={user.displayName || "Manager"}
+                title={`${user.displayName || currentUser?.displayName || "User"} - Click to edit profile & photo`}
               >
-                {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
-              </div>
+                {currentUser?.profilePic || currentUser?.photoURL || user.photoURL ? (
+                  <img 
+                    src={currentUser?.profilePic || currentUser?.photoURL || user.photoURL || ""} 
+                    alt="User Avatar" 
+                    className="w-full h-full object-cover" 
+                  />
+                ) : (
+                  <span>{(user.displayName || currentUser?.displayName || user.email || "U").charAt(0).toUpperCase()}</span>
+                )}
+              </button>
 
               {/* Sign Out Link */}
               <button
@@ -1314,14 +1326,25 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
               {notificationsOpen && renderNotificationsDropdown(true)}
             </div>
 
-            <div 
-              onClick={() => setActiveTab("settings")}
-              className="h-7 w-7 rounded-full text-white font-extrabold text-[10px] flex items-center justify-center cursor-pointer shadow-3xs transition hover:opacity-90"
+            {/* Mobile User Profile Avatar with Live Photo & Modal Trigger */}
+            <button 
+              type="button"
+              id="btn-mobile-user-profile-modal"
+              onClick={() => setIsProfileModalOpen(true)}
+              className="h-7 w-7 rounded-full text-white font-extrabold text-[10px] flex items-center justify-center cursor-pointer shadow-3xs transition hover:opacity-90 overflow-hidden border border-slate-200"
               style={{ backgroundColor: company?.primaryColor || '#0066FF' }}
-              title={user.displayName || "Manager"}
+              title={`${user.displayName || currentUser?.displayName || "User"} - Click to edit profile & photo`}
             >
-              {(user.displayName || user.email || "U").charAt(0).toUpperCase()}
-            </div>
+              {currentUser?.profilePic || currentUser?.photoURL || user.photoURL ? (
+                <img 
+                  src={currentUser?.profilePic || currentUser?.photoURL || user.photoURL || ""} 
+                  alt="User Avatar" 
+                  className="w-full h-full object-cover" 
+                />
+              ) : (
+                <span>{(user.displayName || currentUser?.displayName || user.email || "U").charAt(0).toUpperCase()}</span>
+              )}
+            </button>
 
             {/* Mobile Sign Out Button */}
             <button
@@ -1492,6 +1515,11 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
           </div>
         </div>
       )}
+      {/* User Profile & Photo Upload Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
       <ToastContainer />
       <MiraTechSupportChat />
     </>

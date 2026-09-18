@@ -596,7 +596,25 @@ export default function UserManagement() {
                 <tbody className="text-xs text-slate-700 divide-y divide-slate-100">
                   {users.map((u: any) => (
                     <tr key={u.id} className="hover:bg-slate-50/45 transition">
-                      <td className="p-3 font-semibold text-slate-800">{u.email}</td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 bg-slate-100 shrink-0 flex items-center justify-center font-bold text-xs text-slate-600">
+                            {u.profilePic || u.photoURL ? (
+                              <img src={u.profilePic || u.photoURL} alt={u.displayName || u.email} className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{(u.displayName || u.name || u.email || 'U').charAt(0).toUpperCase()}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-800 truncate text-xs">
+                              {u.displayName || u.name || u.email?.split('@')[0]}
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-medium truncate">
+                              {u.email}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
                       <td className="p-3 font-bold text-[10px]">
                         <div className="space-y-1.5">
                           <span className={`px-2 py-0.5 rounded-full font-bold uppercase border tracking-wider ${

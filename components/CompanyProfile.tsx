@@ -4,10 +4,11 @@ import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, updateDoc, collection, addDoc } from "firebase/firestore";
 import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineError } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
-import { Building, Mail, Phone, MapPin, Image as ImageIcon, Loader2, CheckCircle, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { Building, Mail, Phone, MapPin, Image as ImageIcon, Loader2, CheckCircle, ShieldAlert, CheckCircle2, Camera, User } from "lucide-react";
 import Image from "next/image";
 import SystemPermissions from "./SystemPermissions";
 import DepartmentManager from "./DepartmentManager";
+import UserProfileModal from "./UserProfileModal";
 
 interface CompanyData {
   ownerId: string;
@@ -79,6 +80,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
   const [fontFamily, setFontFamily] = useState<"inter" | "space_grotesk" | "playfair" | "jetbrains_mono" | "outfit">("inter");
   const [cardRadius, setCardRadius] = useState<"none" | "md" | "lg" | "xl" | "full">("md");
   const [sidebarStyle, setSidebarStyle] = useState<"flat" | "colored" | "gradient" | "bordered">("flat");
+  const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
 
   const applyPresetColors = (preset: string) => {
     setThemePreset(preset);
@@ -394,6 +396,50 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
 
   return (
     <>
+      {/* Individual User Workspace Identity Card */}
+      <div className="max-w-xl mx-auto mb-4 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+        <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/70 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="relative w-12 h-12 rounded-full overflow-hidden border border-slate-200 shadow-2xs shrink-0 bg-slate-100 flex items-center justify-center">
+              {currentUser?.profilePic || currentUser?.photoURL || importAuth.currentUser?.photoURL ? (
+                <img 
+                  src={currentUser?.profilePic || currentUser?.photoURL || importAuth.currentUser?.photoURL || ""} 
+                  alt="Profile Avatar" 
+                  className="w-full h-full object-cover" 
+                />
+              ) : (
+                <span className="font-extrabold text-sm text-slate-600 uppercase">
+                  {(currentUser?.displayName || currentUser?.name || currentUser?.email || "U").charAt(0)}
+                </span>
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-sm font-extrabold text-slate-800 tracking-tight">
+                  {currentUser?.displayName || currentUser?.name || importAuth.currentUser?.displayName || currentUser?.email?.split('@')[0] || "Workspace Member"}
+                </h3>
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-150">
+                  {currentUser?.role ? currentUser.role.replace(/_/g, ' ') : 'STAFF'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 font-semibold truncate max-w-[280px]">
+                {currentUser?.email || importAuth.currentUser?.email}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="btn-open-user-profile-settings"
+            onClick={() => setIsUserProfileModalOpen(true)}
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 uppercase tracking-wider"
+          >
+            <Camera className="w-3.5 h-3.5 text-sky-400" />
+            <span>Update Photo</span>
+          </button>
+        </div>
+      </div>
+
       <div className="max-w-xl mx-auto bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
       <div className="p-6 border-b border-slate-100 bg-slate-50/50">
         <h2 className="text-lg font-semibold text-slate-800">Company Profile Set-up</h2>
@@ -946,6 +992,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     </div>
     <DepartmentManager />
     <SystemPermissions />
+    <UserProfileModal
+      isOpen={isUserProfileModalOpen}
+      onClose={() => setIsUserProfileModalOpen(false)}
+    />
     </>
   );
 }

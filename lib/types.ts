@@ -44,6 +44,7 @@ export interface User extends ScopedPermissions {
   departments?: string[];
   permissions?: ScopedPermissions;
   photoURL?: string;
+  profilePic?: string;
   isVerified?: boolean;
   isEmailVerified?: boolean;
   emailVerified?: boolean;
