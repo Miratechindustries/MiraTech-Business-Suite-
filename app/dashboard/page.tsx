@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
 
 const DashboardLayout = dynamic(() => import("../../components/DashboardLayout"), {
   ssr: false,
@@ -17,5 +18,10 @@ const DashboardLayout = dynamic(() => import("../../components/DashboardLayout")
 });
 
 export default function DashboardPage() {
-  return <DashboardLayout defaultTab="dashboard" />;
+  return (
+    <ErrorBoundary fallbackTitle="MiraTech Workspace Fault Guard">
+      <DashboardLayout defaultTab="dashboard" />
+    </ErrorBoundary>
+  );
 }
+

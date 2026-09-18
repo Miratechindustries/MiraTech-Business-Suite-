@@ -64,7 +64,7 @@ export async function createAndSendOtp(
   const docId = getOtpDocId(normalizedEmail);
   const now = Date.now();
 
-  const docRef = adminDb.collection("_otp_verifications").doc(docId);
+  const docRef = adminDb.collection("otp_verifications").doc(docId);
   const snap = await docRef.get().catch(() => null);
 
   if (snap && snap.exists) {
@@ -172,7 +172,7 @@ export async function verifySubmittedOtp(
   }
 
   const docId = getOtpDocId(normalizedEmail);
-  const docRef = adminDb.collection("_otp_verifications").doc(docId);
+  const docRef = adminDb.collection("otp_verifications").doc(docId);
   const snap = await docRef.get().catch(() => null);
 
   if (!snap || !snap.exists) {

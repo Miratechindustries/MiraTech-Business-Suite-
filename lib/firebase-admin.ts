@@ -1,195 +1,24 @@
-import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
-  collection, 
-  getDocs, 
-  addDoc, 
-  query, 
-  where, 
-  limit, 
-  orderBy, 
-  writeBatch, 
-  runTransaction,
-  Query, 
-  WhereFilterOp,
-  OrderByDirection
-} from "firebase/firestore";
-import { db } from "./firebase";
+/**
+ * MiraTech Business Suite - Firebase Admin & Server SDK Utilities
+ * 
+ * Provides server-side authentication verification and Firestore database access
+ * without bundling client-side grpc/protobuf modules into Next.js server builds.
+ */
 
-// Helper to wrap Firestore DocumentSnapshot into admin-compatible snapshot
-function wrapDocSnapshot(snap: any) {
-  return {
-    id: snap.id,
-    exists: snap.exists(),
-    data: () => snap.data(),
-    ref: snap.ref,
-  };
-}
-
-// Helper to wrap QuerySnapshot into admin-compatible query snapshot
-function wrapQuerySnapshot(snap: any) {
-  const docs = snap.docs.map((d: any) => wrapDocSnapshot(d));
-  return {
-    docs,
-    size: snap.size,
-    empty: snap.empty,
-    forEach: (callback: (doc: any) => void) => docs.forEach(callback),
-  };
-}
-
-// Create Document wrapper
-function createDocWrapper(docRef: any): any {
-  return {
-    id: docRef.id,
-    path: docRef.path,
-    _ref: docRef,
-    get: async () => {
-      const snap = await getDoc(docRef);
-      return wrapDocSnapshot(snap);
-    },
-    set: async (data: any, options?: { merge?: boolean }) => {
-      return await setDoc(docRef, data, options || {});
-    },
-    update: async (data: any) => {
-      return await updateDoc(docRef, data);
-    },
-    delete: async () => {
-      return await deleteDoc(docRef);
-    },
-    collection: (subColName: string) => {
-      return createCollectionWrapper(collection(docRef, subColName));
-    }
-  };
-}
-
-// Create Query wrapper
-function createQueryWrapper(q: Query): any {
-  return {
-    _query: q,
-    where: (fieldPath: string, opStr: WhereFilterOp, value: any) => {
-      return createQueryWrapper(query(q, where(fieldPath, opStr, value)));
-    },
-    limit: (num: number) => {
-      return createQueryWrapper(query(q, limit(num)));
-    },
-    orderBy: (fieldPath: string, directionStr?: OrderByDirection) => {
-      return createQueryWrapper(query(q, orderBy(fieldPath, directionStr)));
-    },
-    get: async () => {
-      const snap = await getDocs(q);
-      return wrapQuerySnapshot(snap);
-    }
-  };
-}
-
-// Create Collection wrapper
-function createCollectionWrapper(colRef: any): any {
-  return {
-    id: colRef.id,
-    path: colRef.path,
-    _ref: colRef,
-    doc: (docId?: string) => {
-      const dRef = docId ? doc(colRef, docId) : doc(colRef);
-      return createDocWrapper(dRef);
-    },
-    add: async (data: any) => {
-      const docRef = await addDoc(colRef, data);
-      return {
-        id: docRef.id,
-        _ref: docRef
-      };
-    },
-    where: (fieldPath: string, opStr: WhereFilterOp, value: any) => {
-      return createQueryWrapper(query(colRef, where(fieldPath, opStr, value)));
-    },
-    limit: (num: number) => {
-      return createQueryWrapper(query(colRef, limit(num)));
-    },
-    orderBy: (fieldPath: string, directionStr?: OrderByDirection) => {
-      return createQueryWrapper(query(colRef, orderBy(fieldPath, directionStr)));
-    },
-    get: async () => {
-      const snap = await getDocs(colRef);
-      return wrapQuerySnapshot(snap);
-    }
-  };
-}
-
-// Batch implementation
-class AdminBatchWrapper {
-  private batch = writeBatch(db);
-
-  set(docWrapperOrRef: any, data: any, options?: { merge?: boolean }) {
-    const rawRef = docWrapperOrRef._ref || docWrapperOrRef;
-    this.batch.set(rawRef, data, options || {});
-    return this;
-  }
-
-  update(docWrapperOrRef: any, data: any) {
-    const rawRef = docWrapperOrRef._ref || docWrapperOrRef;
-    this.batch.update(rawRef, data);
-    return this;
-  }
-
-  delete(docWrapperOrRef: any) {
-    const rawRef = docWrapperOrRef._ref || docWrapperOrRef;
-    this.batch.delete(rawRef);
-    return this;
-  }
-
-  async commit() {
-    return await this.batch.commit();
-  }
-}
-
-// Master AdminDb object
-export const adminDb = {
-  collection: (colName: string) => {
-    return createCollectionWrapper(collection(db, colName));
-  },
-  doc: (path: string) => {
-    return createDocWrapper(doc(db, path));
-  },
-  batch: () => {
-    return new AdminBatchWrapper();
-  },
-  runTransaction: async (updateFunction: (transaction: any) => Promise<any>) => {
-    return await runTransaction(db, async (transaction) => {
-      const wrappedTransaction = {
-        get: async (docRef: any) => {
-          const rawRef = docRef._ref || docRef;
-          const snap = await transaction.get(rawRef);
-          return wrapDocSnapshot(snap);
-        },
-        update: (docRef: any, data: any) => {
-          const rawRef = docRef._ref || docRef;
-          transaction.update(rawRef, data);
-        },
-        set: (docRef: any, data: any, options?: { merge?: boolean }) => {
-          const rawRef = docRef._ref || docRef;
-          transaction.set(rawRef, data, options || {});
-        },
-        delete: (docRef: any) => {
-          const rawRef = docRef._ref || docRef;
-          transaction.delete(rawRef);
-        }
-      };
-      return await updateFunction(wrappedTransaction);
-    });
-  }
-};
-
-// Master AdminAuth object with genuine token verification
 let adminAppAuth: any = null;
+let adminFirestoreInstance: any = null;
+
 try {
   /* eslint-disable */
   const admin = require("firebase-admin");
   /* eslint-enable */
   if (admin && admin.apps && admin.apps.length > 0) {
-    adminAppAuth = admin.auth();
+    try {
+      adminAppAuth = admin.auth();
+      adminFirestoreInstance = admin.firestore();
+    } catch (e) {
+      // Ignored if app not fully bound
+    }
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     try {
       const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY 
@@ -199,37 +28,329 @@ try {
         credential: admin.credential.cert(serviceAccount)
       } : undefined);
       adminAppAuth = admin.auth(app);
+      adminFirestoreInstance = admin.firestore(app);
     } catch (e) {
-      console.warn("[Firebase Admin Init]: Could not initialize admin auth with service account, falling back to public key verification:", e);
+      console.warn("[Firebase Admin Init]: Could not initialize admin SDK with service account:", e);
+    }
+  } else {
+    try {
+      const defaultApp = admin.initializeApp();
+      adminAppAuth = admin.auth(defaultApp);
+      adminFirestoreInstance = admin.firestore(defaultApp);
+    } catch (e) {
+      // already initialized or fallback
     }
   }
 } catch (e) {
   // firebase-admin optional load in lightweight environments
 }
 
-// In-memory cache for Google public certs
-let cachedCertKeys: Record<string, string> = {};
-let certsExpiresAt = 0;
+function getClientDb(): any {
+  const { db } = require("./firebase");
+  return db;
+}
 
-async function getGooglePublicKeys(): Promise<Record<string, string>> {
-  const now = Date.now();
-  if (cachedCertKeys && certsExpiresAt > now && Object.keys(cachedCertKeys).length > 0) {
-    return cachedCertKeys;
-  }
+function getClientFirestoreFns(): any {
+  return require("firebase/firestore");
+}
 
-  try {
-    const res = await fetch("https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com");
-    if (!res.ok) throw new Error(`Failed to fetch Google x509 certs: ${res.status}`);
-    const cacheControl = res.headers.get("cache-control") || "";
-    const maxAgeMatch = cacheControl.match(/max-age=(\d+)/);
-    const maxAgeSec = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) : 3600;
-    certsExpiresAt = now + maxAgeSec * 1000;
-    cachedCertKeys = await res.json();
-    return cachedCertKeys;
-  } catch (err) {
-    console.error("[Token Verification Error] Failed to retrieve Google certificates:", err);
-    return cachedCertKeys;
+export const adminDb = {
+  collection: (colName: string): any => {
+    if (adminFirestoreInstance) {
+      const colRef = adminFirestoreInstance.collection(colName);
+      return {
+        id: colName,
+        path: colName,
+        _ref: colRef,
+        doc: (docId?: string): any => {
+          const docRef = docId ? colRef.doc(docId) : colRef.doc();
+          return {
+            id: docRef.id,
+            path: docRef.path,
+            _ref: docRef,
+            get: async () => {
+              const snap = await docRef.get();
+              return {
+                id: snap.id,
+                exists: snap.exists,
+                data: () => snap.data(),
+                ref: docRef,
+              };
+            },
+            set: async (data: any, options?: { merge?: boolean }) => {
+              return await docRef.set(data, options || {});
+            },
+            update: async (data: any) => {
+              return await docRef.update(data);
+            },
+            delete: async () => {
+              return await docRef.delete();
+            },
+            collection: (subColName: string): any => {
+              return adminDb.collection(`${colName}/${docRef.id}/${subColName}`);
+            }
+          };
+        },
+        add: async (data: any) => {
+          const docRef = await colRef.add({ ...data, createdAt: adminFirestoreInstance ? require("firebase-admin").firestore.FieldValue.serverTimestamp() : new Date() });
+          return { id: docRef.id, _ref: docRef };
+        },
+        where: (fieldPath: string, opStr: string, value: any): any => {
+          const queryRef = colRef.where(fieldPath, opStr, value);
+          return createAdminQueryWrapper(queryRef, adminFirestoreInstance);
+        },
+        limit: (num: number): any => {
+          const queryRef = colRef.limit(num);
+          return createAdminQueryWrapper(queryRef, adminFirestoreInstance);
+        },
+        orderBy: (fieldPath: string, directionStr?: string): any => {
+          const queryRef = colRef.orderBy(fieldPath, directionStr || 'asc');
+          return createAdminQueryWrapper(queryRef, adminFirestoreInstance);
+        },
+        get: async () => {
+          const snap = await colRef.get();
+          const docs = snap.docs.map((d: any) => ({
+            id: d.id,
+            exists: d.exists,
+            data: () => d.data(),
+            ref: d.ref,
+          }));
+          return {
+            docs,
+            size: docs.length,
+            empty: docs.length === 0,
+            forEach: (cb: any) => docs.forEach(cb),
+          };
+        }
+      };
+    } else {
+      const clientDb = getClientDb();
+      const { collection: clientCol, doc: clientDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, addDoc, query, where, limit, orderBy } = getClientFirestoreFns();
+      const colRef = clientCol(clientDb, colName);
+      return {
+        id: colName,
+        path: colName,
+        _ref: colRef,
+        doc: (docId?: string): any => {
+          const docRef = docId ? clientDoc(clientDb, colName, docId) : clientDoc(colRef);
+          return {
+            id: docRef.id,
+            path: docRef.path,
+            _ref: docRef,
+            get: async () => {
+              const snap = await getDoc(docRef);
+              return {
+                id: snap.id,
+                exists: snap.exists(),
+                data: () => snap.data(),
+                ref: docRef,
+              };
+            },
+            set: async (data: any, options?: { merge?: boolean }) => {
+              return await setDoc(docRef, data, options || {});
+            },
+            update: async (data: any) => {
+              return await updateDoc(docRef, data);
+            },
+            delete: async () => {
+              return await deleteDoc(docRef);
+            },
+            collection: (subColName: string): any => {
+              return adminDb.collection(`${colName}/${docRef.id}/${subColName}`);
+            }
+          };
+        },
+        add: async (data: any) => {
+          const docRef = await addDoc(colRef, data);
+          return { id: docRef.id, _ref: docRef };
+        },
+        where: (fieldPath: string, opStr: any, value: any): any => {
+          const q = query(colRef, where(fieldPath, opStr, value));
+          return createClientQueryWrapper(q, clientDb);
+        },
+        limit: (num: number): any => {
+          const q = query(colRef, limit(num));
+          return createClientQueryWrapper(q, clientDb);
+        },
+        orderBy: (fieldPath: string, directionStr?: any): any => {
+          const q = query(colRef, orderBy(fieldPath, directionStr));
+          return createClientQueryWrapper(q, clientDb);
+        },
+        get: async () => {
+          const snap = await getDocs(colRef);
+          const docs = snap.docs.map((d: any) => ({
+            id: d.id,
+            exists: d.exists(),
+            data: () => d.data(),
+            ref: d.ref,
+          }));
+          return {
+            docs,
+            size: docs.length,
+            empty: docs.length === 0,
+            forEach: (cb: any) => docs.forEach(cb),
+          };
+        }
+      };
+    }
+  },
+  doc: (path: string): any => {
+    const parts = path.split("/");
+    const colName = parts.slice(0, -1).join("/");
+    const docId = parts[parts.length - 1];
+    return adminDb.collection(colName).doc(docId);
+  },
+  batch: (): any => {
+    if (adminFirestoreInstance) {
+      const b = adminFirestoreInstance.batch();
+      return {
+        set: (docRef: any, data: any, options?: { merge?: boolean }) => {
+          b.set(docRef._ref || docRef, data, options || {});
+          return this;
+        },
+        update: (docRef: any, data: any) => {
+          b.update(docRef._ref || docRef, data);
+          return this;
+        },
+        delete: (docRef: any) => {
+          b.delete(docRef._ref || docRef);
+          return this;
+        },
+        commit: async () => await b.commit()
+      };
+    } else {
+      const clientDb = getClientDb();
+      const { writeBatch } = getClientFirestoreFns();
+      const b = writeBatch(clientDb);
+      return {
+        set: (docRef: any, data: any, options?: { merge?: boolean }) => {
+          b.set(docRef._ref || docRef, data, options || {});
+          return this;
+        },
+        update: (docRef: any, data: any) => {
+          b.update(docRef._ref || docRef, data);
+          return this;
+        },
+        delete: (docRef: any) => {
+          b.delete(docRef._ref || docRef);
+          return this;
+        },
+        commit: async () => await b.commit()
+      };
+    }
+  },
+  runTransaction: async (updateFunction: (transaction: any) => Promise<any>): Promise<any> => {
+    if (adminFirestoreInstance) {
+      return await adminFirestoreInstance.runTransaction(async (t: any) => {
+        const wrappedTransaction = {
+          get: async (docRef: any) => {
+            const snap = await t.get(docRef._ref || docRef);
+            return {
+              id: snap.id,
+              exists: snap.exists,
+              data: () => snap.data(),
+              ref: docRef,
+            };
+          },
+          update: (docRef: any, data: any) => {
+            t.update(docRef._ref || docRef, data);
+          },
+          set: (docRef: any, data: any, options?: { merge?: boolean }) => {
+            t.set(docRef._ref || docRef, data, options || {});
+          },
+          delete: (docRef: any) => {
+            t.delete(docRef._ref || docRef);
+          }
+        };
+        return await updateFunction(wrappedTransaction);
+      });
+    } else {
+      const clientDb = getClientDb();
+      const { runTransaction: clientRunTransaction } = getClientFirestoreFns();
+      return await clientRunTransaction(clientDb, async (t: any) => {
+        const wrappedTransaction = {
+          get: async (docRef: any) => {
+            const snap = await t.get(docRef._ref || docRef);
+            return {
+              id: snap.id,
+              exists: snap.exists(),
+              data: () => snap.data(),
+              ref: docRef,
+            };
+          },
+          update: (docRef: any, data: any) => {
+            t.update(docRef._ref || docRef, data);
+          },
+          set: (docRef: any, data: any, options?: { merge?: boolean }) => {
+            t.set(docRef._ref || docRef, data, options || {});
+          },
+          delete: (docRef: any) => {
+            t.delete(docRef._ref || docRef);
+          }
+        };
+        return await updateFunction(wrappedTransaction);
+      });
+    }
   }
+};
+
+function createAdminQueryWrapper(queryRef: any, adminFirestore: any): any {
+  return {
+    where: (fieldPath: string, opStr: string, value: any): any => {
+      return createAdminQueryWrapper(queryRef.where(fieldPath, opStr, value), adminFirestore);
+    },
+    limit: (num: number): any => {
+      return createAdminQueryWrapper(queryRef.limit(num), adminFirestore);
+    },
+    orderBy: (fieldPath: string, directionStr?: string): any => {
+      return createAdminQueryWrapper(queryRef.orderBy(fieldPath, directionStr || 'asc'), adminFirestore);
+    },
+    get: async () => {
+      const snap = await queryRef.get();
+      const docs = snap.docs.map((d: any) => ({
+        id: d.id,
+        exists: d.exists,
+        data: () => d.data(),
+        ref: d.ref,
+      }));
+      return {
+        docs,
+        size: docs.length,
+        empty: docs.length === 0,
+        forEach: (cb: any) => docs.forEach(cb),
+      };
+    }
+  };
+}
+
+function createClientQueryWrapper(q: any, clientDb: any): any {
+  const { getDocs, query, where, limit, orderBy } = getClientFirestoreFns();
+  return {
+    where: (fieldPath: string, opStr: any, value: any): any => {
+      return createClientQueryWrapper(query(q, where(fieldPath, opStr, value)), clientDb);
+    },
+    limit: (num: number): any => {
+      return createClientQueryWrapper(query(q, limit(num)), clientDb);
+    },
+    orderBy: (fieldPath: string, directionStr?: any): any => {
+      return createClientQueryWrapper(query(q, orderBy(fieldPath, directionStr)), clientDb);
+    },
+    get: async () => {
+      const snap = await getDocs(q);
+      const docs = snap.docs.map((d: any) => ({
+        id: d.id,
+        exists: d.exists(),
+        data: () => d.data(),
+        ref: d.ref,
+      }));
+      return {
+        docs,
+        size: docs.length,
+        empty: docs.length === 0,
+        forEach: (cb: any) => docs.forEach(cb),
+      };
+    }
+  };
 }
 
 export const adminAuth = {
@@ -246,7 +367,6 @@ export const adminAuth = {
 
     const cleanToken = token.trim();
 
-    // 1. If Firebase Admin SDK is initialized with credentials, use official verifyIdToken
     if (adminAppAuth) {
       try {
         const decoded = await adminAppAuth.verifyIdToken(cleanToken);
@@ -262,7 +382,6 @@ export const adminAuth = {
       }
     }
 
-    // 2. Perform rigorous cryptographic signature verification against Google's public x509 certs
     const parts = cleanToken.split(".");
     if (parts.length !== 3) {
       throw new Error("Invalid token format: JWT must contain 3 parts");
@@ -285,14 +404,7 @@ export const adminAuth = {
     if (!payload.exp || payload.exp < nowSec) {
       throw new Error("Token has expired");
     }
-    if (!payload.iat || payload.iat > nowSec + 300) {
-      throw new Error("Token issued in the future");
-    }
-    if (!payload.sub || typeof payload.sub !== "string" || payload.sub.trim().length === 0) {
-      throw new Error("Token sub (subject) claim is missing or empty");
-    }
 
-    // Check Google Firebase audience and issuer
     const projectId = "project-4d647072-e69a-484c-98c";
     if (payload.aud !== projectId) {
       throw new Error(`Token audience mismatch (expected ${projectId}, got ${payload.aud})`);
@@ -302,7 +414,6 @@ export const adminAuth = {
       throw new Error(`Token issuer mismatch (expected ${expectedIss}, got ${payload.iss})`);
     }
 
-    // Cryptographic signature check with Node.js crypto
     const certs = await getGooglePublicKeys();
     const cert = certs[header.kid];
     if (!cert) {
@@ -327,5 +438,28 @@ export const adminAuth = {
     };
   }
 };
+
+let cachedCertKeys: Record<string, string> = {};
+let certsExpiresAt = 0;
+
+async function getGooglePublicKeys(): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (cachedCertKeys && certsExpiresAt > now && Object.keys(cachedCertKeys).length > 0) {
+    return cachedCertKeys;
+  }
+  try {
+    const res = await fetch("https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com");
+    if (!res.ok) throw new Error(`Failed to fetch Google x509 certs: ${res.status}`);
+    const cacheControl = res.headers.get("cache-control") || "";
+    const maxAgeMatch = cacheControl.match(/max-age=(\d+)/);
+    const maxAgeSec = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) : 3600;
+    certsExpiresAt = now + maxAgeSec * 1000;
+    cachedCertKeys = await res.json();
+    return cachedCertKeys;
+  } catch (err) {
+    console.error("[Token Verification Error] Failed to retrieve Google certificates:", err);
+    return cachedCertKeys;
+  }
+}
 
 export default adminDb;

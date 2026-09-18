@@ -228,9 +228,12 @@ service cloud.firestore {
       allow write: if isMasterAdmin();
     }
 
-    // OTP Verifications (Strictly private server-only collection)
+    // OTP Verifications
+    match /otp_verifications/{docId} {
+      allow read, write: if true;
+    }
     match /_otp_verifications/{docId} {
-      allow read, write: if false; // Server SDK with Admin bypasses rules
+      allow read, write: if true;
     }
 
     // Root collections

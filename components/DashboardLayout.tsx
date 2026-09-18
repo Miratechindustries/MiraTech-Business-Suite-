@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 
 // Subcomponents
+import { ErrorBoundary } from "./ErrorBoundary";
 import Dashboard from "./Dashboard";
 import AuditCenter from "./finance/AuditCenter";
 import Quotations from "./Quotations";
@@ -1401,42 +1402,44 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
               )}
 
               <div className={isCurrentTabLocked ? "blur-md pointer-events-none select-none transition-all duration-300" : ""}>
-                {/* Render Active View Tab */}
-                {activeTab === "business_admin" && (
-                  <BusinessAdminDashboard
-                    onNavigateToCompanyDashboard={() => setActiveTab("dashboard")}
-                    onNavigateTab={(tabId) => setActiveTab(tabId)}
-                  />
-                )}
+                <ErrorBoundary fallbackTitle="MiraTech Department Module Fault Guard">
+                  {/* Render Active View Tab */}
+                  {activeTab === "business_admin" && (
+                    <BusinessAdminDashboard
+                      onNavigateToCompanyDashboard={() => setActiveTab("dashboard")}
+                      onNavigateTab={(tabId) => setActiveTab(tabId)}
+                    />
+                  )}
 
-                {activeTab === "dashboard" && (
-                  <DepartmentsHub
-                    company={company}
-                    onSelectTab={(tabId) => setActiveTab(tabId)}
-                  />
-                )}
+                  {activeTab === "dashboard" && (
+                    <DepartmentsHub
+                      company={company}
+                      onSelectTab={(tabId) => setActiveTab(tabId)}
+                    />
+                  )}
 
-                {/* Unified Department Workspaces with Plan Gating */}
-                {activeTab === "sales" && <ProtectedSales onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "finance" && <ProtectedFinance onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "hr" && <ProtectedHR onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "inventory" && <ProtectedInventoryDept onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "projects" && <ProtectedProjects onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "reports" && <ProtectedReports onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "support" && <ProtectedSupport onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "procurement" && <ProtectedProcurement onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "pos" && <ProtectedPOS companyId={company?.ownerId || user.uid} userId={user.uid} onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "marketing" && <ProtectedMarketing onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "audit" && <ProtectedAudit onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
-                {activeTab === "executive" && <ProtectedExecutive onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {/* Unified Department Workspaces with Plan Gating */}
+                  {activeTab === "sales" && <ProtectedSales onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {activeTab === "finance" && <ProtectedFinance onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {activeTab === "hr" && <ProtectedHR onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {activeTab === "inventory" && <ProtectedInventoryDept onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {activeTab === "projects" && <ProtectedProjects onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {activeTab === "reports" && <ProtectedReports onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {activeTab === "support" && <ProtectedSupport onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {activeTab === "procurement" && <ProtectedProcurement onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {activeTab === "pos" && <ProtectedPOS companyId={company?.ownerId || user.uid} userId={user.uid} onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {activeTab === "marketing" && <ProtectedMarketing onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {activeTab === "audit" && <ProtectedAudit onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
+                  {activeTab === "executive" && <ProtectedExecutive onBack={() => setActiveTab("dashboard")} onUpgradeClick={() => setActiveTab('subscriptions')} />}
 
-                {activeTab === "admin" && <MasterAdminDashboard />}
+                  {activeTab === "admin" && <MasterAdminDashboard />}
 
-                {activeTab === "settings" && (
-                   <CompanyProfile onCompanyLoaded={(data) => setCompany(data)} />
-                 )}
+                  {activeTab === "settings" && (
+                     <CompanyProfile onCompanyLoaded={(data) => setCompany(data)} />
+                   )}
 
-                {activeTab === "subscriptions" && <SubscriptionsView />}
+                  {activeTab === "subscriptions" && <SubscriptionsView />}
+                </ErrorBoundary>
               </div>
             </div>
           )}
