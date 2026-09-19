@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid admin authentication token" }, { status: 401 });
     }
 
-    const isAdmin = await verifyAdminUser(decoded);
+    const isAdmin = await verifyAdminUser(req);
 
     if (!isAdmin) {
       return NextResponse.json(

@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Unauthorized: ${err.message}` }, { status: 401 });
     }
 
-    const isMasterAdmin = await verifyAdminUser(decodedToken);
+    const isMasterAdmin = await verifyAdminUser(req);
 
     if (!isMasterAdmin) {
       return NextResponse.json({ error: "Forbidden: Administrator privileges required." }, { status: 403 });

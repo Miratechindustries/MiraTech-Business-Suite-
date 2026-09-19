@@ -1,3 +1,5 @@
+import { NextRequest } from "next/server";
+
 /**
  * MiraTech Business Suite - Firebase Admin & Server SDK Utilities
  * 
@@ -10,7 +12,10 @@ let adminFirestoreInstance: any = null;
 
 try {
   /* eslint-disable */
-  const admin = require("firebase-admin");
+  let admin = require("firebase-admin");
+  if (admin.default) {
+    admin = admin.default;
+  }
   /* eslint-enable */
   
   // Check if already initialized
@@ -55,16 +60,13 @@ function getClientFirestoreFns(): any {
 
 export const adminDb = {
   collection: (colName: string): any => {
-    if (!adminFirestoreInstance) {
-      console.error("[Firebase Admin]: adminFirestoreInstance is not initialized!");
-      throw new Error("Firebase Admin SDK not initialized properly.");
-    }
-    const colRef = adminFirestoreInstance.collection(colName);
-    return {
-      id: colName,
-      path: colName,
-      _ref: colRef,
-      doc: (docId?: string): any => {
+    if (adminFirestoreInstance) {
+      const colRef = adminFirestoreInstance.collection(colName);
+      return {
+        id: colName,
+        path: colName,
+        _ref: colRef,
+        doc: (docId?: string): any => {
           const docRef = docId ? colRef.doc(docId) : colRef.doc();
           return {
             id: docRef.id,
@@ -440,6 +442,45 @@ export const adminAuth = {
     };
   }
 };
+
+export async function verifyAdminUser(
+  req: NextRequest,
+  requiredRole?: "MASTER_ADMIN" | "ADMIN" | "MARKETING"
+): Promise<{ uid: string; email: string; role: string }> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw new Error("Missing or invalid Authorization header");
+  }
+
+  const token = authHeader.split("Bearer ")[1];
+  const decoded = await adminAuth.verifyIdToken(token);
+
+  let isAdmin = false;
+  let userRole = decoded.role || "user";
+
+  if (decoded.email === "miratechindustries@gmail.com") {
+    isAdmin = true;
+    userRole = "MASTER_ADMIN";
+  } else {
+    const userDoc = await adminDb.collection("users").doc(decoded.uid).get();
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      if (userData.isMasterAdmin || userData.isAdmin || userData.role === "admin") {
+        isAdmin = true;
+        userRole = userData.role || "ADMIN";
+      } else if (requiredRole === "MARKETING" && (userData.department === "marketing" || userData.role === "marketing")) {
+        isAdmin = true;
+        userRole = "MARKETING";
+      }
+    }
+  }
+
+  if (!isAdmin || (requiredRole && userRole !== requiredRole && userRole !== "MASTER_ADMIN")) {
+    throw new Error("Insufficient permissions");
+  }
+
+  return { uid: decoded.uid, email: decoded.email, role: userRole };
+}
 
 let cachedCertKeys: Record<string, string> = {};
 let certsExpiresAt = 0;

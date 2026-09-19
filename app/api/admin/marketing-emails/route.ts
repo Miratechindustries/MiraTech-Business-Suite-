@@ -25,9 +25,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    const isAuthorized = await verifyAdminUser(decoded, true);
+    const authorizedUser = await verifyAdminUser(req, "MARKETING");
 
-    if (!isAuthorized) {
+    if (!authorizedUser) {
       return NextResponse.json({ error: "Access denied. Administrator or Marketing privileges required." }, { status: 403 });
     }
 
@@ -102,9 +102,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    const isAuthorized = await verifyAdminUser(decoded, true);
+    const authorizedUser = await verifyAdminUser(req, "MARKETING");
 
-    if (!isAuthorized) {
+    if (!authorizedUser) {
       return NextResponse.json({ error: "Access denied. Administrator or Marketing privileges required." }, { status: 403 });
     }
 
