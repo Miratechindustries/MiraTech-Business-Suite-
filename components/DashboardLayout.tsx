@@ -75,6 +75,8 @@ import CompanyCreation from "./CompanyCreation";
 import BusinessAdminDashboard from "./BusinessAdminDashboard";
 import WorkspaceSwitcher, { WorkspaceOrg } from "./WorkspaceSwitcher";
 import UserProfileModal from "./UserProfileModal";
+import TrialDaysIndicator from "./TrialDaysIndicator";
+import QuickSupportFAB from "./QuickSupportFAB";
 
 // Wrapped dynamic department dashboards with both Plan-level Gating & RBAC Department Security
 const ProtectedSales = withPlanAccess(
@@ -270,6 +272,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   // Notifications states
   const [notifications, setNotifications] = useState<any[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [isQuickSupportOpen, setIsQuickSupportOpen] = useState(false);
   const desktopBellRef = useRef<HTMLDivElement>(null);
   const mobileBellRef = useRef<HTMLDivElement>(null);
 
@@ -1362,6 +1365,15 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
 
         {/* Workspace Body pane */}
         <main className="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto space-y-4 overflow-y-auto">
+          {/* Dynamic 14-Day Evaluation Trial Days Remaining Indicator */}
+          {company && (
+            <TrialDaysIndicator
+              company={company}
+              onUpgradeClick={() => setActiveTab("subscriptions")}
+              onContactSupport={() => setIsQuickSupportOpen(true)}
+            />
+          )}
+
           {/* Active Workspace Block */}
           {!company && activeTab !== "settings" ? (
             <div className="flex flex-col items-center justify-center min-h-[400px] h-full text-center p-6 space-y-4 max-w-sm mx-auto">
@@ -1524,7 +1536,11 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
         onClose={() => setIsProfileModalOpen(false)}
       />
       <ToastContainer />
-      <MiraTechSupportChat />
+      <QuickSupportFAB
+        currentCompany={company}
+        isOpenExternal={isQuickSupportOpen}
+        onCloseExternal={() => setIsQuickSupportOpen(false)}
+      />
     </>
   );
 }

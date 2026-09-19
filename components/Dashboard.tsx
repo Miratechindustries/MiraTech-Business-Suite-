@@ -13,6 +13,7 @@ import LoadingSkeleton from "./LoadingSkeleton";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend } from "recharts";
 import { motion } from "motion/react";
 import AuditLogs from "./AuditLogs";
+import TrialDaysIndicator from "./TrialDaysIndicator";
 
 interface Invoice {
   total: number;
@@ -49,6 +50,10 @@ interface CompanyDetails {
   primaryColor?: string;
   secondaryColor?: string;
   subscriptionStatus?: string;
+  subscriptionPlanId?: string;
+  subscriptionTrialEndsAt?: string;
+  trialEndsAt?: string;
+  createdAt?: string;
 }
 
 interface DashboardProps {
@@ -558,6 +563,9 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
 
   return (
     <div className="space-y-4">
+      {/* Dynamic 14-Day Evaluation Trial Days Indicator */}
+      {company && <TrialDaysIndicator company={company as any} />}
+
       {/* Upper Status Bar */}
       <motion.div
         initial={{ y: -12, opacity: 0 }}
