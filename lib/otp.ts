@@ -18,6 +18,14 @@ const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_ATTEMPTS = 5;
 const RESEND_COOLDOWN_MS = 60 * 1000; // 60 seconds
 
+// In-memory OTP cache for instant, fail-safe verification across requests on this server
+const globalForOtp = globalThis as unknown as {
+  memoryOtpStore?: Map<string, StoredOtpRecord>;
+};
+export const memoryOtpStore =
+  globalForOtp.memoryOtpStore ?? new Map<string, StoredOtpRecord>();
+globalForOtp.memoryOtpStore = memoryOtpStore;
+
 function hashOtp(code: string, salt: string): string {
   return crypto
     .createHmac("sha256", OTP_SECRET)
@@ -65,6 +73,19 @@ export async function createAndSendOtp(
     const docId = getOtpDocId(normalizedEmail);
     const now = Date.now();
 
+    // Check memory store cooldown first
+    const memoryRecord = memoryOtpStore.get(normalizedEmail);
+    if (memoryRecord && memoryRecord.lastSentAt && now - memoryRecord.lastSentAt < RESEND_COOLDOWN_MS) {
+      const remainingCooldown = Math.ceil(
+        (RESEND_COOLDOWN_MS - (now - memoryRecord.lastSentAt)) / 1000
+      );
+      return {
+        success: false,
+        cooldownSeconds: remainingCooldown,
+        message: `Please wait ${remainingCooldown} seconds before requesting a new verification code.`,
+      };
+    }
+
     const docRef = adminDb.collection("otp_verifications").doc(docId);
     const snap = await docRef.get().catch(() => null);
 
@@ -91,9 +112,19 @@ export async function createAndSendOtp(
     console.log(`[MIRATECH OTP SECURITY DISPATCH]`);
     console.log(`Recipient: ${normalizedEmail}`);
     console.log(`Verification Code: ${rawCode}`);
-    console.log(`(Development/Testing Bypass Code: 999999)`);
     console.log("==================================================\n");
 
+    // Store in-memory for instant, reliable validation regardless of Firestore state
+    memoryOtpStore.set(normalizedEmail, {
+      hashedOtp,
+      salt,
+      expiresAt: now + OTP_EXPIRY_MS,
+      attempts: 0,
+      lastSentAt: now,
+      companyName: companyName || "MiraTech Workspace",
+    });
+
+    // Also persist to Firestore if available
     await docRef.set({
       hashedOtp,
       salt,
@@ -190,25 +221,72 @@ export async function verifySubmittedOtp(
     return { valid: false, error: "Verification code must be exactly 6 numerical digits." };
   }
 
-  // Allow universal testing/development bypass code 999999
-  if (trimmedCode === "999999") {
-    return { valid: true };
+  // 1. Check in-memory store first
+  const memoryRecord = memoryOtpStore.get(normalizedEmail);
+  const now = Date.now();
+
+  if (memoryRecord) {
+    if (now > memoryRecord.expiresAt) {
+      memoryOtpStore.delete(normalizedEmail);
+      return {
+        valid: false,
+        error: "Verification code has expired. Please request a new code.",
+      };
+    }
+
+    if (memoryRecord.attempts >= MAX_ATTEMPTS) {
+      memoryOtpStore.delete(normalizedEmail);
+      return {
+        valid: false,
+        error: "Maximum verification attempts exceeded (5). This code has been invalidated for security. Please request a new code.",
+      };
+    }
+
+    const candidateHash = hashOtp(trimmedCode, memoryRecord.salt);
+    const candidateBuf = Buffer.from(candidateHash, "hex");
+    const storedBuf = Buffer.from(memoryRecord.hashedOtp, "hex");
+
+    let isMatch = false;
+    if (candidateBuf.length === storedBuf.length) {
+      isMatch = crypto.timingSafeEqual(candidateBuf, storedBuf);
+    }
+
+    if (isMatch) {
+      memoryOtpStore.delete(normalizedEmail);
+      const docId = getOtpDocId(normalizedEmail);
+      adminDb.collection("otp_verifications").doc(docId).delete().catch(() => {});
+      return { valid: true };
+    } else {
+      memoryRecord.attempts += 1;
+      const remaining = MAX_ATTEMPTS - memoryRecord.attempts;
+      if (remaining <= 0) {
+        memoryOtpStore.delete(normalizedEmail);
+        return {
+          valid: false,
+          error: "Incorrect code. Maximum attempts reached (5). Please request a new code.",
+        };
+      }
+      return {
+        valid: false,
+        error: `Incorrect verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
+        remainingAttempts: remaining,
+      };
+    }
   }
 
+  // 2. Fallback to Firestore
   const docId = getOtpDocId(normalizedEmail);
   const docRef = adminDb.collection("otp_verifications").doc(docId);
   const snap = await docRef.get().catch(() => null);
 
   if (!snap || !snap.exists) {
-    // If no doc in Firestore but code is 6 digits during preview/testing, allow fallback verification if needed or prompt user
     return {
       valid: false,
-      error: "No active verification code found for this email. Please request a new one (or use bypass code 999999 for testing).",
+      error: "No active verification code found for this email. Please request a new one.",
     };
   }
 
   const record = snap.data() as StoredOtpRecord;
-  const now = Date.now();
   if (now > record.expiresAt) {
     await docRef.delete().catch(() => {});
     return {

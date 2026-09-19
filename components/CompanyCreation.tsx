@@ -642,9 +642,66 @@ export default function CompanyCreation() {
     return true;
   };
 
+  // Resilient API dispatcher preventing unexpected HTML/warmup parse crashes
+  const safeApiPost = async (url: string, payload: any, retries = 1): Promise<any> => {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const contentType = res.headers.get('content-type') || '';
+      let data: any = null;
+
+      if (contentType.includes('application/json')) {
+        try {
+          data = await res.json();
+        } catch {
+          // JSON parsing fallback
+        }
+      }
+
+      if (!data) {
+        const text = await res.text();
+        try {
+          data = JSON.parse(text);
+        } catch {
+          if (retries > 0 && (text.includes('<!DOCTYPE') || text.includes('<html') || res.status >= 500)) {
+            await new Promise((r) => setTimeout(r, 1200));
+            return safeApiPost(url, payload, retries - 1);
+          }
+          if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+            throw new Error('Authentication gateway is initializing. Please try again in a few moments.');
+          }
+          throw new Error(text.slice(0, 150) || `Gateway returned status ${res.status}`);
+        }
+      }
+
+      if (!res.ok) {
+        const errorMsg = data?.error || data?.message || `Request failed (${res.status})`;
+        const errObj: any = new Error(errorMsg);
+        errObj.status = res.status;
+        errObj.cooldownSeconds = data?.cooldownSeconds;
+        throw errObj;
+      }
+
+      return data;
+    } catch (err: any) {
+      if (retries > 0 && err.message?.includes('<!DOCTYPE')) {
+        await new Promise((r) => setTimeout(r, 1200));
+        return safeApiPost(url, payload, retries - 1);
+      }
+      throw err;
+    }
+  };
+
   // Email verification actions
   const sendVerificationCode = async (targetEmail = accountEmail) => {
-    const cleanEmail = (targetEmail || '').trim();
+    const cleanEmail = (targetEmail || '').trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
       setError("Please provide a valid corporate email address in Step 1.");
       return;
@@ -655,18 +712,10 @@ export default function CompanyCreation() {
     setIsVerifyingModalOpen(true);
     setModalTempEmail(cleanEmail);
     try {
-      const res = await fetch('/api/auth/send-verification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, companyName: companyName.trim() })
+      const data = await safeApiPost('/api/auth/send-verification', {
+        email: cleanEmail,
+        companyName: companyName.trim(),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        if (res.status === 429 && data.cooldownSeconds) {
-          setResendCooldown(data.cooldownSeconds);
-        }
-        throw new Error(data.error || 'Failed to dispatch verification code.');
-      }
       setResendCooldown(data.cooldownSeconds || 60);
       setVerificationSuccess(`A 6-digit verification code has been dispatched to ${cleanEmail}`);
       addToast(`Security verification code sent to ${cleanEmail}`, "info");
@@ -674,6 +723,9 @@ export default function CompanyCreation() {
         otpInputRefs.current[0]?.focus();
       }, 150);
     } catch (err: any) {
+      if (err.status === 429 && err.cooldownSeconds) {
+        setResendCooldown(err.cooldownSeconds);
+      }
       setVerificationError(err.message || "Failed to send email verification code.");
     } finally {
       setVerificationSending(false);
@@ -689,17 +741,15 @@ export default function CompanyCreation() {
     setVerificationChecking(true);
     setVerificationError(null);
     try {
-      const res = await fetch('/api/auth/verify-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: accountEmail.trim(), code })
+      const data = await safeApiPost('/api/auth/verify-code', {
+        email: accountEmail.trim().toLowerCase(),
+        code,
       });
-      const data = await res.json();
-      if (!res.ok || !data.valid) {
-        throw new Error(data.error || 'Invalid verification code. Please check and try again.');
+      if (!data || !data.valid) {
+        throw new Error(data?.error || 'Invalid verification code. Please check and try again.');
       }
       setIsEmailVerified(true);
-      setVerifiedEmail(accountEmail.trim());
+      setVerifiedEmail(accountEmail.trim().toLowerCase());
       setIsVerifyingModalOpen(false);
       setVerificationSuccess("Company email verified successfully!");
       addToast("Corporate email verified successfully!", "success");
