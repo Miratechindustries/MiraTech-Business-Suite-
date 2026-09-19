@@ -12,37 +12,36 @@ try {
   /* eslint-disable */
   const admin = require("firebase-admin");
   /* eslint-enable */
-  if (admin && admin.apps && admin.apps.length > 0) {
+  
+  // Check if already initialized
+  if (admin.apps && admin.apps.length > 0) {
+    adminAppAuth = admin.auth();
+    adminFirestoreInstance = admin.firestore();
+    console.log("[Firebase Admin]: Initialized from existing app.");
+  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
     try {
-      adminAppAuth = admin.auth();
-      adminFirestoreInstance = admin.firestore();
-    } catch (e) {
-      // Ignored if app not fully bound
-    }
-  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    try {
-      const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY 
-        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
-        : undefined;
-      const app = admin.initializeApp(serviceAccount ? {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      const app = admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
-      } : undefined);
+      });
       adminAppAuth = admin.auth(app);
       adminFirestoreInstance = admin.firestore(app);
+      console.log("[Firebase Admin]: Initialized from SERVICE_ACCOUNT_KEY.");
     } catch (e) {
-      console.warn("[Firebase Admin Init]: Could not initialize admin SDK with service account:", e);
+      console.error("[Firebase Admin]: Critical error initializing with SERVICE_ACCOUNT_KEY:", e);
     }
   } else {
     try {
       const defaultApp = admin.initializeApp();
       adminAppAuth = admin.auth(defaultApp);
       adminFirestoreInstance = admin.firestore(defaultApp);
+      console.log("[Firebase Admin]: Initialized from default credentials.");
     } catch (e) {
-      // already initialized or fallback
+      console.error("[Firebase Admin]: Critical error initializing with default credentials:", e);
     }
   }
 } catch (e) {
-  // firebase-admin optional load in lightweight environments
+  console.error("[Firebase Admin]: Critical load error:", e);
 }
 
 function getClientDb(): any {
@@ -56,13 +55,16 @@ function getClientFirestoreFns(): any {
 
 export const adminDb = {
   collection: (colName: string): any => {
-    if (adminFirestoreInstance) {
-      const colRef = adminFirestoreInstance.collection(colName);
-      return {
-        id: colName,
-        path: colName,
-        _ref: colRef,
-        doc: (docId?: string): any => {
+    if (!adminFirestoreInstance) {
+      console.error("[Firebase Admin]: adminFirestoreInstance is not initialized!");
+      throw new Error("Firebase Admin SDK not initialized properly.");
+    }
+    const colRef = adminFirestoreInstance.collection(colName);
+    return {
+      id: colName,
+      path: colName,
+      _ref: colRef,
+      doc: (docId?: string): any => {
           const docRef = docId ? colRef.doc(docId) : colRef.doc();
           return {
             id: docRef.id,
@@ -460,43 +462,6 @@ async function getGooglePublicKeys(): Promise<Record<string, string>> {
     console.error("[Token Verification Error] Failed to retrieve Google certificates:", err);
     return cachedCertKeys;
   }
-}
-
-export async function verifyAdminUser(decodedToken: any, requireMarketing = false): Promise<boolean> {
-  if (!decodedToken) return false;
-  const email = (decodedToken.email || "").toLowerCase();
-  if (email === "miratechindustries@gmail.com") return true;
-
-  const role = (decodedToken.role || "").toUpperCase();
-  const allowedRoles = requireMarketing
-    ? ["MASTER_ADMIN", "ADMIN", "SUPER_ADMIN", "COMPANY_ADMIN", "COMPANY_OWNER", "OWNER", "BUSINESS_ADMIN", "MARKETING", "MANAGER"]
-    : ["MASTER_ADMIN", "ADMIN", "SUPER_ADMIN", "COMPANY_ADMIN", "COMPANY_OWNER", "OWNER", "BUSINESS_ADMIN"];
-
-  if (allowedRoles.includes(role)) {
-    return true;
-  }
-
-  try {
-    const userDoc = await adminDb.collection("users").doc(decodedToken.uid).get();
-    if (userDoc.exists) {
-      const uData = userDoc.data();
-      const uRole = (uData?.role || "").toUpperCase();
-      const uDept = (uData?.department || "").toLowerCase();
-      if (
-        uData?.isMasterAdmin === true ||
-        uData?.isAdmin === true ||
-        allowedRoles.includes(uRole) ||
-        (requireMarketing && (uDept === "marketing" || uRole === "MARKETING")) ||
-        (uData?.email && uData.email.toLowerCase() === "miratechindustries@gmail.com")
-      ) {
-        return true;
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-
-  return false;
 }
 
 export default adminDb;
