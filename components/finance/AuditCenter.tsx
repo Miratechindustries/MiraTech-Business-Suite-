@@ -47,8 +47,8 @@ import {
   JournalEntry, 
   TRANSACTION_MAPPINGS 
 } from "../../lib/finance/ledger";
-import * as XLSX from "xlsx";
-import { jsPDF } from "jspdf";
+// import * as XLSX from "xlsx";
+// import { jsPDF } from "jspdf";
 
 // Recharts components
 import { 
@@ -870,7 +870,7 @@ export default function AuditCenter() {
   };
 
   // Export spreadsheet using xlsx
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const formatted = ledger.map(l => ({
       "Transaction ID": l.transactionId,
       "Audit Reference": l.referenceNumber,
@@ -884,6 +884,7 @@ export default function AuditCenter() {
       "Description": l.description
     }));
 
+    const XLSX = await import("xlsx");
     const ws = XLSX.utils.json_to_sheet(formatted);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Financial Ledger");
@@ -892,7 +893,8 @@ export default function AuditCenter() {
   };
 
   // PDF statement compiling
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    const { jsPDF } = await import("jspdf");
     const doc = new jsPDF();
     const activeCorpName = isSuperAdminView && selectedTenantId === "all" 
       ? "Consolidated Organization Systems" 

@@ -1,50 +1,34 @@
-import { NextRequest } from "next/server";
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
 
 /**
  * MiraTech Business Suite - Firebase Admin & Server SDK Utilities
  * 
  * Provides server-side authentication verification and Firestore database access
- * without bundling client-side grpc/protobuf modules into Next.js server builds.
  */
 
-let adminAppAuth: any = null;
-let adminFirestoreInstance: any = null;
+export let adminAppAuth: any = null;
+export let adminFirestoreInstance: any = null;
 
 try {
-  /* eslint-disable */
-  let admin = require("firebase-admin");
-  if (admin.default) {
-    admin = admin.default;
-  }
-  /* eslint-enable */
-  
-  // Check if already initialized
-  if (admin.apps && admin.apps.length > 0) {
-    adminAppAuth = admin.auth();
-    adminFirestoreInstance = admin.firestore();
+  let app;
+  if (getApps().length > 0) {
+    app = getApps()[0];
     console.log("[Firebase Admin]: Initialized from existing app.");
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-    try {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-      const app = admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-      });
-      adminAppAuth = admin.auth(app);
-      adminFirestoreInstance = admin.firestore(app);
-      console.log("[Firebase Admin]: Initialized from SERVICE_ACCOUNT_KEY.");
-    } catch (e) {
-      console.error("[Firebase Admin]: Critical error initializing with SERVICE_ACCOUNT_KEY:", e);
-    }
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    app = initializeApp({
+      credential: cert(serviceAccount)
+    });
+    console.log("[Firebase Admin]: Initialized from SERVICE_ACCOUNT_KEY.");
   } else {
-    try {
-      const defaultApp = admin.initializeApp();
-      adminAppAuth = admin.auth(defaultApp);
-      adminFirestoreInstance = admin.firestore(defaultApp);
-      console.log("[Firebase Admin]: Initialized from default credentials.");
-    } catch (e) {
-      console.error("[Firebase Admin]: Critical error initializing with default credentials:", e);
-    }
+    app = initializeApp();
+    console.log("[Firebase Admin]: Initialized from default credentials.");
   }
+  
+  adminAppAuth = getAuth(app);
+  adminFirestoreInstance = getFirestore(app);
 } catch (e) {
   console.error("[Firebase Admin]: Critical load error:", e);
 }
@@ -96,20 +80,21 @@ export const adminDb = {
           };
         },
         add: async (data: any) => {
-          const docRef = await colRef.add({ ...data, createdAt: adminFirestoreInstance ? require("firebase-admin").firestore.FieldValue.serverTimestamp() : new Date() });
+          const { FieldValue } = require("firebase-admin/firestore");
+          const docRef = await colRef.add({ ...data, createdAt: FieldValue.serverTimestamp() });
           return { id: docRef.id, _ref: docRef };
         },
         where: (fieldPath: string, opStr: string, value: any): any => {
           const queryRef = colRef.where(fieldPath, opStr, value);
-          return createAdminQueryWrapper(queryRef, adminFirestoreInstance);
+          return createAdminQueryWrapper(queryRef);
         },
         limit: (num: number): any => {
           const queryRef = colRef.limit(num);
-          return createAdminQueryWrapper(queryRef, adminFirestoreInstance);
+          return createAdminQueryWrapper(queryRef);
         },
         orderBy: (fieldPath: string, directionStr?: string): any => {
           const queryRef = colRef.orderBy(fieldPath, directionStr || 'asc');
-          return createAdminQueryWrapper(queryRef, adminFirestoreInstance);
+          return createAdminQueryWrapper(queryRef);
         },
         get: async () => {
           const snap = await colRef.get();
@@ -298,16 +283,16 @@ export const adminDb = {
   }
 };
 
-function createAdminQueryWrapper(queryRef: any, adminFirestore: any): any {
+function createAdminQueryWrapper(queryRef: any): any {
   return {
     where: (fieldPath: string, opStr: string, value: any): any => {
-      return createAdminQueryWrapper(queryRef.where(fieldPath, opStr, value), adminFirestore);
+      return createAdminQueryWrapper(queryRef.where(fieldPath, opStr, value));
     },
     limit: (num: number): any => {
-      return createAdminQueryWrapper(queryRef.limit(num), adminFirestore);
+      return createAdminQueryWrapper(queryRef.limit(num));
     },
     orderBy: (fieldPath: string, directionStr?: string): any => {
-      return createAdminQueryWrapper(queryRef.orderBy(fieldPath, directionStr || 'asc'), adminFirestore);
+      return createAdminQueryWrapper(queryRef.orderBy(fieldPath, directionStr || 'asc'));
     },
     get: async () => {
       const snap = await queryRef.get();
@@ -385,7 +370,7 @@ export const adminAuth = {
         throw new Error(`Firebase token verification failed: ${adminErr.message}`);
       }
     }
-
+    
     const parts = cleanToken.split(".");
     if (parts.length !== 3) {
       throw new Error("Invalid token format: JWT must contain 3 parts");
@@ -440,7 +425,6 @@ export const adminAuth = {
       role: payload.role || (payload.email === "miratechindustries@gmail.com" ? "MASTER_ADMIN" : "user"),
       ...payload
     };
-  }
 };
 
 export async function verifyAdminUser(

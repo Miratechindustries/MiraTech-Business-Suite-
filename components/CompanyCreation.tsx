@@ -17,6 +17,7 @@ import {
 } from '../lib/subscriptions';
 import { getPaddle, PADDLE_PRICE_MAP, isPaddleConfigured } from '../lib/paddle-client';
 import { useToastStore } from '../lib/store';
+import { provisionTenantAction } from '../app/actions/provision';
 import ProvisioningSuccessModal from './ProvisioningSuccessModal';
 import { 
   Building2, 
@@ -1086,15 +1087,6 @@ export default function CompanyCreation() {
     const cleanEmail = (accountEmail || '').trim();
     const cleanPassword = (accountPassword || '').trim();
 
-    const isMatchingActiveSession = Boolean(
-      auth?.currentUser?.email && 
-      auth.currentUser.email.toLowerCase() === cleanEmail.toLowerCase()
-    );
-
-    if (!isMatchingActiveSession && (!cleanPassword || cleanPassword.length < 8)) {
-      setError("Administrator master password is missing or shorter than 8 characters. Please configure your master password in the Administrator section below.");
-      return;
-    }
     if (!validateStep(7)) return;
 
     setLoading(true);
@@ -1102,57 +1094,50 @@ export default function CompanyCreation() {
     setStatusLogs([]);
     logStatus(`Initializing corporate tenant provisioning for: "${companyName}"...`);
 
-    try {
-      // If user selected a paid tier and Paddle is configured, invoke getPaddle() for PCI-compliant checkout & 14-day trial card tokenization
-      if (subscriptionPlanId !== 'free' && isPaddleConfigured()) {
-        if (existingSubStatus && ['active', 'trialing', 'past_due'].includes(existingSubStatus.status)) {
-          logStatus(`Firestore Check: Valid subscription found (${existingSubStatus.status}). Bypassing Paddle checkout re-trigger...`);
-          await executeTenantProvisioning(`sub_existing_${Date.now()}`, `ctm_existing_${Date.now()}`);
-        } else {
-          logStatus(`Opening secure PCI-compliant Paddle Billing checkout (14-Day Free Trial - No immediate charge)...`);
-          const paddle = await getPaddle((event: any) => {
-            if (event?.name === 'checkout.completed') {
-              const subId = event?.data?.id || event?.data?.subscription_id || `sub_pdl_${Date.now()}`;
-              const customerId = event?.data?.customer_id || `ctm_pdl_${Date.now()}`;
-              logStatus(`Paddle checkout completed successfully! Subscription ID: ${subId}`);
-              executeTenantProvisioning(subId, customerId).catch((err: any) => {
-                console.error(err);
-                setError("Provisioning failed after payment: " + err.message);
-                setLoading(false);
-              });
-            } else if (event?.name === 'checkout.error') {
-              setError("Paddle checkout error: " + (event?.data?.message || "Payment authorization failed."));
-              setLoading(false);
-            }
-          });
+    const payload = {
+      accountEmail,
+      accountPassword,
+      companyName,
+      registrationNumber,
+      taxVatNumber,
+      industry,
+      businessType,
+      businessAddress,
+      businessCity,
+      businessCountry,
+      businessWebsite,
+      businessOfficialEmail,
+      businessOfficialPhone,
+      employeeRange,
+      branchCount,
+      currency,
+      selectedModules,
+      selectedDepartments,
+      accountFullName,
+      accountPhone,
+      adminPositionTitle,
+      initialRole,
+      permissions,
+      staffList,
+      subscriptionPlanId,
+      billingCycle,
+      paddleSubId: `sub_pdl_${Date.now()}`,
+      paddleCustId: `ctm_pdl_${Date.now()}`
+    };
 
-          if (paddle) {
-            const priceId = PADDLE_PRICE_MAP[subscriptionPlanId] || 'pri_starter_tier';
-            paddle.Checkout.open({
-              items: [{ priceId, quantity: 1 }],
-              customData: {
-                companyName: companyName,
-                userEmail: accountEmail,
-                tier: subscriptionPlanId,
-              },
-              customer: {
-                email: accountEmail,
-              },
-              settings: {
-                variant: 'one-page',
-                displayMode: 'overlay',
-                theme: 'light',
-                locale: 'en',
-                successUrl: window.location.href,
-              },
-            });
-          } else {
-            logStatus(`Paddle client unavailable. Proceeding with sandbox trial provisioning...`);
-            await executeTenantProvisioning(`sub_pdl_sandbox_${Date.now()}`, `ctm_pdl_${Date.now()}`);
-          }
-        }
+    try {
+      logStatus(`Provisioning corporate tenant securely via server action...`);
+      const result = await provisionTenantAction(payload);
+      
+      if (result.success) {
+        logStatus(`Tenant provisioned successfully!`);
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+        try { sessionStorage.removeItem(SESSION_PASSWORD_KEY); } catch (_) {}
+        localStorage.setItem('mira_post_register_redirect', 'business_admin');
+        setShowSuccessModal(true);
+        addToast("Company workspace created successfully!", "success");
       } else {
-        await executeTenantProvisioning(`sub_pdl_free_${Date.now()}`, `ctm_pdl_${Date.now()}`);
+        throw new Error(result.error || "Provisioning failed");
       }
     } catch (err: any) {
       console.error("Corporate provisioning failed:", err);

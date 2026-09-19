@@ -32,10 +32,10 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { motion } from "motion/react";
-import * as XLSX from "xlsx";
+// import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import jsPDF from "jspdf";
+// import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
 interface Employee {
@@ -154,6 +154,7 @@ export default function Payroll() {
   };
 
   const generatePDF = async () => {
+    const { jsPDF } = await import("jspdf");
     const input = pdfAreaRef.current;
     if (!input) return;
     
@@ -192,6 +193,7 @@ export default function Payroll() {
 
     try {
       const zip = new JSZip();
+      const { jsPDF } = await import("jspdf");
 
       for (const item of selectedHistoryItems) {
         setSelectedBulkPayslip(item);
@@ -643,13 +645,14 @@ export default function Payroll() {
     }
   };
 
-  const handleExportHistoryToExcel = () => {
+  const handleExportHistoryToExcel = async () => {
     if (payslipsHistory.length === 0) {
       addToast("No archived payslips available to compile export", "warning");
       return;
     }
 
     try {
+      const XLSX = await import("xlsx");
       const dataToExport = payslipsHistory.map(p => ({
         "Employee Name": p.employeeName,
         "Employee Email": p.employeeEmail,

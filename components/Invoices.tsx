@@ -7,9 +7,9 @@ import { useUserStore, useToastStore } from "../lib/store";
 import { logAction } from "../lib/audit";
 import { uploadToDrive } from "../lib/drive";
 import { FileText, Plus, Search, Trash, Edit, Download, Loader2, Eye, X, Check, Wallet, FileSpreadsheet } from "lucide-react";
-import jsPDF from "jspdf";
+// import jsPDF from "jspdf";
 import safeHtml2Canvas from "../lib/safeHtml2canvas";
-import * as XLSX from "xlsx";
+// import * as XLSX from "xlsx";
 import LoadingSkeleton from "./LoadingSkeleton";
 
 interface Item {
@@ -611,7 +611,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
   };
 
 
-  const exportInvoicesToExcel = () => {
+  const exportInvoicesToExcel = async () => {
     const data = invoices.flatMap(inv => 
       inv.items.map(item => ({
         "Invoice No.": inv.number,
@@ -626,6 +626,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
       }))
     );
 
+    const XLSX = await import("xlsx");
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Invoices");
@@ -640,6 +641,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
       const element = pdfAreaRef.current;
       const canvas = await safeHtml2Canvas(element, { scale: 2, useCORS: true });
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const { jsPDF } = await import("jspdf");
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210; // A4 dimensions
       const imgHeight = (canvas.height * imgWidth) / canvas.width;

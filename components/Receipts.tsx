@@ -7,7 +7,7 @@ import { useUserStore, useToastStore } from "../lib/store";
 import { logAction } from "../lib/audit";
 import { uploadToDrive } from "../lib/drive";
 import { FileCheck, Search, Trash, Download, Loader2, Eye, X } from "lucide-react";
-import jsPDF from "jspdf";
+// import jsPDF from "jspdf";
 import safeHtml2Canvas from "../lib/safeHtml2canvas";
 
 interface Receipt {
@@ -163,6 +163,7 @@ export default function Receipts({ departmentId }: { departmentId?: string }) {
       const element = pdfAreaRef.current;
       const canvas = await safeHtml2Canvas(element, { scale: 2, useCORS: true });
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const { jsPDF } = await import("jspdf");
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
