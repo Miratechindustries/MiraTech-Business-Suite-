@@ -1,11 +1,13 @@
-import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { initializeApp, getApps, cert, getApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { NextRequest } from "next/server";
 
 /**
  * MiraTech Business Suite - Firebase Admin & Server SDK Utilities
  * 
- * Provides server-side authentication verification and Firestore database access
+ * Provides server-side authentication verification and Firestore database access.
+ * Explicitly forbids falling back to client-side SDK in server contexts.
  */
 
 export let adminAppAuth: any = null;
@@ -14,7 +16,7 @@ export let adminFirestoreInstance: any = null;
 try {
   let app;
   if (getApps().length > 0) {
-    app = getApps()[0];
+    app = getApp();
     console.log("[Firebase Admin]: Initialized from existing app.");
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
@@ -23,14 +25,18 @@ try {
     });
     console.log("[Firebase Admin]: Initialized from SERVICE_ACCOUNT_KEY.");
   } else {
+    // Attempt default initialization in server environment
     app = initializeApp();
     console.log("[Firebase Admin]: Initialized from default credentials.");
   }
   
   adminAppAuth = getAuth(app);
   adminFirestoreInstance = getFirestore(app);
+  console.log("[Firebase Admin]: Successfully initialized.");
 } catch (e) {
-  console.error("[Firebase Admin]: Critical load error:", e);
+  console.error("[Firebase Admin]: Critical initialization failure:", e);
+  // Do NOT fallback to client-side. Server-side must have Admin SDK configured correctly.
+  throw new Error(`Firebase Admin SDK failed to initialize: ${(e as Error).message}`);
 }
 
 function getClientDb(): any {
@@ -343,13 +349,13 @@ function createClientQueryWrapper(q: any, clientDb: any): any {
 }
 
 export const adminAuth = {
-  verifyIdToken: async (token: string): Promise<{
+  async verifyIdToken(token: string): Promise<{
     uid: string;
     email: string;
     email_verified?: boolean;
     role?: string;
     [key: string]: any;
-  }> => {
+  }> {
     if (!token || typeof token !== "string" || token.trim().length === 0) {
       throw new Error("Invalid token: token cannot be empty");
     }
@@ -425,6 +431,7 @@ export const adminAuth = {
       role: payload.role || (payload.email === "miratechindustries@gmail.com" ? "MASTER_ADMIN" : "user"),
       ...payload
     };
+  }
 };
 
 export async function verifyAdminUser(
