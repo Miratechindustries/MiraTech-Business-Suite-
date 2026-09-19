@@ -1514,7 +1514,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
           </p>
 
           <div className="absolute bottom-[20mm] left-[20mm] right-[20mm] border-t border-slate-200 pt-5 text-center text-[10px] text-slate-400 font-semibold">
-            MiraTech Executive Report & Ledger Engine - {new Date().getFullYear()} All Rights Reserved.
+            MiraTech Business Suite - {new Date().getFullYear()} All Rights Reserved.
           </div>
         </div>
       </div>

@@ -849,7 +849,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
               <Landmark className="h-7 w-7" />
             </span>
             <h1 className="text-xl font-extrabold font-sans text-slate-900 tracking-tight">
-              MiraTech Report & Ledger Engine
+              MiraTech Business Suite
             </h1>
             <p className="text-xs text-slate-500 leading-relaxed max-w-md mx-auto">
               Enterprise quotation, billing, payroll, and active Google Workspace synchronization engine.

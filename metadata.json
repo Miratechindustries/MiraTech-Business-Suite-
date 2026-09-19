@@ -1,6 +1,6 @@
 {
-  "name": "MiraTech Executive Report & Ledger Engine",
-  "description": "Cloud-based business management and enterprise ERP SaaS platform integrating CRM, double-entry accounting, invoicing, automated payroll, multi-warehouse inventory, and transactional subscription email notification pipelines with Paddle Merchant of Record billing and RFC 8058 email compliance.",
+  "name": "MiraTech Business Suite",
+  "description": "Enterprise cloud-based business management and ERP SaaS platform integrating CRM, double-entry general ledger, invoicing, quotations, receipts, automated payroll, multi-warehouse inventory, and transactional email notification pipelines with Paddle billing compliance.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

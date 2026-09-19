@@ -139,21 +139,64 @@ export async function createAndSendOtp(
     });
 
     const orgName = companyName || "MiraTech Business Suite";
-    const senderName = process.env.BREVO_SENDER_NAME || "MiraTech Security";
+    const senderName = process.env.BREVO_SENDER_NAME || "MiraTech Business Suite Security";
     const senderEmail = process.env.BREVO_SENDER_EMAIL || "no-reply@miratech.io";
 
-    const emailSubject = `Your ${orgName} Verification Code: ${rawCode}`;
-    const textContent = `Your ${orgName} 6-digit verification code is: ${rawCode}. This code expires in 10 minutes.`;
+    const emailSubject = `Your ${orgName} Verification Code: ${rawCode} - MiraTech Business Suite`;
+    const textContent = `Your ${orgName} 6-digit verification code is: ${rawCode}.\n\nThis verification code was generated for your MiraTech Business Suite workspace session and will expire in 10 minutes.\n\nSecurity Notice: Never share this single-use code with anyone. MiraTech administrators will never ask for your verification code.`;
     
     const bodyContent = `
-      <p style="margin: 0 0 16px 0;">You are registering or verifying a corporate workspace for <strong>${orgName}</strong>. Please enter the following 6-digit confirmation code in your verification prompt to validate your corporate identity:</p>
-      
-      <div style="background-color: #f1f5f9; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
-        <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #1e293b;">${rawCode}</div>
-        <div style="font-size: 12px; color: #64748b; margin-top: 8px; font-weight: 500;">Expires in 10 minutes • Single-use corporate security code</div>
-      </div>
+      <div style="text-align: left; margin-bottom: 24px;">
+        <!-- Security Header Badge -->
+        <div style="display: inline-block; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 9999px; padding: 4px 12px; margin-bottom: 14px;">
+          <span style="font-size: 11px; font-weight: 700; color: #1d4ed8; text-transform: uppercase; letter-spacing: 0.5px;">
+            🛡️ Identity Authentication Gateway
+          </span>
+        </div>
 
-      <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b;">If you did not request this verification code, please ignore this notice or contact our security desk immediately. Never disclose this one-time code to third parties.</p>
+        <p style="margin: 0 0 14px 0; font-size: 15px; color: #1e293b; line-height: 1.6;">
+          You are authenticating or verifying a corporate tenant workspace for <strong>${orgName}</strong> within the <strong>MiraTech Business Suite</strong>.
+        </p>
+        <p style="margin: 0 0 20px 0; font-size: 14px; color: #475569; line-height: 1.5;">
+          Please enter the following 6-digit verification passcode in your active session prompt to authenticate your corporate credentials:
+        </p>
+
+        <!-- High-Security OTP Display Box in MiraTech Suite Theme -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0; background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%); border: 2px solid #3b82f6; border-radius: 14px; box-shadow: 0 6px 16px rgba(37, 99, 235, 0.08); overflow: hidden;">
+          <tr>
+            <td style="padding: 10px 20px; background-color: #0f172a; border-bottom: 1px solid #1e293b; text-align: center;">
+              <span style="font-size: 11px; font-weight: 700; color: #93c5fd; text-transform: uppercase; letter-spacing: 1.5px;">
+                SINGLE-USE CORPORATE ACCESS TOKEN
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 26px 20px; text-align: center;">
+              <div style="font-family: ui-monospace, 'SFMono-Regular', 'Roboto Mono', Menlo, Monaco, Consolas, monospace; font-size: 38px; font-weight: 800; letter-spacing: 10px; color: #0f172a; text-indent: 10px;">
+                ${rawCode}
+              </div>
+              <div style="margin-top: 14px;">
+                <span style="display: inline-block; background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; color: #065f46;">
+                  ⏱️ Valid for 10 minutes
+                </span>
+                <span style="display: inline-block; margin-left: 6px; background-color: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; color: #475569;">
+                  🔒 5 Attempts Permitted
+                </span>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Security Guidance in Theme Colors -->
+        <div style="background-color: #f8fafc; border-left: 4px solid #2563eb; border-radius: 0 8px 8px 0; padding: 14px 16px; margin: 20px 0;">
+          <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: 700; color: #0f172a;">MiraTech Business Suite Security Notice:</h4>
+          <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #475569; line-height: 1.6;">
+            <li>Never disclose this passcode to anyone. MiraTech Support will never request your OTP.</li>
+            <li>If you did not request this code, your credentials may be in use elsewhere. Please secure your account immediately.</li>
+            <li>Dispatched securely through your enterprise Brevo SMTP transaction router.</li>
+          </ul>
+        </div>
+      </div>
     `;
 
     const { html: emailHtml } = generateEmailHtml({
@@ -161,7 +204,7 @@ export async function createAndSendOtp(
       subject: emailSubject,
       category: "TRANSACTIONAL",
       emailType: "OTP_VERIFICATION",
-      headline: "Verify Corporate Identity",
+      headline: "Corporate Identity Verification",
       bodyContent,
       textContent,
       companyDetails: {

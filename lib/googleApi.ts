@@ -19,7 +19,7 @@ export async function syncToGoogleSheets(
       },
       body: JSON.stringify({
         properties: {
-          title: `MiraTech Executive Report - ${companyName} (${new Date().toLocaleDateString()})`,
+          title: `MiraTech Business Suite Report - ${companyName} (${new Date().toLocaleDateString()})`,
         },
       }),
     });
@@ -34,7 +34,7 @@ export async function syncToGoogleSheets(
 
     // 2. Format standard tables
     const rows = [
-      ["MiraTech Corporate Executive Report & Ledger Engine"],
+      ["MiraTech Business Suite - Executive Ledger & Report"],
       ["Company Name", companyName],
       ["Synced Date", new Date().toLocaleString()],
       [],
