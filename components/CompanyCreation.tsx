@@ -18,6 +18,7 @@ import {
 import { getPaddle, PADDLE_PRICE_MAP, isPaddleConfigured } from '../lib/paddle-client';
 import { useToastStore } from '../lib/store';
 import { provisionTenantAction } from '../app/actions/provision';
+import { motion, AnimatePresence } from 'motion/react';
 import ProvisioningSuccessModal from './ProvisioningSuccessModal';
 import { 
   Building2, 
@@ -158,6 +159,29 @@ const STEPS = [
   { number: 7, title: "Review", subtitle: "Confirm & Launch" }
 ];
 
+const PROVISIONING_STAGES = [
+  {
+    id: 'tenant_record',
+    title: 'Creating Tenant Record',
+    description: 'Establishing cryptographic credentials & unique organization identifier',
+  },
+  {
+    id: 'init_database',
+    title: 'Initializing Database',
+    description: 'Partitioning company workspace, chart of accounts & data collections',
+  },
+  {
+    id: 'access_roles',
+    title: 'Configuring Access Roles',
+    description: 'Setting up administrative authority, security policies & employee seats',
+  },
+  {
+    id: 'workspace_finalize',
+    title: 'Finalizing Workspace',
+    description: 'Activating enterprise modules & preparing executive control center',
+  },
+];
+
 const DRAFT_STORAGE_KEY = "miratech_registration_wizard_draft_v2";
 const SESSION_PASSWORD_KEY = "miratech_temp_registration_pwd";
 
@@ -166,6 +190,8 @@ export default function CompanyCreation() {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [provisioningPhase, setProvisioningPhase] = useState<number>(0);
+  const [provisioningProgress, setProvisioningProgress] = useState<number>(20);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1090,9 +1116,23 @@ export default function CompanyCreation() {
     if (!validateStep(7)) return;
 
     setLoading(true);
+    setProvisioningPhase(0);
+    setProvisioningProgress(20);
     setError(null);
     setStatusLogs([]);
     logStatus(`Initializing corporate tenant provisioning for: "${companyName}"...`);
+
+    const phaseTimer1 = setTimeout(() => {
+      setProvisioningPhase(1);
+      setProvisioningProgress(50);
+      logStatus(`[Step 2/4] Initializing Database: establishing multi-tenant data collections & ledger schemas...`);
+    }, 900);
+
+    const phaseTimer2 = setTimeout(() => {
+      setProvisioningPhase(2);
+      setProvisioningProgress(75);
+      logStatus(`[Step 3/4] Configuring Access Roles: generating security policies, admin authority & staff seats...`);
+    }, 2000);
 
     const payload = {
       accountEmail,
@@ -1126,20 +1166,32 @@ export default function CompanyCreation() {
     };
 
     try {
-      logStatus(`Provisioning corporate tenant securely via server action...`);
+      logStatus(`[Step 1/4] Creating Tenant Record: provisioning credentials securely via server action...`);
       const result = await provisionTenantAction(payload);
       
+      clearTimeout(phaseTimer1);
+      clearTimeout(phaseTimer2);
+
       if (result.success) {
-        logStatus(`Tenant provisioned successfully!`);
+        setProvisioningPhase(3);
+        setProvisioningProgress(100);
+        logStatus(`[Step 4/4] Finalizing Workspace: activating subscriptions & executive control center...`);
+        
+        // Brief pause for visual confirmation
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
         localStorage.removeItem(DRAFT_STORAGE_KEY);
         try { sessionStorage.removeItem(SESSION_PASSWORD_KEY); } catch (_) {}
         localStorage.setItem('mira_post_register_redirect', 'business_admin');
+        setLoading(false);
         setShowSuccessModal(true);
         addToast("Company workspace created successfully!", "success");
       } else {
         throw new Error(result.error || "Provisioning failed");
       }
     } catch (err: any) {
+      clearTimeout(phaseTimer1);
+      clearTimeout(phaseTimer2);
       console.error("Corporate provisioning failed:", err);
       setError(err.message || "Failed to provision corporate workspace. Please review your parameters and try again.");
       logStatus(`[ERROR] Provisioning halted: ${err.message}`);
@@ -2732,9 +2784,162 @@ export default function CompanyCreation() {
         </div>
       </div>
 
+      {/* Multi-Step Provisioning Progress Overlay */}
+      <AnimatePresence>
+        {loading && (
+          <motion.div
+            id="provisioning-progress-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="provisioning-progress-title"
+          >
+            <motion.div
+              id="provisioning-progress-card"
+              initial={{ scale: 0.92, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 280 }}
+              className="bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-6 relative overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-inner">
+                    <Building2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3" /> Tenant Provisioning Engine
+                    </span>
+                    <h3 id="provisioning-progress-title" className="text-lg font-black text-slate-900 leading-tight">
+                      {companyName || 'Corporate Workspace'}
+                    </h3>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-black font-mono text-blue-600">
+                    {provisioningProgress}%
+                  </span>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Progress
+                  </p>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="space-y-1.5">
+                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200/60 shadow-inner">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 rounded-full"
+                    initial={{ width: '15%' }}
+                    animate={{ width: `${provisioningProgress}%` }}
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                  />
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-slate-500 font-medium">
+                  <span>Phase {provisioningPhase + 1} of {PROVISIONING_STAGES.length}</span>
+                  <span className="font-semibold text-blue-600">{PROVISIONING_STAGES[provisioningPhase]?.title}</span>
+                </div>
+              </div>
+
+              {/* Multi-Step Checklist */}
+              <div className="space-y-2.5">
+                {PROVISIONING_STAGES.map((stage, idx) => {
+                  const isDone = idx < provisioningPhase;
+                  const isCurrent = idx === provisioningPhase;
+
+                  return (
+                    <div
+                      key={stage.id}
+                      className={`p-3 rounded-xl border transition-all duration-300 flex items-center justify-between gap-3 ${
+                        isCurrent
+                          ? 'bg-blue-50/70 border-blue-200 shadow-xs ring-1 ring-blue-500/20'
+                          : isDone
+                          ? 'bg-slate-50/70 border-slate-200/70 text-slate-700'
+                          : 'bg-white border-slate-100 text-slate-400 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="shrink-0">
+                          {isDone ? (
+                            <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">
+                              <CheckCircle2 className="w-4 h-4" />
+                            </div>
+                          ) : isCurrent ? (
+                            <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            </div>
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-xs font-bold">
+                              {idx + 1}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className={`text-xs font-bold truncate ${isCurrent ? 'text-blue-900' : isDone ? 'text-slate-800' : 'text-slate-400'}`}>
+                            {stage.title}
+                          </p>
+                          <p className="text-[10px] text-slate-500 truncate">
+                            {stage.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                          isDone
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : isCurrent
+                            ? 'bg-blue-100 text-blue-700 animate-pulse'
+                            : 'bg-slate-100 text-slate-400'
+                        }`}
+                      >
+                        {isDone ? 'Completed' : isCurrent ? 'Setting up...' : 'Queued'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Status Log Terminal snippet */}
+              {statusLogs.length > 0 && (
+                <div className="bg-slate-900 text-slate-200 rounded-xl p-3 text-[11px] font-mono space-y-1 shadow-inner max-h-24 overflow-y-auto">
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1 mb-1">
+                    <span className="flex items-center gap-1.5 text-emerald-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Live System Telemetry
+                    </span>
+                    <span>{statusLogs.length} events</span>
+                  </div>
+                  {statusLogs.slice(-3).map((log, i) => (
+                    <div key={i} className="text-slate-300 truncate text-[10px]">
+                      &gt; {log}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-[11px] text-center text-slate-500">
+                Please keep this browser window open while your dedicated tenant database is prepared.
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Registration Modals */}
       <ProvisioningSuccessModal 
         isOpen={showSuccessModal} 
+        companyName={companyName}
+        accountEmail={accountEmail}
+        planName={selectedPlanDetails.name}
+        modulesCount={selectedModules.length}
+        staffCount={staffList.length}
+        currency={currency}
         onComplete={async () => {
           try {
             const cleanEmail = (accountEmail || '').trim();
