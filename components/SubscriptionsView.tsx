@@ -96,7 +96,7 @@ export default function SubscriptionsView() {
     } finally {
       setLoadingInvoices(false);
     }
-  }, [targetCompanyId]);
+  }, [targetCompanyId, company?.paddleCustomerId, company?.paddleSubscriptionId]);
 
   const handleDownloadInvoice = async (txnId: string) => {
     try {

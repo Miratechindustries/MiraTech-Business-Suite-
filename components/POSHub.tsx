@@ -70,6 +70,28 @@ export default function POSHub({ companyId: propCompanyId, userId: propUserId }:
 
   const TAX_RATE = 0.15;
 
+  const syncOfflineTransactions = useCallback(async () => {
+    const queue = JSON.parse(localStorage.getItem('pos_offline_queue') || '[]');
+    if (queue.length === 0) return;
+    
+    const remainingQueue = [];
+    for (const { saleRecord, cart } of queue) {
+        try {
+            // Re-add createdAt server timestamp
+            await addDoc(collection(db, "companies", companyId, "pos_sales"), { ...saleRecord, createdAt: serverTimestamp() });
+            for (const item of cart) {
+                const prodRef = doc(db, "products", item.id);
+                await updateDoc(prodRef, { stock: (Number(item.stock) || 0) - item.quantity });
+            }
+        } catch (e) {
+            console.error("Sync failed", e);
+            remainingQueue.push({ saleRecord, cart });
+        }
+    }
+    localStorage.setItem('pos_offline_queue', JSON.stringify(remainingQueue));
+    if (remainingQueue.length === 0) addToast('All transactions synced', 'success');
+  }, [companyId, addToast]);
+
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
       setIsOffline(!navigator.onLine);
@@ -138,37 +160,7 @@ export default function POSHub({ companyId: propCompanyId, userId: propUserId }:
         window.removeEventListener('online', handleOnline);
         window.removeEventListener('offline', handleOffline);
     };
-  }, [companyId, userId]);
-
-  const saveToOfflineQueue = (saleRecord: any, cart: any[]) => {
-      const queue = JSON.parse(localStorage.getItem('pos_offline_queue') || '[]');
-      localStorage.setItem('pos_offline_queue', JSON.stringify([...queue, { saleRecord, cart }]));
-      setCart([]);
-      setShowReceipt(true);
-      setLastSale({ cart, total: saleRecord.totalAmount / (1 + TAX_RATE), tax: saleRecord.totalAmount - (saleRecord.totalAmount / (1 + TAX_RATE)), grandTotal: saleRecord.totalAmount });
-  };
-
-  const syncOfflineTransactions = async () => {
-      const queue = JSON.parse(localStorage.getItem('pos_offline_queue') || '[]');
-      if (queue.length === 0) return;
-      
-      const remainingQueue = [];
-      for (const { saleRecord, cart } of queue) {
-          try {
-              // Re-add createdAt server timestamp
-              await addDoc(collection(db, "companies", companyId, "pos_sales"), { ...saleRecord, createdAt: serverTimestamp() });
-              for (const item of cart) {
-                  const prodRef = doc(db, "products", item.id);
-                  await updateDoc(prodRef, { stock: (Number(item.stock) || 0) - item.quantity });
-              }
-          } catch (e) {
-              console.error("Sync failed", e);
-              remainingQueue.push({ saleRecord, cart });
-          }
-      }
-      localStorage.setItem('pos_offline_queue', JSON.stringify(remainingQueue));
-      if (remainingQueue.length === 0) addToast('All transactions synced', 'success');
-  };
+  }, [companyId, userId, addToast, syncOfflineTransactions]);
 
   const toggleShift = async () => {
       if (isClockedIn) {

@@ -56,7 +56,7 @@ In the third bullet, provide a specific, actionable recommendation to improve ma
 Use "E" for currency. Use clean Markdown bullets. Avoid any flowery or marketing-hype words.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
 

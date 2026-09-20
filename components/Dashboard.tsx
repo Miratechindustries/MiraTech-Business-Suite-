@@ -204,7 +204,7 @@ export default function Dashboard({ googleToken, onGoogleSignInNeeded }: Dashboa
     } finally {
       setLoading(false);
     }
-  }, [currentUser?.companyId, currentUser?.businessId, currentUser?.id]);
+  }, [currentUser?.companyId, currentUser?.businessId, auth.currentUser]);
 
   useEffect(() => {
     loadData();

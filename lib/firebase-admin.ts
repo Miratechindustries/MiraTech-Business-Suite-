@@ -1,20 +1,36 @@
 import { initializeApp, getApps, cert, getApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { NextRequest } from "next/server";
+import { db as defaultClientDb } from "./firebase";
+import {
+  collection as clientCol,
+  doc as clientDoc,
+  getDocs as clientGetDocs,
+  getDoc as clientGetDoc,
+  setDoc as clientSetDoc,
+  updateDoc as clientUpdateDoc,
+  deleteDoc as clientDeleteDoc,
+  addDoc as clientAddDoc,
+  query as clientQuery,
+  where as clientWhere,
+  limit as clientLimit,
+  orderBy as clientOrderBy,
+  writeBatch as clientWriteBatch,
+  runTransaction as clientRunTransaction,
+} from "firebase/firestore";
 
 /**
  * MiraTech Business Suite - Firebase Admin & Server SDK Utilities
  * 
  * Provides server-side authentication verification and Firestore database access.
- * Explicitly forbids falling back to client-side SDK in server contexts.
  */
 
 export let adminAppAuth: any = null;
 export let adminFirestoreInstance: any = null;
 
 try {
-  let app;
+  let app: any = null;
   if (getApps().length > 0) {
     app = getApp();
     console.log("[Firebase Admin]: Reusing existing app.");
@@ -28,34 +44,21 @@ try {
     } catch (parseErr) {
       console.error("[Firebase Admin]: Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY JSON:", parseErr);
     }
-  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.K_SERVICE || process.env.GAE_SERVICE) {
-    // Attempt default initialization in GCP / Cloud Run environment
-    try {
-      app = initializeApp();
-      console.log("[Firebase Admin]: Initialized from environment credentials.");
-    } catch (gcpErr) {
-      console.warn("[Firebase Admin]: Default GCP credential initialization failed:", gcpErr);
-    }
   }
-  
+
   if (app) {
     adminAppAuth = getAuth(app);
     adminFirestoreInstance = getFirestore(app);
     console.log("[Firebase Admin]: Successfully initialized Admin SDK instance.");
   } else {
-    console.warn("[Firebase Admin]: Admin credentials not found in environment. Server operations will use resilient client fallback.");
+    console.log("[Firebase Admin]: Operating in resilient client-first mode targeting Firebase project database.");
   }
 } catch (e) {
   console.warn("[Firebase Admin]: Initialization note:", (e as Error).message);
 }
 
 function getClientDb(): any {
-  const { db } = require("./firebase");
-  return db;
-}
-
-function getClientFirestoreFns(): any {
-  return require("firebase/firestore");
+  return defaultClientDb;
 }
 
 export const adminDb = {
@@ -96,7 +99,6 @@ export const adminDb = {
           };
         },
         add: async (data: any) => {
-          const { FieldValue } = require("firebase-admin/firestore");
           const docRef = await colRef.add({ ...data, createdAt: FieldValue.serverTimestamp() });
           return { id: docRef.id, _ref: docRef };
         },
@@ -129,21 +131,20 @@ export const adminDb = {
         }
       };
     } else {
-      const clientDb = getClientDb();
-      const { collection: clientCol, doc: clientDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, addDoc, query, where, limit, orderBy } = getClientFirestoreFns();
-      const colRef = clientCol(clientDb, colName);
+      const activeDb = getClientDb();
+      const colRef = clientCol(activeDb, colName);
       return {
         id: colName,
         path: colName,
         _ref: colRef,
         doc: (docId?: string): any => {
-          const docRef = docId ? clientDoc(clientDb, colName, docId) : clientDoc(colRef);
+          const docRef = docId ? clientDoc(activeDb, colName, docId) : clientDoc(colRef);
           return {
             id: docRef.id,
             path: docRef.path,
             _ref: docRef,
             get: async () => {
-              const snap = await getDoc(docRef);
+              const snap = await clientGetDoc(docRef);
               return {
                 id: snap.id,
                 exists: snap.exists(),
@@ -152,13 +153,13 @@ export const adminDb = {
               };
             },
             set: async (data: any, options?: { merge?: boolean }) => {
-              return await setDoc(docRef, data, options || {});
+              return await clientSetDoc(docRef, data, options || {});
             },
             update: async (data: any) => {
-              return await updateDoc(docRef, data);
+              return await clientUpdateDoc(docRef, data);
             },
             delete: async () => {
-              return await deleteDoc(docRef);
+              return await clientDeleteDoc(docRef);
             },
             collection: (subColName: string): any => {
               return adminDb.collection(`${colName}/${docRef.id}/${subColName}`);
@@ -166,23 +167,23 @@ export const adminDb = {
           };
         },
         add: async (data: any) => {
-          const docRef = await addDoc(colRef, data);
+          const docRef = await clientAddDoc(colRef, data);
           return { id: docRef.id, _ref: docRef };
         },
         where: (fieldPath: string, opStr: any, value: any): any => {
-          const q = query(colRef, where(fieldPath, opStr, value));
-          return createClientQueryWrapper(q, clientDb);
+          const q = clientQuery(colRef, clientWhere(fieldPath, opStr, value));
+          return createClientQueryWrapper(q, activeDb);
         },
         limit: (num: number): any => {
-          const q = query(colRef, limit(num));
-          return createClientQueryWrapper(q, clientDb);
+          const q = clientQuery(colRef, clientLimit(num));
+          return createClientQueryWrapper(q, activeDb);
         },
         orderBy: (fieldPath: string, directionStr?: any): any => {
-          const q = query(colRef, orderBy(fieldPath, directionStr));
-          return createClientQueryWrapper(q, clientDb);
+          const q = clientQuery(colRef, clientOrderBy(fieldPath, directionStr));
+          return createClientQueryWrapper(q, activeDb);
         },
         get: async () => {
-          const snap = await getDocs(colRef);
+          const snap = await clientGetDocs(colRef);
           const docs = snap.docs.map((d: any) => ({
             id: d.id,
             exists: d.exists(),
@@ -224,9 +225,8 @@ export const adminDb = {
         commit: async () => await b.commit()
       };
     } else {
-      const clientDb = getClientDb();
-      const { writeBatch } = getClientFirestoreFns();
-      const b = writeBatch(clientDb);
+      const activeDb = getClientDb();
+      const b = clientWriteBatch(activeDb);
       return {
         set: (docRef: any, data: any, options?: { merge?: boolean }) => {
           b.set(docRef._ref || docRef, data, options || {});
@@ -270,9 +270,8 @@ export const adminDb = {
         return await updateFunction(wrappedTransaction);
       });
     } else {
-      const clientDb = getClientDb();
-      const { runTransaction: clientRunTransaction } = getClientFirestoreFns();
-      return await clientRunTransaction(clientDb, async (t: any) => {
+      const activeDb = getClientDb();
+      return await clientRunTransaction(activeDb, async (t: any) => {
         const wrappedTransaction = {
           get: async (docRef: any) => {
             const snap = await t.get(docRef._ref || docRef);
@@ -328,20 +327,19 @@ function createAdminQueryWrapper(queryRef: any): any {
   };
 }
 
-function createClientQueryWrapper(q: any, clientDb: any): any {
-  const { getDocs, query, where, limit, orderBy } = getClientFirestoreFns();
+function createClientQueryWrapper(q: any, activeDb: any): any {
   return {
     where: (fieldPath: string, opStr: any, value: any): any => {
-      return createClientQueryWrapper(query(q, where(fieldPath, opStr, value)), clientDb);
+      return createClientQueryWrapper(clientQuery(q, clientWhere(fieldPath, opStr, value)), activeDb);
     },
     limit: (num: number): any => {
-      return createClientQueryWrapper(query(q, limit(num)), clientDb);
+      return createClientQueryWrapper(clientQuery(q, clientLimit(num)), activeDb);
     },
     orderBy: (fieldPath: string, directionStr?: any): any => {
-      return createClientQueryWrapper(query(q, orderBy(fieldPath, directionStr)), clientDb);
+      return createClientQueryWrapper(clientQuery(q, clientOrderBy(fieldPath, directionStr)), activeDb);
     },
     get: async () => {
-      const snap = await getDocs(q);
+      const snap = await clientGetDocs(q);
       const docs = snap.docs.map((d: any) => ({
         id: d.id,
         exists: d.exists(),

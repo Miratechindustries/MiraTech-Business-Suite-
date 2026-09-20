@@ -72,7 +72,7 @@ export default function EmailPreferenceAdmin() {
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState<any | null>(null);
 
-  const fetchPreferencesAndLogs = async () => {
+  const fetchPreferencesAndLogs = useCallback(async () => {
     setLoading(true);
     try {
       let authHeader = '';
@@ -99,11 +99,11 @@ export default function EmailPreferenceAdmin() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter, search]);
 
   useEffect(() => {
     fetchPreferencesAndLogs();
-  }, [filter]);
+  }, [fetchPreferencesAndLogs]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();

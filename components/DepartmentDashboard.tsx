@@ -113,8 +113,8 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
 
 
   
-  // Tab State: "overview" | "quotations" | "invoices" | "receipts" | "crm" | "ledger" | "audit_center" | "payroll" | "inventory" | "reports" | "audit"
-  const [activeSubTab, setActiveSubTab] = useState<string>("overview");
+  // Tab State: "overview" | "quotations" | "invoices" | "receipts" | "crm" | "ledger" | "audit_center" | "payroll" | "inventory" | "reports" | "audit" | "social" | "procurement_hub"
+  const [activeSubTab, setActiveSubTab] = useState<string>(depLower === "marketing" ? "social" : "overview");
   const [selectedKpi, setSelectedKpi] = useState<any>(null);
   const [kpiSearch, setKpiSearch] = useState<string>("");
 
