@@ -1071,6 +1071,16 @@ export default function CompanyCreation() {
       paymentMethodCaptured: true
     };
 
+    // Ensure main client auth session is authenticated as adminUid before writing to Firestore
+    if (!auth?.currentUser || auth.currentUser.uid !== adminUid) {
+      try {
+        await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        logStatus(`Authenticated client session for corporate administrator (${cleanEmail}).`);
+      } catch (signinErr) {
+        console.warn("Client auth synchronization note:", signinErr);
+      }
+    }
+
     await setDoc(doc(db, 'companies', adminUid), companyPayload);
     await setDoc(doc(db, 'businesses', adminUid), companyPayload);
     logStatus(`Company tenant profile persisted on /companies/${adminUid} and /businesses/${adminUid}.`);
@@ -1232,6 +1242,11 @@ export default function CompanyCreation() {
         setProvisioningProgress(100);
         logStatus(`[Step 4/4] Finalizing Workspace: activating subscriptions & executive control center...`);
         
+        // Automatically establish client auth session with primary administrator credentials
+        try {
+          await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        } catch (_) {}
+
         // Brief pause for visual confirmation
         await new Promise((resolve) => setTimeout(resolve, 600));
 
@@ -1247,11 +1262,18 @@ export default function CompanyCreation() {
     } catch (err: any) {
       clearTimeout(phaseTimer1);
       clearTimeout(phaseTimer2);
-      console.error("Corporate provisioning failed:", err);
-      setError(err.message || "Failed to provision corporate workspace. Please review your parameters and try again.");
-      logStatus(`[ERROR] Provisioning halted: ${err.message}`);
-      addToast(err.message || "Provisioning failed", "error");
-      setLoading(false);
+      console.warn("Server action provisioning note, initiating direct client provisioning:", err);
+      logStatus(`Executing direct authenticated client provisioning fallback...`);
+      try {
+        await executeTenantProvisioning(payload.paddleSubId, payload.paddleCustId);
+        setLoading(false);
+      } catch (fallbackErr: any) {
+        console.error("Corporate provisioning failed:", fallbackErr);
+        setError(fallbackErr.message || "Failed to provision corporate workspace. Please review your parameters and try again.");
+        logStatus(`[ERROR] Provisioning halted: ${fallbackErr.message}`);
+        addToast(fallbackErr.message || "Provisioning failed", "error");
+        setLoading(false);
+      }
     }
   };
 

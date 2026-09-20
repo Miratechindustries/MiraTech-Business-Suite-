@@ -39,8 +39,93 @@ export interface BrevoSendResult {
 export function getBrevoSender(customSender?: Partial<BrevoSender>): BrevoSender {
   return {
     name: customSender?.name || process.env.BREVO_SENDER_NAME || "MiraTech Business Suite",
-    email: customSender?.email || process.env.BREVO_SENDER_EMAIL || "no-reply@miratech.io",
+    email: customSender?.email || process.env.BREVO_SENDER_EMAIL || "miratechindustries@gmail.com",
   };
+}
+
+/**
+ * Sanitizes tags to conform with Brevo's strict ASCII alphanumeric + hyphen/underscore requirement (max 50 chars).
+ */
+function sanitizeTags(tags?: string[]): string[] | undefined {
+  if (!tags || !Array.isArray(tags) || tags.length === 0) return undefined;
+  const cleaned = tags
+    .map((t) => (typeof t === "string" ? t.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_").slice(0, 50) : ""))
+    .filter(Boolean);
+  return cleaned.length > 0 ? Array.from(new Set(cleaned)).slice(0, 10) : undefined;
+}
+
+/**
+ * Sanitizes headers to prevent CRLF injection.
+ */
+function sanitizeHeaders(headers?: Record<string, string>): Record<string, string> | undefined {
+  if (!headers || typeof headers !== "object") return undefined;
+  const clean: Record<string, string> = {};
+  for (const [key, val] of Object.entries(headers)) {
+    if (key && val && typeof val === "string") {
+      const cleanKey = key.replace(/[\r\n]/g, "").trim();
+      const cleanVal = val.replace(/[\r\n]/g, "").trim();
+      if (cleanKey && cleanVal) {
+        clean[cleanKey] = cleanVal;
+      }
+    }
+  }
+  return Object.keys(clean).length > 0 ? clean : undefined;
+}
+
+/**
+ * Validates Brevo API credentials and returns account status.
+ */
+export async function testBrevoConnection(): Promise<{
+  configured: boolean;
+  valid: boolean;
+  email?: string;
+  plan?: string;
+  credits?: number;
+  error?: string;
+}> {
+  const brevoApiKey = process.env.BREVO_API_KEY?.trim();
+  if (!brevoApiKey) {
+    return {
+      configured: false,
+      valid: false,
+      error: "BREVO_API_KEY environment variable is not configured.",
+    };
+  }
+
+  try {
+    const response = await fetch("https://api.brevo.com/v3/account", {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        "api-key": brevoApiKey,
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const emailCredit = data.plan?.find((p: any) => p.type === "free" || p.type === "subscription" || p.type === "payAsYouGo");
+      return {
+        configured: true,
+        valid: true,
+        email: data.email,
+        plan: emailCredit?.type || "Standard",
+        credits: emailCredit?.credits ?? data.relay?.data?.credits,
+      };
+    }
+
+    const errJson = await response.json().catch(() => ({}));
+    return {
+      configured: true,
+      valid: false,
+      error: errJson.message || `Brevo returned HTTP ${response.status}`,
+    };
+  } catch (err: any) {
+    return {
+      configured: true,
+      valid: false,
+      error: err?.message || "Network error connecting to Brevo API",
+    };
+  }
 }
 
 /**
@@ -66,10 +151,23 @@ export async function sendViaBrevo(options: BrevoSendOptions): Promise<BrevoSend
     };
   }
 
-  const cleanRecipients = options.to.map((r) => ({
-    email: r.email.trim().toLowerCase(),
-    ...(r.name ? { name: r.name } : {}),
-  }));
+  const cleanRecipients = options.to
+    .filter((r) => r.email && r.email.includes("@"))
+    .map((r) => ({
+      email: r.email.trim().toLowerCase(),
+      ...(r.name ? { name: r.name.trim() } : {}),
+    }));
+
+  if (cleanRecipients.length === 0) {
+    return {
+      success: false,
+      error: "No valid recipient email addresses provided.",
+      attempts: 0,
+    };
+  }
+
+  const cleanTags = sanitizeTags(options.tags);
+  const cleanHeaders = sanitizeHeaders(options.headers);
 
   const payload: Record<string, any> = {
     sender,
@@ -78,8 +176,8 @@ export async function sendViaBrevo(options: BrevoSendOptions): Promise<BrevoSend
     htmlContent: options.htmlContent,
     ...(options.textContent ? { textContent: options.textContent } : {}),
     ...(options.replyTo ? { replyTo: options.replyTo } : {}),
-    ...(options.headers && Object.keys(options.headers).length > 0 ? { headers: options.headers } : {}),
-    ...(options.tags && options.tags.length > 0 ? { tags: options.tags } : {}),
+    ...(cleanHeaders ? { headers: cleanHeaders } : {}),
+    ...(cleanTags ? { tags: cleanTags } : {}),
   };
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {

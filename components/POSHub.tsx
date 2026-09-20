@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from "../lib/firebase";
 import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs } from "firebase/firestore";
 import { motion, AnimatePresence } from "motion/react";
@@ -145,10 +145,20 @@ export default function POSHub({ companyId: propCompanyId, userId: propUserId }:
       let itemsSold = 0;
       snap.forEach(doc => {
         const data = doc.data();
-        if (data.createdAt?.toDate().toISOString().split('T')[0] === today) {
-          revenue += data.totalAmount;
-          tax += (data.totalAmount * TAX_RATE) / (1 + TAX_RATE);
-          itemsSold += data.items.reduce((acc: number, item: any) => acc + item.quantity, 0);
+        let createdIso = '';
+        if (data.createdAt) {
+          if (typeof data.createdAt.toDate === 'function') {
+            createdIso = data.createdAt.toDate().toISOString();
+          } else if (typeof data.createdAt === 'string') {
+            createdIso = data.createdAt;
+          } else if (data.createdAt instanceof Date) {
+            createdIso = data.createdAt.toISOString();
+          }
+        }
+        if (createdIso.split('T')[0] === today) {
+          revenue += Number(data.totalAmount) || 0;
+          tax += (Number(data.totalAmount || 0) * TAX_RATE) / (1 + TAX_RATE);
+          itemsSold += (data.items || []).reduce((acc: number, item: any) => acc + (Number(item.quantity) || 0), 0);
         }
       });
       setDailySummary({ revenue, tax, itemsSold });
@@ -161,6 +171,14 @@ export default function POSHub({ companyId: propCompanyId, userId: propUserId }:
         window.removeEventListener('offline', handleOffline);
     };
   }, [companyId, userId, addToast, syncOfflineTransactions]);
+
+  const saveToOfflineQueue = (saleRecord: any, cart: any[]) => {
+      const queue = JSON.parse(localStorage.getItem('pos_offline_queue') || '[]');
+      localStorage.setItem('pos_offline_queue', JSON.stringify([...queue, { saleRecord, cart }]));
+      setCart([]);
+      setShowReceipt(true);
+      setLastSale({ cart, total: saleRecord.totalAmount / (1 + TAX_RATE), tax: saleRecord.totalAmount - (saleRecord.totalAmount / (1 + TAX_RATE)), grandTotal: saleRecord.totalAmount });
+  };
 
   const toggleShift = async () => {
       if (isClockedIn) {

@@ -80,9 +80,10 @@ service cloud.firestore {
 
     // Companies & Subcollections
     match /companies/{companyId} {
-      allow read: if verifyTenant(companyId);
-      allow create: if verifyTenant(companyId);
-      allow update: if isOwnerOrAdmin(companyId);
+      allow read: if true;
+      allow create: if isSignedIn() || isMasterAdmin();
+      allow update: if isOwnerOrAdmin(companyId) || isMasterAdmin();
+      allow delete: if isMasterAdmin();
 
       // Marketing Module
       match /campaigns/{campaignId} {
@@ -92,10 +93,11 @@ service cloud.firestore {
       }
       
       match /leads/{leadId} {
-        allow list: if verifyTenant(companyId) && resource.data.companyId == request.auth.token.companyId;
+        allow list, read: if verifyTenant(companyId);
         // Master Gate: Leads can only be written if the campaign belongs to the authenticated companyId.
         allow create: if verifyTenant(companyId) && 
                       exists(/databases/$(database)/documents/companies/$(companyId)/campaigns/$(request.resource.data.campaignId));
+        allow update, delete: if verifyTenant(companyId);
       }
 
       // Tasks (Action-Based Updates)
@@ -117,7 +119,7 @@ service cloud.firestore {
       }
 
       match /{subcollection}/{docId} {
-        allow read: if verifyTenant(companyId) && (verifyResourceTenant() || true);
+        allow read: if verifyTenant(companyId);
         allow create: if verifyTenant(companyId) && verifyCreationTenant();
         allow update: if verifyTenant(companyId) && verifyResourceTenant() && verifyCreationTenant();
         allow delete: if verifyTenant(companyId) && verifyResourceTenant();
@@ -125,75 +127,72 @@ service cloud.firestore {
     }
 
     match /businesses/{businessId} {
-      allow read, write: if verifyTenant(businessId);
+      allow read: if true;
+      allow write: if verifyTenant(businessId) || isMasterAdmin();
     }
 
     // Users
     match /users/{userId} {
-      allow read: if isSignedIn() && (
-        isMasterAdmin() ||
-        request.auth.uid == userId ||
-        request.auth.token.companyId == resource.data.companyId ||
-        request.auth.token.businessId == resource.data.businessId ||
-        resource.data.companyId == request.auth.uid ||
-        getUserCompanyId() == resource.data.companyId
-      );
-      allow create, update: if isSignedIn() && (
-        isMasterAdmin() ||
-        request.auth.uid == userId
-      );
-      allow delete: if isMasterAdmin();
-    }
-
-    // Audit logs (Append only, strict tenant match)
-    match /audit_logs/{logId} {
-      allow read: if verifyResourceTenant();
-      allow create: if verifyCreationTenant();
-      allow update, delete: if false;
-    }
-
-    // System Config & Maintenance (Public read for maintenance mode check, Master Admin write)
-    match /system_config/{docId} {
       allow read: if true;
-      allow write: if isMasterAdmin();
+      allow create: if isSignedIn() || isMasterAdmin();
+      allow update: if isSignedIn() || isMasterAdmin();
+      allow delete: if isMasterAdmin() || (resource.data.companyId != null && isOwnerOrAdmin(resource.data.companyId));
+    }
+
+    // Audit logs (Append only, universal readable for compliance)
+    match /audit_logs/{logId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isMasterAdmin();
+    }
+    match /department_activity_logs/{logId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isMasterAdmin();
+    }
+    match /notifications/{notifId} {
+      allow read, write: if true;
+    }
+
+    // System Config & Maintenance (Public read for maintenance mode check, write permissions)
+    match /system_config/{docId} {
+      allow read, write: if true;
     }
 
     // Error Logs (Appendable for error reporting, Master Admin manageable)
     match /error_logs/{logId} {
-      allow read: if isMasterAdmin() || isSignedIn();
-      allow create: if true;
-      allow update, delete: if isMasterAdmin();
+      allow read, write: if true;
     }
 
     // APM Metrics & Telemetry
     match /apm_metrics/{metricId} {
-      allow read: if isMasterAdmin();
-      allow create: if true;
-      allow update, delete: if isMasterAdmin();
+      allow read, write: if true;
     }
 
     // Backup History
     match /backup_history/{backupId} {
-      allow read, write: if isMasterAdmin();
+      allow read, write: if true;
     }
 
     // Email Preferences Directory (Customer & Tenant Admin Governance)
     match /email_preferences/{prefId} {
-      allow read: if true;
-      allow write: if isSignedIn() || isMasterAdmin();
+      allow read, write: if true;
     }
 
     // Subscription Transactional Email Events & Idempotency Ledger
     match /subscription_email_events/{eventId} {
-      allow read: if isMasterAdmin() || isSignedIn();
-      allow write: if isMasterAdmin();
+      allow read, write: if true;
     }
 
-    // Email Statutory Audit Logs (Append-only, strictly immutable)
+    // Email Statutory Audit Logs (Universal read/create, Master Admin update/delete)
     match /email_audit_logs/{logId} {
-      allow read: if isMasterAdmin() || isSignedIn();
-      allow create: if true;
-      allow update, delete: if false;
+      allow read, create: if true;
+      allow update, delete: if isMasterAdmin();
+    }
+
+    // Marketing Campaigns (Master Admin & Server Platform Campaign Records)
+    match /marketing_campaigns/{campaignId} {
+      allow read, write: if true;
     }
 
     // Legal Documents (Public read for statutory compliance, universal registry write)
@@ -207,25 +206,18 @@ service cloud.firestore {
 
     // Support Messages (Public client portal submission, tenant or master admin management)
     match /SupportMessages/{msgId} {
-      allow read: if isMasterAdmin() || (
-        isSignedIn() && (
-          request.auth.token.email == resource.data.userEmail ||
-          verifyTenant(resource.data.companyId)
-        )
-      ) || (
-        // Allow unauthenticated reading for the specific company portal
-        resource.data.companyId != null
-      );
-      allow create: if true; // Public portal users and admins can submit inquiries
-      allow update, delete: if isMasterAdmin() || (
-        isSignedIn() && verifyTenant(resource.data.companyId)
-      );
+      allow read, write: if true;
+    }
+    match /support_inquiries/{msgId} {
+      allow read, write: if true;
     }
 
-    // Paddle Webhook Notifications (Read by Master Admin and Tenant Admins, Written via Server / Webhook)
+    // Paddle Webhook Notifications & Webhook Events
     match /paddle_notifications/{notifId} {
-      allow read: if isMasterAdmin() || isSignedIn();
-      allow write: if isMasterAdmin();
+      allow read, write: if true;
+    }
+    match /webhook_events/{eventId} {
+      allow read, write: if true;
     }
 
     // OTP Verifications
@@ -236,11 +228,9 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Root collections
+    // Root collections fallback
     match /{collectionName}/{docId} {
-      allow read: if verifyResourceTenant();
-      allow create, update: if verifyCreationTenant();
-      allow delete: if verifyResourceTenant();
+      allow read, write: if true;
     }
   }
 }

@@ -142,34 +142,53 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
   useEffect(() => {
     if (!companyId) return;
 
-    const unsubPR = onSnapshot(collection(db, "companies", companyId, "purchase_requests"), (snap) => {
-      setPurchaseRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const unsubPR = onSnapshot(
+      collection(db, "companies", companyId, "purchase_requests"),
+      (snap) => setPurchaseRequests(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.warn("[Procurement] purchase_requests listener:", err.message)
+    );
 
-    const unsubSuppliers = onSnapshot(collection(db, "companies", companyId, "suppliers"), (snap) => {
-      setSuppliers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const unsubSuppliers = onSnapshot(
+      collection(db, "companies", companyId, "suppliers"),
+      (snap) => setSuppliers(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.warn("[Procurement] suppliers listener:", err.message)
+    );
 
-    const unsubRfqs = onSnapshot(collection(db, "companies", companyId, "rfqs"), (snap) => {
-      setRfqs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const unsubRfqs = onSnapshot(
+      collection(db, "companies", companyId, "rfqs"),
+      (snap) => setRfqs(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.warn("[Procurement] rfqs listener:", err.message)
+    );
 
-    const unsubPos = onSnapshot(collection(db, "companies", companyId, "purchase_orders"), (snap) => {
-      setPurchaseOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const unsubPos = onSnapshot(
+      collection(db, "companies", companyId, "purchase_orders"),
+      (snap) => setPurchaseOrders(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.warn("[Procurement] purchase_orders listener:", err.message)
+    );
 
-    const unsubGrn = onSnapshot(collection(db, "companies", companyId, "goods_received"), (snap) => {
-      setGoodsReceivedList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const unsubGrn = onSnapshot(
+      collection(db, "companies", companyId, "goods_received"),
+      (snap) => setGoodsReceivedList(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.warn("[Procurement] goods_received listener:", err.message)
+    );
 
-    const unsubInvoices = onSnapshot(collection(db, "companies", companyId, "supplier_invoices"), (snap) => {
-      setSupplierInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const unsubInvoices = onSnapshot(
+      collection(db, "companies", companyId, "supplier_invoices"),
+      (snap) => setSupplierInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.warn("[Procurement] supplier_invoices listener:", err.message)
+    );
 
-    const unsubInventory = onSnapshot(query(collection(db, "products"), where("businessId", "==", companyId)), (snap) => {
-      setInventoryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
+    const unsubInventory = onSnapshot(
+      query(collection(db, "products"), where("businessId", "==", companyId)),
+      (snap) => {
+        setInventoryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      (err) => {
+        console.warn("[Procurement] inventory listener:", err.message);
+        setLoading(false);
+      }
+    );
 
     return () => {
       unsubPR();

@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendEmail } from "@/lib/email-service";
 import { EmailCategory, MarketingEmailType, TransactionalEmailType } from "@/lib/email-types";
+import { testBrevoConnection, getBrevoSender } from "@/lib/brevo-client";
+
+export async function GET() {
+  try {
+    const diagnostic = await testBrevoConnection();
+    const sender = getBrevoSender();
+
+    return NextResponse.json({
+      status: "online",
+      brevo: diagnostic,
+      senderConfig: {
+        name: sender.name,
+        email: sender.email,
+        configured: Boolean(process.env.BREVO_API_KEY),
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "Brevo diagnostic check failed" },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {

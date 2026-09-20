@@ -53,6 +53,9 @@ export default function AuditTrailDrawer({ isOpen, onClose, companyId }: AuditTr
         } as AuditLog));
         setLogs(fetchedLogs);
         setLoading(false);
+      }, (err) => {
+        console.warn("[AuditTrailDrawer] tenant logs error:", err);
+        setLoading(false);
       });
     } else {
       // Master Admin View: Listen to all audit_logs

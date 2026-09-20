@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Image from "next/image";
 import { User } from "firebase/auth";
-import { googleSignIn, logout, auth, initAuth, emailSignIn, emailSignUp, handleFirestoreError, OperationType } from "../lib/firebase";
+import { googleSignIn, logout, auth, initAuth, emailSignIn, emailSignUp, resetUserPassword, handleFirestoreError, OperationType } from "../lib/firebase";
 import { getDoc, doc, collection, query, where, orderBy, limit, onSnapshot, updateDoc, deleteDoc, addDoc, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useUserStore } from "../lib/store";
@@ -43,7 +43,10 @@ import {
   ShoppingCart,
   FolderKanban,
   Layers,
-  ArrowLeft
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  KeyRound
 } from "lucide-react";
 
 // Subcomponents
@@ -185,6 +188,9 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [emailValue, setEmailValue] = useState("");
   const [passwordValue, setPasswordValue] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isResetPasswordMode, setIsResetPasswordMode] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isAddOrgModalOpen, setIsAddOrgModalOpen] = useState(false);
@@ -544,33 +550,43 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     }
     if (!targetCompanyId) return;
 
-    companyUnsubscribeRef.current = onSnapshot(doc(db, "companies", targetCompanyId), (compSnap) => {
+    let unsubBiz: (() => void) | null = null;
+    const unsubComp = onSnapshot(doc(db, "companies", targetCompanyId), (compSnap) => {
       if (compSnap.exists()) {
+        if (unsubBiz) {
+          unsubBiz();
+          unsubBiz = null;
+        }
         const data = { id: compSnap.id, ...compSnap.data() } as unknown as CompanyData;
         setCompany(data);
         if (typeof data.inactivityTimeout === "number") {
           localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
         }
       } else {
-        // Fallback to businesses collection
-        const unsubBiz = onSnapshot(doc(db, "businesses", targetCompanyId), (bizSnap) => {
-          if (bizSnap.exists()) {
-            const data = { id: bizSnap.id, ...bizSnap.data() } as unknown as CompanyData;
-            setCompany(data);
-            if (typeof data.inactivityTimeout === "number") {
-              localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
+        if (!unsubBiz) {
+          unsubBiz = onSnapshot(doc(db, "businesses", targetCompanyId), (bizSnap) => {
+            if (bizSnap.exists()) {
+              const data = { id: bizSnap.id, ...bizSnap.data() } as unknown as CompanyData;
+              setCompany(data);
+              if (typeof data.inactivityTimeout === "number") {
+                localStorage.setItem("mira_inactivity_timeout", String(data.inactivityTimeout));
+              }
+            } else {
+              setCompany(null);
             }
-          } else {
-            setCompany(null);
-          }
-        }, (err) => {
-          console.warn("[DashboardLayout Info] Reading business profile locally or waiting for replication:", err.message);
-        });
-        companyUnsubscribeRef.current = unsubBiz;
+          }, (err) => {
+            console.warn("[DashboardLayout Info] Reading business profile:", err.message);
+          });
+        }
       }
     }, (err) => {
-      console.warn("[DashboardLayout Info] Reading company profile locally or waiting for replication:", err.message);
+      console.warn("[DashboardLayout Info] Reading company profile:", err.message);
     });
+
+    companyUnsubscribeRef.current = () => {
+      unsubComp();
+      if (unsubBiz) unsubBiz();
+    };
   };
 
   // Workspace Switcher action handler
@@ -782,20 +798,49 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     e.preventDefault();
     setAuthError("");
     setAuthSuccess("");
+    const cleanEmail = emailValue.trim();
+    const cleanPassword = passwordValue.trim();
+
     try {
       setAuthLoading(true);
-      await emailSignIn(emailValue, passwordValue);
+      await emailSignIn(cleanEmail, cleanPassword);
     } catch (err: any) {
       console.error("Email sign-in failed:", err);
       if (err.code === 'auth/network-request-failed') {
         setAuthError("Network error. Please ensure Email/Password authentication is enabled and the current domain is added to the 'Authorized domains' list in your Firebase Authentication settings.");
-      } else if (err.code === 'auth/invalid-credential') {
-        setAuthError("Invalid email or password. Please check your credentials and try again.");
+      } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+        if (cleanEmail.toLowerCase().endsWith('@gmail.com')) {
+          setAuthError("Invalid email or password. If you originally registered via Google Workspace, please click 'Continue with Google Workspace' below or reset your password.");
+        } else {
+          setAuthError("Invalid email or password. Please verify your credentials or use the password reset option.");
+        }
       } else {
         setAuthError(err.message || "Failed to sign in. Please check your credentials.");
       }
     } finally {
       setAuthLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = emailValue.trim();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setAuthError('Please enter a valid corporate email address to receive password reset instructions.');
+      return;
+    }
+
+    try {
+      setResetLoading(true);
+      setAuthError("");
+      setAuthSuccess("");
+      await resetUserPassword(cleanEmail);
+      setAuthSuccess(`Password reset email dispatched to ${cleanEmail}. Please check your inbox.`);
+      setIsResetPasswordMode(false);
+    } catch (err: any) {
+      setAuthError(err.message || 'Failed to send password reset email.');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -805,7 +850,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
     setAuthSuccess("");
     try {
       setAuthLoading(true);
-      await emailSignUp(emailValue, passwordValue);
+      await emailSignUp(emailValue.trim(), passwordValue.trim());
       setAuthSuccess("Account successfully registered! You are now signed in.");
     } catch (err: any) {
       console.error("Email registration failed:", err);
@@ -862,6 +907,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
               type="button"
               onClick={() => {
                 setIsRegisterMode(false);
+                setIsResetPasswordMode(false);
                 setAuthError("");
                 setAuthSuccess("");
               }}
@@ -873,6 +919,7 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
               type="button"
               onClick={() => {
                 setIsRegisterMode(true);
+                setIsResetPasswordMode(false);
                 setAuthError("");
                 setAuthSuccess("");
               }}
@@ -901,51 +948,142 @@ export default function DashboardLayout({ defaultTab = "dashboard" }: DashboardL
           ) : (
             <div className="max-w-md mx-auto space-y-5 text-left">
               <div className="p-3.5 bg-amber-50 rounded-xl text-xs text-amber-800 leading-relaxed border border-amber-100">
-                <strong>Company Login:</strong> Sign in securely with your corporate credentials or Google Workspace account.
+                <strong>{isResetPasswordMode ? 'Password Reset:' : 'Company Login:'}</strong> {isResetPasswordMode ? 'Enter your corporate email address to receive reset instructions.' : 'Sign in securely with your corporate credentials or Google Workspace account.'}
               </div>
 
-              <form onSubmit={handleEmailSignIn} className="space-y-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Corporate Email</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <input
-                      type="email"
-                      value={emailValue}
-                      onChange={(e) => setEmailValue(e.target.value)}
-                      placeholder="admin@company.com"
-                      className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition"
-                      required
-                    />
+              {isResetPasswordMode ? (
+                <form onSubmit={handlePasswordReset} className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Corporate Email</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <input
+                        type="email"
+                        value={emailValue}
+                        onChange={(e) => setEmailValue(e.target.value)}
+                        placeholder="admin@company.com"
+                        className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition"
+                        required
+                      />
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <input
-                      type="password"
-                      value={passwordValue}
-                      onChange={(e) => setPasswordValue(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition"
-                      required
-                    />
+
+                  {authError && (
+                    <p className="text-[11px] text-red-500 bg-red-50 p-2.5 rounded-lg border border-red-100">{authError}</p>
+                  )}
+                  {authSuccess && (
+                    <p className="text-[11px] text-emerald-600 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 font-medium">{authSuccess}</p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={resetLoading}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 text-white hover:bg-blue-700 font-bold text-xs rounded-xl shadow-xs transition duration-200 cursor-pointer disabled:opacity-50"
+                  >
+                    {resetLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Password Reset Link"}
+                  </button>
+
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsResetPasswordMode(false);
+                        setAuthError("");
+                      }}
+                      className="text-xs font-semibold text-slate-500 hover:text-blue-600 cursor-pointer"
+                    >
+                      Back to Sign In
+                    </button>
                   </div>
-                </div>
-                {authError && (
-                  <p className="text-[11px] text-red-500 bg-red-50 p-2.5 rounded-lg border border-red-100">{authError}</p>
-                )}
-                {authSuccess && (
-                  <p className="text-[11px] text-emerald-600 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 font-medium">{authSuccess}</p>
-                )}
-                <button
-                  type="submit"
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-[#0F172A] text-white hover:bg-slate-900 font-bold text-xs rounded-xl shadow-xs transition duration-200 cursor-pointer mt-2"
-                >
-                  Sign In to Company Account
-                </button>
-              </form>
+                </form>
+              ) : (
+                <form onSubmit={handleEmailSignIn} className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Corporate Email</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <input
+                        type="email"
+                        value={emailValue}
+                        onChange={(e) => setEmailValue(e.target.value)}
+                        placeholder="admin@company.com"
+                        className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">Password</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsResetPasswordMode(true);
+                          setAuthError("");
+                          setAuthSuccess("");
+                        }}
+                        className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={passwordValue}
+                        onChange={(e) => setPasswordValue(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full pl-9 pr-10 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  {authError && (
+                    <div className="text-[11px] text-red-500 bg-red-50 p-2.5 rounded-lg border border-red-100 space-y-1">
+                      <p>{authError}</p>
+                      {authError.includes('Invalid email or password') && (
+                        <div className="pt-1 flex flex-wrap gap-2 text-[10px]">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsResetPasswordMode(true);
+                              setAuthError("");
+                            }}
+                            className="font-bold text-blue-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <KeyRound className="w-3 h-3" /> Reset Password
+                          </button>
+                          <span>•</span>
+                          <button
+                            type="button"
+                            onClick={handleGoogleLogin}
+                            className="font-bold text-blue-600 hover:underline cursor-pointer"
+                          >
+                            Sign In with Google
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {authSuccess && (
+                    <p className="text-[11px] text-emerald-600 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 font-medium">{authSuccess}</p>
+                  )}
+                  <button
+                    type="submit"
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-[#0F172A] text-white hover:bg-slate-900 font-bold text-xs rounded-xl shadow-xs transition duration-200 cursor-pointer mt-2"
+                  >
+                    Sign In to Company Account
+                  </button>
+                </form>
+              )}
 
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px bg-slate-200" />

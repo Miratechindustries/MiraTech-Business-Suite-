@@ -5,6 +5,7 @@ import {
   User, 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup
 } from "firebase/auth";
@@ -115,6 +116,22 @@ export const emailSignUp = async (email: string, password: string) => {
       message = 'This email address is already in use by another account.';
     } else if (error.code === 'auth/weak-password') {
       message = 'The password is too weak. It must be at least 6 characters.';
+    } else if (error.code === 'auth/invalid-email') {
+      message = 'Please enter a valid email address.';
+    }
+    const customError = new Error(message);
+    (customError as any).code = error.code;
+    throw customError;
+  }
+};
+
+export const resetUserPassword = async (email: string) => {
+  try {
+    return await sendPasswordResetEmail(auth, email.trim());
+  } catch (error: any) {
+    let message = 'Failed to dispatch password reset email. Please verify the email address.';
+    if (error.code === 'auth/user-not-found') {
+      message = 'No registered account found with this email address.';
     } else if (error.code === 'auth/invalid-email') {
       message = 'Please enter a valid email address.';
     }
