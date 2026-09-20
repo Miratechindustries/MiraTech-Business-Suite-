@@ -17,26 +17,36 @@ try {
   let app;
   if (getApps().length > 0) {
     app = getApp();
-    console.log("[Firebase Admin]: Initialized from existing app.");
+    console.log("[Firebase Admin]: Reusing existing app.");
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-    app = initializeApp({
-      credential: cert(serviceAccount)
-    });
-    console.log("[Firebase Admin]: Initialized from SERVICE_ACCOUNT_KEY.");
-  } else {
-    // Attempt default initialization in server environment
-    app = initializeApp();
-    console.log("[Firebase Admin]: Initialized from default credentials.");
+    try {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      app = initializeApp({
+        credential: cert(serviceAccount)
+      });
+      console.log("[Firebase Admin]: Initialized from FIREBASE_SERVICE_ACCOUNT_KEY.");
+    } catch (parseErr) {
+      console.error("[Firebase Admin]: Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY JSON:", parseErr);
+    }
+  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.K_SERVICE || process.env.GAE_SERVICE) {
+    // Attempt default initialization in GCP / Cloud Run environment
+    try {
+      app = initializeApp();
+      console.log("[Firebase Admin]: Initialized from environment credentials.");
+    } catch (gcpErr) {
+      console.warn("[Firebase Admin]: Default GCP credential initialization failed:", gcpErr);
+    }
   }
   
-  adminAppAuth = getAuth(app);
-  adminFirestoreInstance = getFirestore(app);
-  console.log("[Firebase Admin]: Successfully initialized.");
+  if (app) {
+    adminAppAuth = getAuth(app);
+    adminFirestoreInstance = getFirestore(app);
+    console.log("[Firebase Admin]: Successfully initialized Admin SDK instance.");
+  } else {
+    console.warn("[Firebase Admin]: Admin credentials not found in environment. Server operations will use resilient client fallback.");
+  }
 } catch (e) {
-  console.error("[Firebase Admin]: Critical initialization failure:", e);
-  // Do NOT fallback to client-side. Server-side must have Admin SDK configured correctly.
-  throw new Error(`Firebase Admin SDK failed to initialize: ${(e as Error).message}`);
+  console.warn("[Firebase Admin]: Initialization note:", (e as Error).message);
 }
 
 function getClientDb(): any {

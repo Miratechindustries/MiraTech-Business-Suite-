@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifySubmittedOtp } from "../../../../lib/otp";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -22,8 +23,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { email, code } = body;
+    const body = await req.json().catch(() => ({}));
+    const { email, code, verificationToken } = body;
 
     if (!email || !code) {
       return NextResponse.json(
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await verifySubmittedOtp(email, String(code));
+    const result = await verifySubmittedOtp(email, String(code), verificationToken);
 
     if (!result.valid) {
       return NextResponse.json(

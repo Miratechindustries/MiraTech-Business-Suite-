@@ -313,6 +313,7 @@ export default function CompanyCreation() {
   const [verifiedEmail, setVerifiedEmail] = useState('');
   const [isVerifyingModalOpen, setIsVerifyingModalOpen] = useState(false);
   const [verificationCodeInput, setVerificationCodeInput] = useState(['', '', '', '', '', '']);
+  const [verificationToken, setVerificationToken] = useState<string | null>(null);
   const [verificationSending, setVerificationSending] = useState(false);
   const [verificationChecking, setVerificationChecking] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
@@ -716,6 +717,9 @@ export default function CompanyCreation() {
         email: cleanEmail,
         companyName: companyName.trim(),
       });
+      if (data?.verificationToken) {
+        setVerificationToken(data.verificationToken);
+      }
       setResendCooldown(data.cooldownSeconds || 60);
       setVerificationSuccess(`A 6-digit verification code has been dispatched to ${cleanEmail}`);
       addToast(`Security verification code sent to ${cleanEmail}`, "info");
@@ -744,6 +748,7 @@ export default function CompanyCreation() {
       const data = await safeApiPost('/api/auth/verify-code', {
         email: accountEmail.trim().toLowerCase(),
         code,
+        verificationToken,
       });
       if (!data || !data.valid) {
         throw new Error(data?.error || 'Invalid verification code. Please check and try again.');

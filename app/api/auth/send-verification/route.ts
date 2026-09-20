@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAndSendOtp } from "../../../../lib/otp";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -22,7 +23,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { email, companyName } = body;
 
     if (!email || typeof email !== "string" || !email.includes("@") || !email.includes(".")) {
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
       success: true,
       message: result.message,
       cooldownSeconds: result.cooldownSeconds,
+      verificationToken: result.verificationToken,
     });
   } catch (error: any) {
     console.error("[EmailVerification Error]", error);

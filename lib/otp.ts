@@ -26,6 +26,46 @@ export const memoryOtpStore =
   globalForOtp.memoryOtpStore ?? new Map<string, StoredOtpRecord>();
 globalForOtp.memoryOtpStore = memoryOtpStore;
 
+// Cryptographic Token Signing for Serverless Zero-Dependency Verification
+export function generateVerificationToken(payloadObj: {
+  email: string;
+  hashedOtp: string;
+  salt: string;
+  expiresAt: number;
+}): string {
+  const payloadStr = Buffer.from(JSON.stringify(payloadObj)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", OTP_SECRET)
+    .update(payloadStr)
+    .digest("base64url");
+  return `${payloadStr}.${signature}`;
+}
+
+export function parseAndVerifyToken(
+  token: string
+): { email: string; hashedOtp: string; salt: string; expiresAt: number } | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 2) return null;
+    const [payloadStr, signature] = parts;
+    const expectedSignature = crypto
+      .createHmac("sha256", OTP_SECRET)
+      .update(payloadStr)
+      .digest("base64url");
+
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expectedSignature);
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return null;
+    }
+
+    const json = Buffer.from(payloadStr, "base64url").toString("utf8");
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 function hashOtp(code: string, salt: string): string {
   return crypto
     .createHmac("sha256", OTP_SECRET)
@@ -67,7 +107,7 @@ export async function dispatchBrevoEmail(
 export async function createAndSendOtp(
   email: string,
   companyName?: string
-): Promise<{ success: boolean; cooldownSeconds: number; message: string }> {
+): Promise<{ success: boolean; cooldownSeconds: number; message: string; verificationToken?: string }> {
   try {
     const normalizedEmail = email.trim().toLowerCase();
     const docId = getOtpDocId(normalizedEmail);
@@ -107,6 +147,15 @@ export async function createAndSendOtp(
     const rawCode = crypto.randomInt(100000, 1000000).toString();
     const salt = crypto.randomBytes(16).toString("hex");
     const hashedOtp = hashOtp(rawCode, salt);
+    const expiresAt = now + OTP_EXPIRY_MS;
+
+    // Generate signed stateless verification token for instant serverless validation
+    const verificationToken = generateVerificationToken({
+      email: normalizedEmail,
+      hashedOtp,
+      salt,
+      expiresAt,
+    });
 
     console.log("\n==================================================");
     console.log(`[MIRATECH OTP SECURITY DISPATCH]`);
@@ -114,11 +163,11 @@ export async function createAndSendOtp(
     console.log(`Verification Code: ${rawCode}`);
     console.log("==================================================\n");
 
-    // Store in-memory for instant, reliable validation regardless of Firestore state
+    // Store in-memory for instant validation
     memoryOtpStore.set(normalizedEmail, {
       hashedOtp,
       salt,
-      expiresAt: now + OTP_EXPIRY_MS,
+      expiresAt,
       attempts: 0,
       lastSentAt: now,
       companyName: companyName || "MiraTech Workspace",
@@ -128,7 +177,7 @@ export async function createAndSendOtp(
     await docRef.set({
       hashedOtp,
       salt,
-      expiresAt: now + OTP_EXPIRY_MS,
+      expiresAt,
       attempts: 0,
       lastSentAt: now,
       companyName: companyName || "MiraTech Workspace",
@@ -241,21 +290,32 @@ export async function createAndSendOtp(
       success: true,
       cooldownSeconds: 60,
       message: `A 6-digit verification code has been dispatched to ${normalizedEmail}.`,
+      verificationToken,
     };
   } catch (err: any) {
     console.error("[createAndSendOtp Exception]:", err);
     // Fallback success so registration is never blocked by external service failures
+    const fallbackCode = crypto.randomInt(100000, 1000000).toString();
+    const fallbackSalt = crypto.randomBytes(16).toString("hex");
+    const fallbackToken = generateVerificationToken({
+      email: email.trim().toLowerCase(),
+      hashedOtp: hashOtp(fallbackCode, fallbackSalt),
+      salt: fallbackSalt,
+      expiresAt: Date.now() + OTP_EXPIRY_MS,
+    });
     return {
       success: true,
       cooldownSeconds: 60,
       message: `Verification code generated successfully.`,
+      verificationToken: fallbackToken,
     };
   }
 }
 
 export async function verifySubmittedOtp(
   email: string,
-  submittedCode: string
+  submittedCode: string,
+  verificationToken?: string
 ): Promise<{ valid: boolean; error?: string; remainingAttempts?: number }> {
   const normalizedEmail = email.trim().toLowerCase();
   const trimmedCode = submittedCode.trim();
@@ -264,9 +324,39 @@ export async function verifySubmittedOtp(
     return { valid: false, error: "Verification code must be exactly 6 numerical digits." };
   }
 
-  // 1. Check in-memory store first
-  const memoryRecord = memoryOtpStore.get(normalizedEmail);
   const now = Date.now();
+
+  // 1. Stateless Signed Token Verification (Zero Server State Dependency)
+  if (verificationToken) {
+    const tokenData = parseAndVerifyToken(verificationToken);
+    if (tokenData && tokenData.email.toLowerCase() === normalizedEmail) {
+      if (now > tokenData.expiresAt) {
+        return {
+          valid: false,
+          error: "Verification code has expired. Please request a new code.",
+        };
+      }
+
+      const candidateHash = hashOtp(trimmedCode, tokenData.salt);
+      const candidateBuf = Buffer.from(candidateHash, "hex");
+      const storedBuf = Buffer.from(tokenData.hashedOtp, "hex");
+
+      let isMatch = false;
+      if (candidateBuf.length === storedBuf.length) {
+        isMatch = crypto.timingSafeEqual(candidateBuf, storedBuf);
+      }
+
+      if (isMatch) {
+        memoryOtpStore.delete(normalizedEmail);
+        const docId = getOtpDocId(normalizedEmail);
+        adminDb.collection("otp_verifications").doc(docId).delete().catch(() => {});
+        return { valid: true };
+      }
+    }
+  }
+
+  // 2. Check in-memory store
+  const memoryRecord = memoryOtpStore.get(normalizedEmail);
 
   if (memoryRecord) {
     if (now > memoryRecord.expiresAt) {
@@ -317,7 +407,7 @@ export async function verifySubmittedOtp(
     }
   }
 
-  // 2. Fallback to Firestore
+  // 3. Fallback to Firestore
   const docId = getOtpDocId(normalizedEmail);
   const docRef = adminDb.collection("otp_verifications").doc(docId);
   const snap = await docRef.get().catch(() => null);
