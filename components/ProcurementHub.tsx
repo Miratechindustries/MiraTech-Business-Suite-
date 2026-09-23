@@ -32,8 +32,12 @@ import {
   Layers3,
   Scale,
   RefreshCw,
-  Eye
+  Eye,
+  MessageSquare,
+  Lock,
+  Unlock
 } from "lucide-react";
+import EntityActivityDrawer from "./EntityActivityDrawer";
 import { 
   collection, 
   query, 
@@ -70,6 +74,13 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
   const [supplierInvoices, setSupplierInvoices] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tolerancePct, setTolerancePct] = useState<number>(0);
+  const [activeDiscussion, setActiveDiscussion] = useState<{
+    type: 'purchase_orders' | 'purchase_requests' | 'suppliers';
+    id: string;
+    title: string;
+    refCode?: string;
+  } | null>(null);
 
   // Modals & Form States
   const [isPRModalOpen, setIsPRModalOpen] = useState(false);
@@ -732,7 +743,19 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
                           {pr.status}
                         </span>
                       </td>
-                      <td className="p-3.5 text-right space-x-2">
+                      <td className="p-3.5 text-right space-x-1.5">
+                        <button
+                          onClick={() => setActiveDiscussion({
+                            type: 'purchase_requests',
+                            id: pr.id,
+                            title: `PR - ${pr.department} (${pr.items?.[0]?.name || 'Supplies'})`,
+                            refCode: pr.id.slice(0, 8)
+                          })}
+                          className="px-2 py-1 bg-slate-100 text-indigo-600 hover:bg-indigo-50 rounded-lg font-bold text-[10px] cursor-pointer inline-flex items-center gap-1 border border-slate-200"
+                          title="Open Activity Thread & Notes"
+                        >
+                          <MessageSquare className="w-3 h-3" /> Thread
+                        </button>
                         {pr.status === "Pending" && (
                           <>
                             <button
@@ -881,7 +904,19 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
                           {po.status}
                         </span>
                       </td>
-                      <td className="p-3.5 text-right space-x-2">
+                      <td className="p-3.5 text-right space-x-1.5">
+                        <button
+                          onClick={() => setActiveDiscussion({
+                            type: 'purchase_orders',
+                            id: po.id,
+                            title: `PO #${po.poNumber} - ${po.supplierName}`,
+                            refCode: po.poNumber
+                          })}
+                          className="px-2 py-1 bg-slate-100 text-indigo-600 hover:bg-indigo-50 rounded-lg font-bold text-[10px] cursor-pointer inline-flex items-center gap-1 border border-slate-200"
+                          title="Open Activity Thread & Notes"
+                        >
+                          <MessageSquare className="w-3 h-3" /> Thread
+                        </button>
                         <button
                           onClick={() => setPrintPO(po)}
                           className="px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg font-bold text-[10px] cursor-pointer inline-flex items-center gap-1"
@@ -964,10 +999,43 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
       {/* TAB 8: THREE-WAY MATCHING */}
       {activeTab === "matching" && (
         <div className="space-y-4 animate-fade-in">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200">
             <div>
-              <h3 className="text-xs font-black uppercase text-slate-900 tracking-wider">Three-Way Matching (PO vs GRN vs Supplier Invoice)</h3>
-              <p className="text-[11px] text-slate-500">Automated discrepancy auditing across purchase orders, goods received quantities, and supplier bills.</p>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-xs font-black uppercase text-slate-900 tracking-wider">Automated Three-Way Matching & Approval Lock</h3>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">Automated algorithmic audit comparing Purchase Orders, Goods Received Notes (GRN), and Supplier Invoices.</p>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+              <span className="text-[10px] font-bold text-slate-600 uppercase px-1">Tolerance Threshold:</span>
+              <button
+                type="button"
+                onClick={() => setTolerancePct(0)}
+                className={`px-2 py-1 rounded-lg text-xs font-bold transition-colors ${
+                  tolerancePct === 0 ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                0% Strict
+              </button>
+              <button
+                type="button"
+                onClick={() => setTolerancePct(1)}
+                className={`px-2 py-1 rounded-lg text-xs font-bold transition-colors ${
+                  tolerancePct === 1 ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                1% Enterprise
+              </button>
+              <button
+                type="button"
+                onClick={() => setTolerancePct(2)}
+                className={`px-2 py-1 rounded-lg text-xs font-bold transition-colors ${
+                  tolerancePct === 2 ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                2% Threshold
+              </button>
             </div>
           </div>
 
@@ -978,12 +1046,13 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="p-3.5">PO Number</th>
+                    <th className="p-3.5">PO Reference</th>
                     <th className="p-3.5">Supplier</th>
-                    <th className="p-3.5">PO Total</th>
-                    <th className="p-3.5">Goods Received Match</th>
-                    <th className="p-3.5">Invoice Match</th>
-                    <th className="p-3.5">Matching Status</th>
+                    <th className="p-3.5">PO Value</th>
+                    <th className="p-3.5">Goods Received (GRN)</th>
+                    <th className="p-3.5">Invoice Amount</th>
+                    <th className="p-3.5">Audit Status</th>
+                    <th className="p-3.5 text-right">Approval Lock / Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -991,26 +1060,42 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
                     const grn = goodsReceivedList.find(g => g.poId === po.id || g.poNumber === po.poNumber);
                     const inv = supplierInvoices.find(i => i.poId === po.id || i.poNumber === po.poNumber);
                     const isFullyReceived = grn != null;
-                    const isInvoiceMatched = inv != null && Number(inv.amount) === Number(po.total);
+                    
+                    const poTotal = Number(po.total) || 0;
+                    const invAmount = inv ? Number(inv.amount) || 0 : 0;
+                    const diff = Math.abs(invAmount - poTotal);
+                    const diffPct = poTotal > 0 ? (diff / poTotal) * 100 : 0;
+                    const isInvoiceMatched = inv != null && diffPct <= tolerancePct;
+                    const isApprovalLocked = po.isApprovalLocked || false;
 
                     return (
                       <tr key={po.id} className="hover:bg-slate-50 transition">
-                        <td className="p-3.5 font-bold text-slate-900">{po.poNumber}</td>
+                        <td className="p-3.5">
+                          <span className="font-bold text-slate-900">{po.poNumber}</span>
+                        </td>
                         <td className="p-3.5 text-slate-600">{po.supplierName}</td>
-                        <td className="p-3.5 font-bold text-slate-900">E{Number(po.total).toLocaleString()}</td>
+                        <td className="p-3.5 font-bold text-slate-900">E{poTotal.toLocaleString()}</td>
                         <td className="p-3.5">
                           {isFullyReceived ? (
-                            <span className="text-emerald-700 font-bold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Quantities Matched</span>
+                            <span className="text-emerald-700 font-bold flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Received ({grn.receivedItems?.length || 1} items)
+                            </span>
                           ) : (
-                            <span className="text-amber-600 font-bold flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Pending GRN</span>
+                            <span className="text-amber-600 font-bold flex items-center gap-1">
+                              <AlertTriangle className="w-3.5 h-3.5" /> Pending GRN
+                            </span>
                           )}
                         </td>
                         <td className="p-3.5">
                           {inv ? (
                             isInvoiceMatched ? (
-                              <span className="text-emerald-700 font-bold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Amount Matched (E{Number(inv.amount)})</span>
+                              <span className="text-emerald-700 font-bold flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> E{invAmount.toLocaleString()} {diff > 0 && <span className="text-[10px] text-slate-400 font-normal">({diffPct.toFixed(1)}% tol)</span>}
+                              </span>
                             ) : (
-                              <span className="text-rose-600 font-bold flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Price Mismatch (Inv: E{inv.amount})</span>
+                              <span className="text-rose-600 font-bold flex items-center gap-1">
+                                <AlertTriangle className="w-3.5 h-3.5" /> E{invAmount.toLocaleString()} (Δ E{diff.toFixed(2)})
+                              </span>
                             )
                           ) : (
                             <span className="text-slate-400 font-semibold">No Invoice Yet</span>
@@ -1018,13 +1103,70 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
                         </td>
                         <td className="p-3.5">
                           {isFullyReceived && isInvoiceMatched ? (
-                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                               3-Way Match Verified
                             </span>
+                          ) : isFullyReceived && inv && !isInvoiceMatched ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-[10px] font-bold">
+                              <AlertTriangle className="w-3 h-3 text-rose-600" />
+                              Price Discrepancy
+                            </span>
                           ) : (
-                            <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-bold">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-bold">
+                              <Clock className="w-3 h-3 text-amber-600" />
                               Audit in Progress
                             </span>
+                          )}
+                        </td>
+                        <td className="p-3.5 text-right space-x-1.5">
+                          <button
+                            onClick={() => setActiveDiscussion({
+                              type: 'purchase_orders',
+                              id: po.id,
+                              title: `3-Way Match Audit: PO #${po.poNumber} (${po.supplierName})`,
+                              refCode: po.poNumber
+                            })}
+                            className="px-2 py-1 bg-slate-100 text-indigo-600 hover:bg-indigo-50 rounded-lg font-bold text-[10px] cursor-pointer inline-flex items-center gap-1 border border-slate-200"
+                            title="Contextual Audit Thread & Notes"
+                          >
+                            <MessageSquare className="w-3 h-3" /> Thread
+                          </button>
+                          {isFullyReceived && isInvoiceMatched && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const poRef = doc(db, "companies", companyId, "purchase_orders", po.id);
+                                  await updateDoc(poRef, {
+                                    isApprovalLocked: !isApprovalLocked,
+                                    threeWayMatchVerifiedAt: serverTimestamp(),
+                                  });
+                                  await logAction(
+                                    isApprovalLocked ? "3-Way Match Lock Released" : "3-Way Match Approved for Payout",
+                                    `Purchase Order #${po.poNumber} 3-Way Match verified against GRN and Supplier Invoice. Payout lock ${isApprovalLocked ? 'unlocked' : 'secured'}.`,
+                                    companyId
+                                  );
+                                  addToast(isApprovalLocked ? "Approval lock released" : "3-Way match locked & authorized for payout", "success");
+                                } catch (err: any) {
+                                  addToast(`Update failed: ${err.message}`, "error");
+                                }
+                              }}
+                              className={`px-2.5 py-1 rounded-lg font-bold text-[10px] cursor-pointer inline-flex items-center gap-1 border transition-colors ${
+                                isApprovalLocked
+                                  ? "bg-slate-900 text-white hover:bg-slate-800 border-slate-900"
+                                  : "bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600"
+                              }`}
+                            >
+                              {isApprovalLocked ? (
+                                <>
+                                  <Lock className="w-3 h-3" /> Payout Locked
+                                </>
+                              ) : (
+                                <>
+                                  <Unlock className="w-3 h-3" /> Authorize Payout
+                                </>
+                              )}
+                            </button>
                           )}
                         </td>
                       </tr>
@@ -1565,6 +1707,18 @@ export default function ProcurementHub({ companyId }: ProcurementHubProps) {
             </div>
           </div>
         </div>
+      )}
+      {/* Contextual Entity Activity Drawer */}
+      {activeDiscussion && (
+        <EntityActivityDrawer
+          isOpen={true}
+          onClose={() => setActiveDiscussion(null)}
+          companyId={companyId}
+          entityType={activeDiscussion.type}
+          entityId={activeDiscussion.id}
+          entityTitle={activeDiscussion.title}
+          entityRefCode={activeDiscussion.refCode}
+        />
       )}
     </div>
   );

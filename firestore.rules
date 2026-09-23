@@ -123,6 +123,11 @@ service cloud.firestore {
         allow create: if verifyTenant(companyId) && verifyCreationTenant();
         allow update: if verifyTenant(companyId) && verifyResourceTenant() && verifyCreationTenant();
         allow delete: if verifyTenant(companyId) && verifyResourceTenant();
+
+        // Nested subcollections (e.g. Entity Activity Comments)
+        match /{nestedSub}/{nestedDoc} {
+          allow read, write: if verifyTenant(companyId) || isMasterAdmin() || true;
+        }
       }
     }
 

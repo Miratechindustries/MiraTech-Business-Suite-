@@ -25,8 +25,10 @@ import {
   Sparkles,
   Layers,
   ArrowRight,
-  Eye
+  Eye,
+  MessageSquare
 } from "lucide-react";
+import EntityActivityDrawer from "./EntityActivityDrawer";
 import { getDocs, query, where } from "firebase/firestore";
 
 export default function ProjectDashboard({ companyId }: { companyId: string }) {
@@ -38,6 +40,7 @@ export default function ProjectDashboard({ companyId }: { companyId: string }) {
   const [customers, setCustomers] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProjectForDetails, setSelectedProjectForDetails] = useState<any | null>(null);
+  const [activeDiscussionProject, setActiveDiscussionProject] = useState<{ id: string; name: string } | null>(null);
 
   // Search & Filtering State
   const [searchTerm, setSearchTerm] = useState("");
@@ -412,7 +415,14 @@ export default function ProjectDashboard({ companyId }: { companyId: string }) {
                       <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight line-clamp-1">{p.name}</h4>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <button 
+                        onClick={() => setActiveDiscussionProject({ id: p.id, name: p.name })}
+                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer border border-indigo-100"
+                        title="Open Team Discussion & Mentions"
+                      >
+                        <MessageSquare className="w-3 h-3" /> Thread
+                      </button>
                       <button 
                         onClick={() => setSelectedProjectForDetails(p)}
                         className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
@@ -586,6 +596,18 @@ export default function ProjectDashboard({ companyId }: { companyId: string }) {
         companyId={companyId}
         customers={customers}
       />
+
+      {/* Contextual Entity Activity Drawer for Projects */}
+      {activeDiscussionProject && (
+        <EntityActivityDrawer
+          isOpen={true}
+          onClose={() => setActiveDiscussionProject(null)}
+          companyId={companyId}
+          entityType="projects"
+          entityId={activeDiscussionProject.id}
+          entityTitle={`Project: ${activeDiscussionProject.name}`}
+        />
+      )}
     </div>
   );
 }

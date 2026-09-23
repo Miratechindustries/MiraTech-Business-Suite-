@@ -6,11 +6,12 @@ import { db, auth as importAuth, handleFirestoreError, OperationType, isOfflineE
 import { useUserStore, useToastStore } from "../lib/store";
 import { logAction } from "../lib/audit";
 import { uploadToDrive } from "../lib/drive";
-import { FileText, Plus, Search, Trash, Edit, Download, Loader2, Eye, X, Check, Wallet, FileSpreadsheet } from "lucide-react";
+import { FileText, Plus, Search, Trash, Edit, Download, Loader2, Eye, X, Check, Wallet, FileSpreadsheet, MessageSquare } from "lucide-react";
 // import jsPDF from "jspdf";
 import safeHtml2Canvas from "../lib/safeHtml2canvas";
 // import * as XLSX from "xlsx";
 import LoadingSkeleton from "./LoadingSkeleton";
+import EntityActivityDrawer from "./EntityActivityDrawer";
 
 interface Item {
   description: string;
@@ -89,6 +90,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
   const [company, setCompany] = useState<CompanyDetails | null>(null);
   const [clients, setClients] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [activeDiscussionInvoice, setActiveDiscussionInvoice] = useState<Invoice | null>(null);
 
   // Workflow states
   const [workflowComments, setWorkflowComments] = useState("");
@@ -883,6 +885,13 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
                       </button>
                     )}
                     <button
+                      onClick={() => setActiveDiscussionInvoice(inv)}
+                      title="Activity Thread & Notes"
+                      className="p-1 text-indigo-600 hover:bg-indigo-50 rounded-md cursor-pointer inline-flex"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                    </button>
+                    <button
                       onClick={() => setPreviewInvoice(inv)}
                       title="Preview Ledger Document"
                       className="p-1 text-slate-600 hover:bg-slate-50 rounded-md cursor-pointer inline-flex"
@@ -1604,6 +1613,18 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
             </div>
           </div>
         </div>
+      )}
+      {/* Contextual Entity Collaboration Drawer */}
+      {activeDiscussionInvoice && activeDiscussionInvoice.id && (
+        <EntityActivityDrawer
+          isOpen={!!activeDiscussionInvoice}
+          onClose={() => setActiveDiscussionInvoice(null)}
+          companyId={auth.currentUser?.uid || currentUser?.companyId || ''}
+          entityType="invoices"
+          entityId={activeDiscussionInvoice.id}
+          entityTitle={activeDiscussionInvoice.clientName ? `Invoice #${activeDiscussionInvoice.number} - ${activeDiscussionInvoice.clientName}` : `Invoice #${activeDiscussionInvoice.number}`}
+          entityRefCode={activeDiscussionInvoice.number}
+        />
       )}
     </div>
   );

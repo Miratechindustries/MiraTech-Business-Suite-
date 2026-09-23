@@ -36,7 +36,10 @@ import {
   ChartOfAccountItem, 
   postJournalVoucher, 
   JournalVoucherLine,
-  getJournalEntries
+  getJournalEntries,
+  verifyLedgerIntegrity,
+  generateTaxReportSummary,
+  TaxReportSummary
 } from "../lib/accounting/ledger";
 
 export interface Transaction {
@@ -140,8 +143,8 @@ export default function Transactions() {
   const { currentUser } = useUserStore();
   const addToast = useToastStore((state) => state.addToast);
   
-  // Tab state: "transactions" | "reconciliation"
-  const [activeTab, setActiveTab] = useState<"transactions" | "reconciliation">("transactions");
+  // Tab state: "transactions" | "reconciliation" | "tax_report"
+  const [activeTab, setActiveTab] = useState<"transactions" | "reconciliation" | "tax_report">("transactions");
   
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [search, setSearch] = useState("");
@@ -151,6 +154,17 @@ export default function Transactions() {
   const [loading, setLoading] = useState(true);
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [errorSignal, setErrorSignal] = useState<string | null>(null);
+
+  // Cryptographic Ledger Integrity Audit State
+  const [auditIntegrityResult, setAuditIntegrityResult] = useState<any | null>(null);
+  const [isAuditingIntegrity, setIsAuditingIntegrity] = useState(false);
+
+  // Tax Liability Reporting State
+  const [taxPeriod, setTaxPeriod] = useState<"Q1" | "Q2" | "Q3" | "Q4" | "ALL">("ALL");
+  const [taxYear, setTaxYear] = useState<number>(2026);
+  const [taxRatePct, setTaxRatePct] = useState<number>(15);
+  const [taxSummary, setTaxSummary] = useState<TaxReportSummary | null>(null);
+  const [loadingTaxReport, setLoadingTaxReport] = useState(false);
 
   // Journal Voucher Audit Modal State
   const [inspectVoucherTx, setInspectVoucherTx] = useState<Transaction | null>(null);
@@ -568,6 +582,66 @@ export default function Transactions() {
     } finally {
       setIsProcessingReconciliation(false);
     }
+  };
+
+  // Run Cryptographic Ledger Integrity Audit
+  const handleAuditLedgerIntegrity = async () => {
+    setIsAuditingIntegrity(true);
+    try {
+      const res = await verifyLedgerIntegrity(businessId);
+      setAuditIntegrityResult(res);
+      if (res.isIntegrityIntact) {
+        addToast(`Ledger Audit Passed: All ${res.totalVouchersAudited} vouchers balanced with valid cryptographic hash seals.`, "success");
+      } else {
+        addToast(`Ledger Audit Warning: Found ${res.unbalancedCount} unbalanced vouchers or ${res.tamperedCount} hash seal mismatches.`, "error");
+      }
+    } catch (err) {
+      addToast(`Audit error: ${err instanceof Error ? err.message : String(err)}`, "error");
+    } finally {
+      setIsAuditingIntegrity(false);
+    }
+  };
+
+  // Load Tax Summary Data
+  const loadTaxSummaryData = useCallback(async () => {
+    setLoadingTaxReport(true);
+    try {
+      const summary = await generateTaxReportSummary(businessId, taxPeriod, taxYear, taxRatePct);
+      setTaxSummary(summary);
+    } catch (err) {
+      console.error("Failed to generate tax summary", err);
+    } finally {
+      setLoadingTaxReport(false);
+    }
+  }, [businessId, taxPeriod, taxYear, taxRatePct]);
+
+  useEffect(() => {
+    if (activeTab === "tax_report" && businessId) {
+      loadTaxSummaryData();
+    }
+  }, [activeTab, businessId, loadTaxSummaryData]);
+
+  const handleExportTaxCSV = () => {
+    if (!taxSummary) return;
+    let csv = "data:text/csv;charset=utf-8,Tax Report Metric,Value\n";
+    csv += `"Reporting Period","${taxSummary.period} ${taxSummary.year}"\n`;
+    csv += `"Standard Tax Rate","${taxSummary.standardTaxRatePct}%"\n`;
+    csv += `"Gross Taxable Revenue / Sales","E${taxSummary.grossSalesTaxable.toFixed(2)}"\n`;
+    csv += `"Output Tax Collected","E${taxSummary.outputTaxCollected.toFixed(2)}"\n`;
+    csv += `"Gross Taxable Expenses / Purchases","E${taxSummary.grossPurchasesTaxable.toFixed(2)}"\n`;
+    csv += `"Input Tax Credits Claimable","E${taxSummary.inputTaxCredits.toFixed(2)}"\n`;
+    csv += `"Net Tax ${taxSummary.isRefundDue ? 'Refund Due' : 'Payable'}","E${taxSummary.netTaxPayable.toFixed(2)}"\n`;
+    csv += `"Taxable Transactions Evaluated","${taxSummary.taxableTransactionsCount}"\n`;
+    csv += `"Generated At","${taxSummary.generatedAt}"\n`;
+
+    const encoded = encodeURI(csv);
+    const link = document.createElement("a");
+    link.setAttribute("href", encoded);
+    link.setAttribute("download", `MiraTech_Tax_Liability_Report_${taxSummary.period}_${taxSummary.year}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    addToast("Tax Liability Summary CSV downloaded", "success");
   };
 
   // Simple RFC 4180 CSV parser handling quotes, commas, and multiline cells
@@ -1012,6 +1086,37 @@ export default function Transactions() {
         </div>
       )}
 
+      {/* Cryptographic Ledger Integrity Audit Result Banner */}
+      {auditIntegrityResult && (
+        <div className={`p-4 border rounded-xl flex items-start gap-3 text-xs animate-fade-in shadow-2xs ${
+          auditIntegrityResult.isIntegrityIntact 
+            ? "border-emerald-200 bg-emerald-50/80 text-emerald-900" 
+            : "border-amber-200 bg-amber-50/80 text-amber-900"
+        }`}>
+          <ShieldCheck className={`h-5 w-5 shrink-0 mt-0.5 ${auditIntegrityResult.isIntegrityIntact ? "text-emerald-600" : "text-amber-600"}`} />
+          <div className="flex-1 space-y-1">
+            <div className="flex justify-between items-center">
+              <span className="font-extrabold uppercase tracking-widest text-[10px]">
+                Cryptographic Ledger Integrity Audit Report
+              </span>
+              <button onClick={() => setAuditIntegrityResult(null)} className="text-slate-400 hover:text-slate-600 font-bold">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="font-semibold">
+              Audited {auditIntegrityResult.totalVouchersAudited} Journal Vouchers. {auditIntegrityResult.isIntegrityIntact ? "100% Double-Entry Balanced & Hash Seals Verified Intact!" : `Found ${auditIntegrityResult.unbalancedCount} unbalanced vouchers and ${auditIntegrityResult.tamperedCount} tampered hash seals.`}
+            </p>
+            {auditIntegrityResult.issues && auditIntegrityResult.issues.length > 0 && (
+              <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-amber-800 pt-1">
+                {auditIntegrityResult.issues.map((iss: string, idx: number) => (
+                  <li key={idx}>{iss}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Navigation Tabs Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
@@ -1046,7 +1151,28 @@ export default function Transactions() {
               <FileCheck2 className="h-3.5 w-3.5" />
               Bank Reconciliation
             </button>
+            <button
+              onClick={() => setActiveTab("tax_report")}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "tax_report" 
+                  ? "bg-white text-blue-700 shadow-2xs" 
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+              Tax Liability & Returns
+            </button>
           </div>
+
+          <button
+            onClick={handleAuditLedgerIntegrity}
+            disabled={isAuditingIntegrity}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 text-white hover:bg-slate-900 rounded-md text-[11px] font-bold cursor-pointer shadow-3xs transition"
+            title="Verify double-entry balance equality and SHA-256 hash seals on all vouchers"
+          >
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+            {isAuditingIntegrity ? "Auditing..." : "Audit Hash Seals"}
+          </button>
 
           <button
             onClick={() => {
@@ -1240,7 +1366,7 @@ export default function Transactions() {
             </table>
           </div>
         </>
-      ) : (
+      ) : activeTab === "reconciliation" ? (
         /* Automated Statement Reconciliation Workspace */
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-3xs">
@@ -1397,7 +1523,178 @@ export default function Transactions() {
             </div>
           </div>
         </div>
-      )}
+      ) : activeTab === "tax_report" ? (
+        /* Automated Tax Liability & Returns Summary Workspace */
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-3xs space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-150 pb-3">
+              <div>
+                <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                  Automated Tax Liability & Quarterly Return Engine
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Calculates Output VAT/Sales Tax collected versus Input Tax Credits on operational expenditures for compliance reporting.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={taxPeriod}
+                  onChange={(e) => setTaxPeriod(e.target.value as any)}
+                  className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-white cursor-pointer"
+                >
+                  <option value="ALL">Full Year / All Quarters</option>
+                  <option value="Q1">Q1 (Jan - Mar)</option>
+                  <option value="Q2">Q2 (Apr - Jun)</option>
+                  <option value="Q3">Q3 (Jul - Sep)</option>
+                  <option value="Q4">Q4 (Oct - Dec)</option>
+                </select>
+
+                <select
+                  value={taxYear}
+                  onChange={(e) => setTaxYear(Number(e.target.value))}
+                  className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-white font-mono cursor-pointer"
+                >
+                  <option value={2026}>2026 Tax Year</option>
+                  <option value={2025}>2025 Tax Year</option>
+                  <option value={2024}>2024 Tax Year</option>
+                </select>
+
+                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg text-xs font-bold">
+                  <span className="text-slate-400 text-[10px] uppercase">VAT Rate:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={taxRatePct}
+                    onChange={(e) => setTaxRatePct(Number(e.target.value))}
+                    className="w-12 text-center font-mono font-bold bg-white border border-slate-200 rounded text-xs"
+                  />
+                  <span className="text-slate-600">%</span>
+                </div>
+
+                <button
+                  onClick={handleExportTaxCSV}
+                  disabled={!taxSummary}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-3xs"
+                >
+                  <Download className="h-3.5 w-3.5" /> Export Tax Filing CSV
+                </button>
+              </div>
+            </div>
+
+            {loadingTaxReport ? (
+              <div className="text-center py-12 text-slate-400 text-xs font-medium">
+                Computing double-entry tax metrics across General Ledger documents...
+              </div>
+            ) : taxSummary ? (
+              <div className="space-y-4">
+                {/* Tax KPI Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-emerald-50/50 border border-emerald-200 p-4 rounded-xl">
+                    <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider block">
+                      Output Tax (Sales / Invoices)
+                    </span>
+                    <h3 className="text-lg font-black text-emerald-900 mt-1 font-mono">
+                      E{taxSummary.outputTaxCollected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </h3>
+                    <p className="text-[10px] text-emerald-700 font-medium mt-1">
+                      Collected on E{taxSummary.grossSalesTaxable.toLocaleString()} gross taxable sales
+                    </p>
+                  </div>
+
+                  <div className="bg-blue-50/50 border border-blue-200 p-4 rounded-xl">
+                    <span className="text-[10px] font-extrabold text-blue-800 uppercase tracking-wider block">
+                      Input Tax Credits (Purchases / Expenses)
+                    </span>
+                    <h3 className="text-lg font-black text-blue-900 mt-1 font-mono">
+                      E{taxSummary.inputTaxCredits.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </h3>
+                    <p className="text-[10px] text-blue-700 font-medium mt-1">
+                      Claimable on E{taxSummary.grossPurchasesTaxable.toLocaleString()} gross operational expenses
+                    </p>
+                  </div>
+
+                  <div className={`border p-4 rounded-xl ${
+                    taxSummary.isRefundDue ? "bg-indigo-50/50 border-indigo-200" : "bg-amber-50/50 border-amber-200"
+                  }`}>
+                    <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${
+                      taxSummary.isRefundDue ? "text-indigo-800" : "text-amber-800"
+                    }`}>
+                      {taxSummary.isRefundDue ? "Net Tax Refund Claimable" : "Net Tax Payable to Revenue Authority"}
+                    </span>
+                    <h3 className={`text-lg font-black mt-1 font-mono ${
+                      taxSummary.isRefundDue ? "text-indigo-900" : "text-amber-900"
+                    }`}>
+                      E{taxSummary.netTaxPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </h3>
+                    <p className={`text-[10px] font-medium mt-1 ${
+                      taxSummary.isRefundDue ? "text-indigo-700" : "text-amber-700"
+                    }`}>
+                      Period: {taxSummary.period} {taxSummary.year} • {taxSummary.taxableTransactionsCount} ledger lines evaluated
+                    </p>
+                  </div>
+                </div>
+
+                {/* Detailed Tax Breakdown Audit Table */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                        <th className="py-2.5 px-3">Tax Category</th>
+                        <th className="py-2.5 px-3">Standard Tax Rate</th>
+                        <th className="py-2.5 px-3 text-right">Taxable Gross Amount</th>
+                        <th className="py-2.5 px-3 text-right">Calculated Tax Amount</th>
+                        <th className="py-2.5 px-3 text-center">Filing Impact</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-150 text-xs">
+                      <tr>
+                        <td className="py-3 px-3 font-bold text-slate-800">Standard Rated Sales & Inflows</td>
+                        <td className="py-3 px-3 font-mono text-slate-600">{taxSummary.standardTaxRatePct}% Standard Output VAT</td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">E{taxSummary.grossSalesTaxable.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">E{taxSummary.outputTaxCollected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            Liability (+)
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-3 px-3 font-bold text-slate-800">Standard Rated Expenses & Purchases</td>
+                        <td className="py-3 px-3 font-mono text-slate-600">{taxSummary.standardTaxRatePct}% Input Credit VAT</td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">E{taxSummary.grossPurchasesTaxable.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-blue-700">E{taxSummary.inputTaxCredits.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                            Credit (-)
+                          </span>
+                        </td>
+                      </tr>
+                      <tr className="bg-slate-50/80 font-bold">
+                        <td className="py-3 px-3 text-slate-900 uppercase tracking-tight" colSpan={3}>
+                          Net Tax Position ({taxSummary.isRefundDue ? "Refundable" : "Payable"})
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-sm text-slate-900">
+                          E{taxSummary.netTaxPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                            taxSummary.isRefundDue ? "bg-indigo-100 text-indigo-900" : "bg-amber-100 text-amber-900"
+                          }`}>
+                            {taxSummary.isRefundDue ? "Claim Refund" : "Remit Payment"}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {/* Creation Modal */}
       {isOpen && (

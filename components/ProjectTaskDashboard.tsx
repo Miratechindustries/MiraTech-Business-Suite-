@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
-import { Plus, Trash2, CheckCircle2, Loader2 } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Loader2, MessageSquare } from "lucide-react";
 import { useUserStore } from "../lib/store";
 import { motion } from "motion/react";
+import EntityActivityDrawer from "./EntityActivityDrawer";
 
 export interface TaskItem {
   id: string;
@@ -38,6 +39,7 @@ export default function ProjectTaskDashboard({
   const { currentUser } = useUserStore();
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [adding, setAdding] = useState(false);
+  const [activeDiscussionTask, setActiveDiscussionTask] = useState<{ id: string; title: string } | null>(null);
 
   const handleAdd = async () => {
     if (!newTaskTitle.trim()) return;
@@ -141,16 +143,38 @@ export default function ProjectTaskDashboard({
                   </span>
                 )}
               </div>
-              <button 
-                onClick={() => handleDelete(task.id)} 
-                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                title="Delete task"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                {companyId && (
+                  <button
+                    onClick={() => setActiveDiscussionTask({ id: task.id, title: task.title })}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                    title="Open task activity thread"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button 
+                  onClick={() => handleDelete(task.id)} 
+                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                  title="Delete task"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </motion.div>
           ))}
         </div>
+      )}
+
+      {activeDiscussionTask && companyId && (
+        <EntityActivityDrawer
+          isOpen={true}
+          onClose={() => setActiveDiscussionTask(null)}
+          companyId={companyId}
+          entityType="tasks"
+          entityId={activeDiscussionTask.id}
+          entityTitle={`Task: ${activeDiscussionTask.title}`}
+        />
       )}
     </div>
   );

@@ -3,7 +3,6 @@ import { getPaddleInstance } from "@/lib/paddle-server";
 import { adminDb } from "@/lib/firebase-admin";
 import { logServerAction } from "@/lib/server-audit";
 import { getLockedFeaturesForPlan, SUBSCRIPTION_PLANS } from "@/lib/subscriptions";
-import { serverTimestamp } from "firebase/firestore";
 import {
   sendSubscriptionConfirmation,
   sendRenewalConfirmation,
@@ -39,7 +38,7 @@ export async function POST(req: NextRequest) {
     // Persist raw notification for admin dashboard
     await adminDb.collection("paddle_notifications").add({
       ...eventData,
-      receivedAt: serverTimestamp(),
+      receivedAt: new Date().toISOString(),
     });
 
     const eventType = eventData.event_type || eventData.eventType;

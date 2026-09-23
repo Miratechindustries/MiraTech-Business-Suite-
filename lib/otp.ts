@@ -1,7 +1,5 @@
 import crypto from "crypto";
 import { generateEmailHtml } from "./email-templates";
-import { recordEmailAuditLog } from "./email-service";
-import { adminDb } from "./firebase-admin";
 import { sendViaBrevo } from "./brevo-client";
 
 interface StoredOtpRecord {
@@ -77,6 +75,53 @@ function getOtpDocId(email: string): string {
   return crypto.createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
 }
 
+// Resilient, non-blocking Firestore helpers (avoids bundling/runtime failure on serverless)
+async function safeDbGet(docId: string): Promise<StoredOtpRecord | null> {
+  try {
+    const { adminDb } = await import("./firebase-admin");
+    if (adminDb && typeof adminDb.collection === "function") {
+      const snap = await adminDb.collection("otp_verifications").doc(docId).get();
+      if (snap && snap.exists) {
+        return snap.data() as StoredOtpRecord;
+      }
+    }
+  } catch {
+    // Non-blocking fallback
+  }
+  return null;
+}
+
+async function safeDbSet(docId: string, data: any): Promise<void> {
+  try {
+    const { adminDb } = await import("./firebase-admin");
+    if (adminDb && typeof adminDb.collection === "function") {
+      await adminDb.collection("otp_verifications").doc(docId).set(data);
+    }
+  } catch {
+    // Non-blocking fallback
+  }
+}
+
+async function safeDbDelete(docId: string): Promise<void> {
+  try {
+    const { adminDb } = await import("./firebase-admin");
+    if (adminDb && typeof adminDb.collection === "function") {
+      await adminDb.collection("otp_verifications").doc(docId).delete();
+    }
+  } catch {
+    // Non-blocking fallback
+  }
+}
+
+async function safeRecordAuditLog(logData: any): Promise<void> {
+  try {
+    const { recordEmailAuditLog } = await import("./email-service");
+    await recordEmailAuditLog(logData);
+  } catch {
+    // Non-blocking fallback
+  }
+}
+
 /**
  * Dispatches a transactional email using Brevo (formerly Sendinblue) v3 REST API.
  */
@@ -113,7 +158,7 @@ export async function createAndSendOtp(
     const docId = getOtpDocId(normalizedEmail);
     const now = Date.now();
 
-    // Check memory store cooldown first
+    // 1. Check in-memory store cooldown
     const memoryRecord = memoryOtpStore.get(normalizedEmail);
     if (memoryRecord && memoryRecord.lastSentAt && now - memoryRecord.lastSentAt < RESEND_COOLDOWN_MS) {
       const remainingCooldown = Math.ceil(
@@ -126,21 +171,17 @@ export async function createAndSendOtp(
       };
     }
 
-    const docRef = adminDb.collection("otp_verifications").doc(docId);
-    const snap = await docRef.get().catch(() => null);
-
-    if (snap && snap.exists) {
-      const existing = snap.data() as StoredOtpRecord;
-      if (existing && existing.lastSentAt && now - existing.lastSentAt < RESEND_COOLDOWN_MS) {
-        const remainingCooldown = Math.ceil(
-          (RESEND_COOLDOWN_MS - (now - existing.lastSentAt)) / 1000
-        );
-        return {
-          success: false,
-          cooldownSeconds: remainingCooldown,
-          message: `Please wait ${remainingCooldown} seconds before requesting a new verification code.`,
-        };
-      }
+    // 2. Check Firestore cooldown if available
+    const existing = await safeDbGet(docId);
+    if (existing && existing.lastSentAt && now - existing.lastSentAt < RESEND_COOLDOWN_MS) {
+      const remainingCooldown = Math.ceil(
+        (RESEND_COOLDOWN_MS - (now - existing.lastSentAt)) / 1000
+      );
+      return {
+        success: false,
+        cooldownSeconds: remainingCooldown,
+        message: `Please wait ${remainingCooldown} seconds before requesting a new verification code.`,
+      };
     }
 
     // Generate cryptographically secure 6-digit OTP
@@ -149,7 +190,7 @@ export async function createAndSendOtp(
     const hashedOtp = hashOtp(rawCode, salt);
     const expiresAt = now + OTP_EXPIRY_MS;
 
-    // Generate signed stateless verification token for instant serverless validation
+    // Generate signed stateless verification token for instant zero-dependency serverless validation
     const verificationToken = generateVerificationToken({
       email: normalizedEmail,
       hashedOtp,
@@ -163,7 +204,7 @@ export async function createAndSendOtp(
     console.log(`Verification Code: ${rawCode}`);
     console.log("==================================================\n");
 
-    // Store in-memory for instant validation
+    // Store in-memory for instant sub-millisecond validation
     memoryOtpStore.set(normalizedEmail, {
       hashedOtp,
       salt,
@@ -173,8 +214,8 @@ export async function createAndSendOtp(
       companyName: companyName || "MiraTech Workspace",
     });
 
-    // Also persist to Firestore if available
-    await docRef.set({
+    // Also persist to Firestore if available (asynchronous, non-blocking)
+    safeDbSet(docId, {
       hashedOtp,
       salt,
       expiresAt,
@@ -183,9 +224,7 @@ export async function createAndSendOtp(
       companyName: companyName || "MiraTech Workspace",
       email: normalizedEmail,
       updatedAt: new Date().toISOString()
-    }).catch((dbErr: any) => {
-      console.warn("[OTP DB Write Warning]:", dbErr?.message);
-    });
+    }).catch(() => {});
 
     const orgName = companyName || "MiraTech Business Suite";
     const senderName = process.env.BREVO_SENDER_NAME || "MiraTech Business Suite Security";
@@ -196,7 +235,6 @@ export async function createAndSendOtp(
     
     const bodyContent = `
       <div style="text-align: left; margin-bottom: 24px;">
-        <!-- Security Header Badge -->
         <div style="display: inline-block; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 9999px; padding: 4px 12px; margin-bottom: 14px;">
           <span style="font-size: 11px; font-weight: 700; color: #1d4ed8; text-transform: uppercase; letter-spacing: 0.5px;">
             🛡️ Identity Authentication Gateway
@@ -210,7 +248,6 @@ export async function createAndSendOtp(
           Please enter the following 6-digit verification passcode in your active session prompt to authenticate your corporate credentials:
         </p>
 
-        <!-- High-Security OTP Display Box in MiraTech Suite Theme -->
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0; background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%); border: 2px solid #3b82f6; border-radius: 14px; box-shadow: 0 6px 16px rgba(37, 99, 235, 0.08); overflow: hidden;">
           <tr>
             <td style="padding: 10px 20px; background-color: #0f172a; border-bottom: 1px solid #1e293b; text-align: center;">
@@ -236,7 +273,6 @@ export async function createAndSendOtp(
           </tr>
         </table>
 
-        <!-- Security Guidance in Theme Colors -->
         <div style="background-color: #f8fafc; border-left: 4px solid #2563eb; border-radius: 0 8px 8px 0; padding: 14px 16px; margin: 20px 0;">
           <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: 700; color: #0f172a;">MiraTech Business Suite Security Notice:</h4>
           <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #475569; line-height: 1.6;">
@@ -261,7 +297,7 @@ export async function createAndSendOtp(
       },
     });
 
-    // Dispatch solely via Brevo REST API
+    // Dispatch via Brevo REST API (HTTPS fetch)
     const brevoResult = await dispatchBrevoEmail(
       normalizedEmail,
       emailSubject,
@@ -271,8 +307,8 @@ export async function createAndSendOtp(
       senderEmail
     ).catch((err) => ({ success: false, error: err?.message || "Brevo dispatch exception" }));
 
-    // Record audit log
-    await recordEmailAuditLog({
+    // Non-blocking audit log
+    safeRecordAuditLog({
       email: normalizedEmail,
       action: "SENT_TRANSACTIONAL",
       preferenceCategory: "OTP_VERIFICATION",
@@ -283,7 +319,7 @@ export async function createAndSendOtp(
     }).catch(() => {});
 
     if (!brevoResult.success) {
-      console.warn(`[Brevo Dispatch Warning / Simulation Mode Active]: ${brevoResult.error}. Code ${rawCode} logged to console.`);
+      console.warn(`[Brevo Dispatch Notice / Simulation Mode Active]: ${brevoResult.error}. Verification Code: ${rawCode}`);
     }
 
     return {
@@ -294,7 +330,7 @@ export async function createAndSendOtp(
     };
   } catch (err: any) {
     console.error("[createAndSendOtp Exception]:", err);
-    // Fallback success so registration is never blocked by external service failures
+    // Bulletproof fallback so corporate signup/verification is never blocked
     const fallbackCode = crypto.randomInt(100000, 1000000).toString();
     const fallbackSalt = crypto.randomBytes(16).toString("hex");
     const fallbackToken = generateVerificationToken({
@@ -325,8 +361,9 @@ export async function verifySubmittedOtp(
   }
 
   const now = Date.now();
+  const docId = getOtpDocId(normalizedEmail);
 
-  // 1. Stateless Signed Token Verification (Zero Server State Dependency)
+  // 1. Stateless Signed Token Verification (Zero Server State Dependency, Instant & Bulletproof)
   if (verificationToken) {
     const tokenData = parseAndVerifyToken(verificationToken);
     if (tokenData && tokenData.email.toLowerCase() === normalizedEmail) {
@@ -348,8 +385,7 @@ export async function verifySubmittedOtp(
 
       if (isMatch) {
         memoryOtpStore.delete(normalizedEmail);
-        const docId = getOtpDocId(normalizedEmail);
-        adminDb.collection("otp_verifications").doc(docId).delete().catch(() => {});
+        safeDbDelete(docId).catch(() => {});
         return { valid: true };
       }
     }
@@ -386,8 +422,7 @@ export async function verifySubmittedOtp(
 
     if (isMatch) {
       memoryOtpStore.delete(normalizedEmail);
-      const docId = getOtpDocId(normalizedEmail);
-      adminDb.collection("otp_verifications").doc(docId).delete().catch(() => {});
+      safeDbDelete(docId).catch(() => {});
       return { valid: true };
     } else {
       memoryRecord.attempts += 1;
@@ -407,21 +442,17 @@ export async function verifySubmittedOtp(
     }
   }
 
-  // 3. Fallback to Firestore
-  const docId = getOtpDocId(normalizedEmail);
-  const docRef = adminDb.collection("otp_verifications").doc(docId);
-  const snap = await docRef.get().catch(() => null);
-
-  if (!snap || !snap.exists) {
+  // 3. Fallback to Firestore if available
+  const record = await safeDbGet(docId);
+  if (!record) {
     return {
       valid: false,
       error: "No active verification code found for this email. Please request a new one.",
     };
   }
 
-  const record = snap.data() as StoredOtpRecord;
   if (now > record.expiresAt) {
-    await docRef.delete().catch(() => {});
+    safeDbDelete(docId).catch(() => {});
     return {
       valid: false,
       error: "Verification code has expired. Please request a new code.",
@@ -429,7 +460,7 @@ export async function verifySubmittedOtp(
   }
 
   if (record.attempts >= MAX_ATTEMPTS) {
-    await docRef.delete().catch(() => {});
+    safeDbDelete(docId).catch(() => {});
     return {
       valid: false,
       error: "Maximum verification attempts exceeded (5). This code has been invalidated for security. Please request a new code.",
@@ -449,13 +480,13 @@ export async function verifySubmittedOtp(
     const nextAttempts = (record.attempts || 0) + 1;
     const remaining = MAX_ATTEMPTS - nextAttempts;
     if (remaining <= 0) {
-      await docRef.delete().catch(() => {});
+      safeDbDelete(docId).catch(() => {});
       return {
         valid: false,
         error: "Incorrect code. Maximum attempts reached (5). Please request a new code.",
       };
     }
-    await docRef.update({ attempts: nextAttempts }).catch(() => {});
+    safeDbSet(docId, { ...record, attempts: nextAttempts }).catch(() => {});
     return {
       valid: false,
       error: `Incorrect verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
@@ -464,6 +495,6 @@ export async function verifySubmittedOtp(
   }
 
   // Successful verification -> Invalidate immediately
-  await docRef.delete().catch(() => {});
+  safeDbDelete(docId).catch(() => {});
   return { valid: true };
 }
