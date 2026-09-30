@@ -227,8 +227,9 @@ export default function SubscriptionsView() {
         const paddle = await getPaddle((event: any) => {
           if (event?.name === 'checkout.completed') {
             handlePaddleCheckoutSuccess(plan, event?.data);
-          } else if (event?.name === 'checkout.error') {
-            setError("Paddle checkout error: " + (event?.data?.message || "Payment authorization failed."));
+          } else if (event?.name === 'checkout.error' || event?.name === 'error') {
+            const errDetail = event?.data?.message || event?.data?.error || "Price ID or catalog mismatch in Paddle account.";
+            setError(`Paddle Catalog Notice: ${errDetail}. If your Paddle account uses custom Price IDs, configure NEXT_PUBLIC_PADDLE_PRICE_${plan.id.toUpperCase()} in Vercel, or click 'Simulate Sandbox Upgrade' below to test feature activation.`);
             setIsProcessing(false);
           }
         });
@@ -1016,33 +1017,44 @@ export default function SubscriptionsView() {
             {/* Modal Content */}
             <div className="p-6 space-y-5 text-xs">
               {paddleConfigured ? (
-                <div className="space-y-4 text-center py-4">
-                  <CreditCard className="w-12 h-12 text-blue-600 mx-auto animate-pulse" />
+                <div className="space-y-4 text-center py-2">
+                  <CreditCard className="w-10 h-10 text-blue-600 mx-auto animate-pulse" />
                   <div className="space-y-1">
-                    <h4 className="font-bold text-sm text-slate-900">Opening Hosted Paddle Checkout...</h4>
-                    <p className="text-slate-500">
-                      The Paddle secure payment overlay is launching. If popups are blocked, confirm below:
+                    <h4 className="font-bold text-sm text-slate-900">Hosted Paddle Checkout Active</h4>
+                    <p className="text-slate-500 text-[11px] leading-relaxed">
+                      Click below to open the secure Paddle payment overlay. Note: If your custom <code className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded">NEXT_PUBLIC_PADDLE_CLIENT_TOKEN</code> does not match default Price IDs, Paddle overlay may show a catalog error.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenCheckout(selectedPlan)}
-                    disabled={isProcessing}
-                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 mx-auto disabled:opacity-50"
-                  >
-                    {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
-                    <span>Relaunch Paddle Checkout Overlay</span>
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCheckout(selectedPlan)}
+                      disabled={isProcessing}
+                      className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+                      <span>Launch Paddle Overlay</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={handleSimulatePaddleSandboxUpgrade}
+                      className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                      <span>Simulate Sandbox Upgrade</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-amber-900">
                     <div className="flex items-center gap-2 font-bold text-xs text-amber-800">
                       <KeyRound className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                      <span>Paddle Client Token Not Detected</span>
+                      <span>Paddle Client Token Not Configured</span>
                     </div>
                     <p className="text-[11px] text-amber-750 leading-relaxed">
-                      To run live client-side checkouts in this environment, provide <code className="font-mono font-bold bg-amber-100 px-1 py-0.5 rounded">NEXT_PUBLIC_PADDLE_CLIENT_TOKEN</code> in your environment or Settings.
+                      To run live client-side checkouts in this environment, provide <code className="font-mono font-bold bg-amber-100 px-1 py-0.5 rounded">NEXT_PUBLIC_PADDLE_CLIENT_TOKEN</code> in your environment variables.
                     </p>
                   </div>
 
