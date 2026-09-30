@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { motion } from 'motion/react';
 import PublicHeader from '../components/public/PublicHeader';
 import PublicFooter from '../components/public/PublicFooter';
+import PromoVideoTrailer from '../components/public/PromoVideoTrailer';
 import { 
   Building2, 
   TrendingUp, 
@@ -29,7 +30,8 @@ import {
   ChevronUp,
   Cpu,
   Globe,
-  CheckSquare
+  CheckSquare,
+  PlayCircle
 } from 'lucide-react';
 import { SUBSCRIPTION_PLANS } from '../lib/subscriptions';
 import { auth } from '../lib/firebase';
@@ -160,10 +162,17 @@ export default function HomePage() {
               <ArrowRight className="w-4 h-4 text-white" />
             </Link>
             <Link
+              href="/promo"
+              className="w-full sm:w-auto px-8 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 border border-slate-700"
+            >
+              <PlayCircle className="w-4 h-4 text-blue-400" />
+              <span>Watch 4K Commercial (60s)</span>
+            </Link>
+            <Link
               href="/login"
               className="w-full sm:w-auto px-8 py-3.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold text-sm rounded-xl shadow-xs transition-all flex items-center justify-center gap-2"
             >
-              <span>Sign In to Workspace</span>
+              <span>Sign In</span>
             </Link>
           </motion.div>
 
@@ -305,6 +314,23 @@ export default function HomePage() {
               </div>
             </div>
           </motion.div>
+        </section>
+
+        {/* 4K COMMERCIAL PROMO TRAILER SECTION */}
+        <section id="trailer" className="max-w-7xl mx-auto space-y-6">
+          <div className="text-center max-w-3xl mx-auto space-y-3">
+            <span className="text-xs font-bold font-mono uppercase tracking-wider text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+              Official 60-Second Commercial Video
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900">
+              See MiraTech Operating at Enterprise Speed
+            </h2>
+            <p className="text-sm text-slate-600">
+              Watch our product trailer featuring AI voiceover narration, 4K visual transitions, and interactive production script controls.
+            </p>
+          </div>
+
+          <PromoVideoTrailer />
         </section>
 
         {/* SERVICES & MODULE PREVIEW SECTION */}

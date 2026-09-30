@@ -16,6 +16,7 @@ import {
 } from '../lib/subscriptions';
 import { logAction } from '../lib/audit';
 import { getPaddle, PADDLE_PRICE_MAP, isPaddleConfigured, getPaddleEnvironment, getPaddleEventLogs, PaddleEventLog } from '../lib/paddle-client';
+import { safeFetchJson } from '../lib/safe-fetch';
 import PaddleCheckoutModal from './PaddleCheckoutModal';
 import SubscriptionActivationStatusChecker from './SubscriptionActivationStatusChecker';
 import { 
@@ -82,12 +83,10 @@ export default function SubscriptionsView() {
       const qParams = new URLSearchParams({ companyId: compId });
       if (custId) qParams.append('customerId', custId);
       if (subId) qParams.append('subscriptionId', subId);
-      const res = await fetch(`/api/paddle/transactions?${qParams.toString()}`);
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `HTTP ${res.status}`);
+      const { ok, data, error: fetchErr } = await safeFetchJson(`/api/paddle/transactions?${qParams.toString()}`);
+      if (!ok) {
+        throw new Error(fetchErr || "Failed to load payment history");
       }
-      const data = await res.json();
       setInvoices(data.transactions || []);
       setIsLiveGateway(Boolean(data.isLiveGateway));
     } catch (err: any) {
@@ -101,9 +100,8 @@ export default function SubscriptionsView() {
   const handleDownloadInvoice = async (txnId: string) => {
     try {
       setDownloadingInvoiceId(txnId);
-      const res = await fetch(`/api/paddle/transactions?action=invoice&transactionId=${encodeURIComponent(txnId)}`);
-      const data = await res.json();
-      if (data.url) {
+      const { ok, data } = await safeFetchJson(`/api/paddle/transactions?action=invoice&transactionId=${encodeURIComponent(txnId)}`);
+      if (ok && data?.url) {
         window.open(data.url, '_blank', 'noopener,noreferrer');
       } else {
         await handleOpenCustomerPortal();
@@ -366,21 +364,20 @@ export default function SubscriptionsView() {
     setError(null);
 
     try {
-      const res = await fetch('/api/paddle/portal', {
+      const { ok, data, error: portalErr } = await safeFetchJson('/api/paddle/portal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyId: targetCompanyId }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to mint customer portal session.');
+      if (!ok) {
+        throw new Error(portalErr || 'Failed to mint customer portal session.');
       }
 
-      if (data.url) {
+      if (data?.url) {
         window.open(data.url, '_blank', 'noopener,noreferrer');
       } else {
-        setError('No portal URL returned by Paddle.');
+        setError(data?.notice || 'No portal URL returned by Paddle.');
       }
     } catch (err: any) {
       setError(err.message || 'Error connecting to Paddle Customer Portal.');

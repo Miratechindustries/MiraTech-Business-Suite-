@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPaddleInstance } from "@/lib/paddle-server";
 import { adminDb } from "@/lib/firebase-admin";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
