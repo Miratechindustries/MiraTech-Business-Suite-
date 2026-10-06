@@ -6,8 +6,9 @@ import { collection, query, where, getDocs, addDoc, doc, updateDoc } from "fireb
 import { useUserStore, useToastStore } from "../lib/store";
 import { 
   X, Calendar, DollarSign, User, Briefcase, FileText, FileCheck, 
-  Plus, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, AlertCircle, ExternalLink, Edit3 
+  Plus, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, AlertCircle, ExternalLink, Edit3, FolderKanban 
 } from "lucide-react";
+import ProjectTaskDashboard from "./ProjectTaskDashboard";
 
 interface ProjectDetailsModalProps {
   isOpen: boolean;
@@ -310,6 +311,14 @@ export default function ProjectDetailsModal({
                 <span className="text-sm font-black text-indigo-800 font-mono">${netProjectValue.toLocaleString()}</span>
               </div>
             </div>
+          </div>
+
+          {/* Project Operational Tasks Section */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5 border-b pb-1.5">
+              <FolderKanban className="w-4 h-4 text-indigo-600" /> Project Tasks & Milestones
+            </h4>
+            <ProjectTaskDashboard companyId={companyId} projectId={project.id} />
           </div>
 
           {/* Project Documents (Quotations, Invoices, Receipts) */}

@@ -113,9 +113,15 @@ export function getPaddleEventLogs(): PaddleEventLog[] {
   return [];
 }
 
+const eventListeners = new Set<(event: any) => void>();
+
 export async function getPaddle(
   onEvent?: (event: any) => void
 ): Promise<any> {
+  if (onEvent) {
+    eventListeners.add(onEvent);
+  }
+
   if (paddleInstance) {
     return paddleInstance;
   }
@@ -142,9 +148,13 @@ export async function getPaddle(
         environment: getPaddleEnvironment(),
         eventCallback: (event: any) => {
           logPaddleEvent(event);
-          if (onEvent) {
-            onEvent(event);
-          }
+          eventListeners.forEach(listener => {
+            try {
+              listener(event);
+            } catch (e) {
+              console.warn('[Paddle Event Listener Error]', e);
+            }
+          });
         },
         checkout: {
           settings: {

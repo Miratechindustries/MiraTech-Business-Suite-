@@ -486,7 +486,14 @@ export default function CompanyCreation() {
     );
 
     if (stepNumber === 1) {
-      const hasValidPassword = isMatchingActiveSession || (accountPassword.length >= 8 && accountPassword === accountConfirmPassword);
+      const isPasswordComplex = (pwd: string) =>
+        pwd.length >= 8 &&
+        /[a-z]/.test(pwd) &&
+        /[A-Z]/.test(pwd) &&
+        /[0-9]/.test(pwd) &&
+        /[^A-Za-z0-9]/.test(pwd);
+
+      const hasValidPassword = isMatchingActiveSession || (isPasswordComplex(accountPassword) && accountPassword === accountConfirmPassword);
       return !!(
         accountFullName.trim() &&
         accountEmail.trim() &&
@@ -2064,13 +2071,26 @@ export default function CompanyCreation() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Temporary Password</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">Temporary Password</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const randPass = `MiraStaff#${Math.floor(1000 + Math.random() * 9000)}!`;
+                        setStaffPassword(randPass);
+                        setShowStaffPassword(true);
+                      }}
+                      className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-2.5 h-2.5" /> Auto-Generate
+                    </button>
+                  </div>
                   <div className="relative">
                     <input
                       type={showStaffPassword ? "text" : "password"}
                       value={staffPassword}
                       onChange={(e) => setStaffPassword(e.target.value)}
-                      placeholder="Min 8 characters"
+                      placeholder="Min 8 chars (mixed case, number, symbol)"
                       className="w-full pl-3 pr-9 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-100 transition"
                     />
                     <button

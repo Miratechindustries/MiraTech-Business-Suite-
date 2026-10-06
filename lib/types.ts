@@ -18,6 +18,7 @@ export type Role =
 export interface ScopedPermissions {
   canApproveQuotations?: boolean;
   canApproveInvoices?: boolean;
+  canApproveTransactions?: boolean;
   canApproveExpenses?: boolean;
   canOverrideHR?: boolean;
   canManageStaff?: boolean;

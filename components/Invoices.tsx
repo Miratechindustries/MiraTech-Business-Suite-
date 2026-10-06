@@ -12,6 +12,7 @@ import safeHtml2Canvas from "../lib/safeHtml2canvas";
 // import * as XLSX from "xlsx";
 import LoadingSkeleton from "./LoadingSkeleton";
 import EntityActivityDrawer from "./EntityActivityDrawer";
+import { createDoubleEntry } from "../lib/accounting/ledger";
 
 interface Item {
   description: string;
@@ -508,6 +509,21 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
       // 2. Automatically generate Receipt
       const recColRef = collection(db, "companies", user.uid, "receipts");
       await addDoc(recColRef, receiptPayload);
+
+      // 3. Post General Ledger double-entry voucher
+      try {
+        await createDoubleEntry({
+          transactionId: payingInvoice.id || payingInvoice.number,
+          businessId: user.uid,
+          sourceModule: "One-Time Payments",
+          amount: payingInvoice.total,
+          date: new Date().toISOString().split("T")[0],
+          description: `Payment received for Invoice #${payingInvoice.number} (${payingInvoice.clientName})`,
+          createdByEmail: currentUser?.email
+        });
+      } catch (glErr) {
+        console.warn("General ledger double-entry posting warning:", glErr);
+      }
 
       // Log database audit trail
       await logAction(
@@ -1361,8 +1377,8 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
 
               {/* Right Panel: Workflow Operations & Fast Copies */}
               {(() => {
-                const isBusinessAdmin = currentUser?.role === 'BUSINESS_ADMIN' || currentUser?.role === 'MASTER_ADMIN';
-                const canApproveInv = isBusinessAdmin || currentUser?.canApproveInvoices;
+                const isBusinessAdmin = currentUser?.role === 'BUSINESS_ADMIN' || currentUser?.role === 'MASTER_ADMIN' || currentUser?.role === 'GENERAL_MANAGER' || currentUser?.role === 'COMPANY_OWNER';
+                const canApproveInv = isBusinessAdmin || currentUser?.canApproveInvoices || currentUser?.canApproveTransactions || currentUser?.approvalRights;
                 const canOverrideHRPerm = isBusinessAdmin || currentUser?.canOverrideHR || currentUser?.approvalRights;
                 const canFinalize = isBusinessAdmin || currentUser?.canFinalizeDocuments;
                 const canReject = isBusinessAdmin || currentUser?.canRejectDocuments;

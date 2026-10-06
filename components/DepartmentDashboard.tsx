@@ -39,6 +39,7 @@ import {
 import { collection, query, where, orderBy, limit, getDocs, updateDoc, addDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { logDepartmentActivity } from "../lib/department";
+import { safeFetchJson } from "../lib/safe-fetch";
 import jsPDF from "jspdf";
 import {
   ResponsiveContainer,
@@ -71,6 +72,7 @@ import ProjectTaskDashboard from "./ProjectTaskDashboard";
 import ProjectDashboard from "./ProjectDashboard";
 import SocialMediaHub from "./SocialMediaHub";
 import ProcurementHub from "./ProcurementHub";
+import SupportDeskView from "./SupportDeskView";
 
 interface DepartmentDashboardProps {
   departmentType: string;
@@ -95,13 +97,14 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
         if (!businessId || !depLower) return;
         setLoading(true);
         try {
-            const response = await fetch('/api/analytics/department-performance', {
+            const { ok, data } = await safeFetchJson('/api/analytics/department-performance', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ companyId: businessId, departmentId: depLower }),
             });
-            const data = await response.json();
-            setOperationalData(data);
+            if (ok && data) {
+                setOperationalData(data);
+            }
         } catch (err) {
             console.error("Failed to fetch operational analytics:", err);
         } finally {
@@ -157,7 +160,7 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
     setActionLoading(actionName);
     setSuccessMsg(null);
     try {
-      const res = await fetch('/api/actions/execute', {
+      const { ok, data, error: execErr } = await safeFetchJson('/api/dept-actions/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -165,13 +168,12 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
           actionName,
           department: depLower,
           details: actionDetails,
-          userEmail: 'miratechindustries@gmail.com'
+          userEmail: currentUser?.email || 'system@miratech.internal'
         })
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to execute action');
+      if (!ok) {
+        throw new Error(execErr || 'Failed to execute action');
       }
 
       setSuccessMsg(data.message || `Action "${actionName}" securely executed & cryptographically logged!`);
@@ -834,15 +836,13 @@ export default function DepartmentDashboard({ departmentType, onBack }: Departme
                 Manage your project tasks and milestones.
               </p>
             </div>
-            <ProjectTaskDashboard companyId={businessId!} projectId="active-project-id" />
+            <ProjectTaskDashboard companyId={businessId!} departmentId={depLower} />
           </div>
         )}
 
         {activeSubTab === "tickets" && depLower === "support" && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs animate-fade-in">
-            <div className="p-4 text-center text-slate-500 text-xs">
-              Support Dashboard not available.
-            </div>
+            <SupportDeskView />
           </div>
         )}
 

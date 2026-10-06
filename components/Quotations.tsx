@@ -643,7 +643,21 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
       items: q.items,
       total: q.total,
       status: "unpaid",
-      convertedFromQuotation: q.number
+      convertedFromQuotation: q.number,
+      approvalStatus: "approved",
+      approvalHistory: [
+        {
+          type: "converted_from_quotation",
+          user: currentUser?.email || "System User",
+          userId: currentUser?.uid || user.uid,
+          role: currentUser?.role || "STAFF",
+          date: new Date().toISOString().split("T")[0],
+          time: new Date().toLocaleTimeString(),
+          comments: `Converted from accepted Quotation #${q.number}.`
+        }
+      ],
+      ...(q.department ? { department: q.department } : {}),
+      ...(q.projectId ? { projectId: q.projectId } : {}),
     };
 
     try {
@@ -653,7 +667,7 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
       const newInvoiceId = addedDoc.id;
 
       // 2. Save to local storage offline invoices cache
-      const cachedInvsKey = `miratech_offline_invoices_${user.uid}`;
+      const cachedInvsKey = `miratech_offline_invoices_${businessId}`;
       const cachedInvs = localStorage.getItem(cachedInvsKey);
       const invsList = cachedInvs ? JSON.parse(cachedInvs) : [];
       invsList.unshift({ id: newInvoiceId, ...invoicePayload });
@@ -663,14 +677,28 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
       await logAction(
         "Invoice Created from Quotation",
         `Converted Quotation #${q.number} to Corporate Invoice #${generatedInvNumber} for '${q.clientName}'. Amount: E${q.total}`,
-        user.uid,
+        businessId,
         q.total
       );
 
-      // 4. Update the source Quotation with custom reference info
-      await updateDoc(doc(db, "companies", businessId, "quotations", q.id!), { 
-        invoiceReference: generatedInvNumber
-      });
+      // 4. Update the source Quotation with custom reference info & status
+      if (q.id) {
+        await updateDoc(doc(db, "companies", businessId, "quotations", q.id), { 
+          invoiceReference: generatedInvNumber,
+          status: "accepted"
+        });
+
+        // Update local quotations cache
+        const cachedQuotsKey = `miratech_offline_quotations_${businessId}`;
+        const cachedQuots = localStorage.getItem(cachedQuotsKey);
+        if (cachedQuots) {
+          const quotsList: Quotation[] = JSON.parse(cachedQuots);
+          const updatedQuots = quotsList.map((item) =>
+            item.id === q.id ? { ...item, status: "accepted" as const, invoiceReference: generatedInvNumber } : item
+          );
+          localStorage.setItem(cachedQuotsKey, JSON.stringify(updatedQuots));
+        }
+      }
       
       addToast(`Quotation converted to Invoice #${generatedInvNumber} successfully!`, "success");
       fetchQuotationsAndCompany();

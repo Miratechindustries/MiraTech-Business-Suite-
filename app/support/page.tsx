@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import PublicHeader from '../../components/public/PublicHeader';
 import PublicFooter from '../../components/public/PublicFooter';
+import { db } from '../../lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { 
   Mail, 
   Clock, 
@@ -16,7 +18,8 @@ import {
   RefreshCw,
   Building2,
   PhoneCall,
-  ExternalLink
+  ExternalLink,
+  AlertCircle
 } from 'lucide-react';
 
 export default function SupportPage() {
@@ -29,15 +32,63 @@ export default function SupportPage() {
     message: '',
   });
   const [submitted, setSubmitted] = useState(false);
+  const [ticketRef, setTicketRef] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setErrorMessage(null);
+
+    const payload = {
+      name: formData.name.trim(),
+      email: formData.email.trim().toLowerCase(),
+      companyName: formData.company.trim(),
+      category: formData.category,
+      priority: 'normal',
+      subject: formData.subject.trim(),
+      message: formData.message.trim(),
+    };
+
+    try {
+      const res = await fetch('/api/support/inquiry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit inquiry to support server.');
+      }
+
+      setTicketRef(data.ticketNumber || `MIRA-INQ-${Math.floor(100000 + Math.random() * 900000)}`);
       setSubmitted(true);
-    }, 800);
+    } catch (apiErr: any) {
+      console.warn('[SupportPage] API submission issue, using direct Firestore fallback:', apiErr.message);
+      try {
+        const fallbackTicket = `MIRA-INQ-${Math.floor(100000 + Math.random() * 900000)}`;
+        await addDoc(collection(db, 'SupportMessages'), {
+          ticketNumber: fallbackTicket,
+          userName: formData.name.trim() || 'Valued Client',
+          userEmail: formData.email.trim().toLowerCase(),
+          companyName: formData.company.trim() || 'Corporate Tenant',
+          message: `[Category: ${formData.category.toUpperCase()}]\nSubject: ${formData.subject.trim()}\n\n${formData.message.trim()}`,
+          category: formData.category,
+          status: 'open',
+          createdAt: serverTimestamp(),
+          isPublicInquiry: true
+        });
+
+        setTicketRef(fallbackTicket);
+        setSubmitted(true);
+      } catch (dbErr: any) {
+        setErrorMessage(apiErr.message || dbErr.message || 'Error submitting ticket. Please email miratechindustries@gmail.com directly.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const supportCategories = [
@@ -151,6 +202,11 @@ export default function SupportPage() {
                 <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center space-y-3">
                   <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
                   <h4 className="font-bold text-slate-900 text-base">Support Ticket Submitted Successfully</h4>
+                  {ticketRef && (
+                    <div className="inline-block px-3 py-1 bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-lg text-xs font-mono font-bold">
+                      Ticket Ref: #{ticketRef}
+                    </div>
+                  )}
                   <p className="text-xs text-slate-600">
                     We have received your message and dispatched a confirmation to <strong>{formData.email}</strong>. Our support desk will follow up shortly.
                   </p>
@@ -158,6 +214,7 @@ export default function SupportPage() {
                     type="button"
                     onClick={() => {
                       setSubmitted(false);
+                      setTicketRef(null);
                       setFormData({ name: '', email: '', company: '', category: 'billing', subject: '', message: '' });
                     }}
                     className="px-4 py-2 bg-slate-900 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-slate-800 transition"
@@ -167,6 +224,12 @@ export default function SupportPage() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+                  {errorMessage && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{errorMessage}</span>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="block font-bold text-slate-700">Your Full Name</label>

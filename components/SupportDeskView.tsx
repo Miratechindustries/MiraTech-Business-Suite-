@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { db, auth } from "../lib/firebase";
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from "firebase/firestore";
-import { LifeBuoy, Send, Trash2, CheckCircle2, MessageSquare, ShieldCheck, Sparkles, UserCheck } from "lucide-react";
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { LifeBuoy, Send, Trash2, CheckCircle2, MessageSquare, ShieldCheck, Sparkles, UserCheck, Check, Clock, AlertCircle, Filter } from "lucide-react";
 import { motion } from "motion/react";
 
 interface SupportMessage {
@@ -24,6 +24,7 @@ export default function SupportDeskView() {
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState("");
   const [selectedUserEmail, setSelectedUserEmail] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "in-progress" | "resolved">("all");
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
@@ -68,7 +69,7 @@ export default function SupportDeskView() {
       await addDoc(collection(db, "SupportMessages"), {
         companyId,
         userId: adminUser?.uid || "master-admin",
-        userEmail: adminUser?.email || "admin@miratech.internal",
+        userEmail: selectedUserEmail || adminUser?.email || "admin@miratech.internal",
         userName: "MiraTech Support Agent",
         message: replyText.trim(),
         isAdminReply: true,
@@ -83,6 +84,20 @@ export default function SupportDeskView() {
     }
   };
 
+  const markConversationStatus = async (newStatus: "open" | "in-progress" | "resolved") => {
+    if (!selectedUserEmail) return;
+    try {
+      const userMsgs = messages.filter(m => m.userEmail === selectedUserEmail);
+      for (const msg of userMsgs) {
+        await updateDoc(doc(db, "SupportMessages", msg.id), {
+          status: newStatus
+        });
+      }
+    } catch (err) {
+      console.error("Failed to update ticket status:", err);
+    }
+  };
+
   const deleteMessage = async (id: string) => {
     try {
       await deleteDoc(doc(db, "SupportMessages", id));
@@ -94,9 +109,13 @@ export default function SupportDeskView() {
   // Group by user email
   const userConversations = Array.from(new Set(messages.map(m => m.userEmail)));
 
-  const activeMessages = selectedUserEmail 
-    ? messages.filter(m => m.userEmail === selectedUserEmail)
-    : messages;
+  // Filter messages by selected user and status filter
+  const filteredMessages = messages.filter((m) => {
+    if (selectedUserEmail && m.userEmail !== selectedUserEmail) return false;
+    if (statusFilter === "all") return true;
+    const itemStatus = m.status || "open";
+    return itemStatus === statusFilter;
+  });
 
   return (
     <div className="space-y-6">
@@ -179,34 +198,82 @@ export default function SupportDeskView() {
 
         {/* Chat Feed & Reply Box */}
         <div className="md:col-span-2 bg-white rounded-3xl border border-slate-200 shadow-4xs flex flex-col h-[600px] overflow-hidden">
-          <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
+          <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-xs font-bold text-slate-800">
-                {selectedUserEmail ? `Conversation with ${selectedUserEmail}` : 'All Support Messages Feed'}
+              <h3 className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                <span>{selectedUserEmail ? `Conversation with ${selectedUserEmail}` : 'All Support Messages Feed'}</span>
               </h3>
               <p className="text-[11px] text-slate-500">Instant bidirectional channel linked to client floating widgets.</p>
             </div>
-            {selectedUserEmail && (
-              <button
-                onClick={() => setSelectedUserEmail(null)}
-                className="text-xs text-indigo-600 font-bold hover:underline"
-              >
-                View All
-              </button>
-            )}
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Status Filter Selector */}
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  className={`px-2.5 py-1 rounded-lg transition ${statusFilter === "all" ? "bg-white text-slate-900 shadow-3xs" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("open")}
+                  className={`px-2.5 py-1 rounded-lg transition ${statusFilter === "open" ? "bg-amber-500 text-white shadow-3xs" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  Open
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("in-progress")}
+                  className={`px-2.5 py-1 rounded-lg transition ${statusFilter === "in-progress" ? "bg-indigo-600 text-white shadow-3xs" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  In Progress
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("resolved")}
+                  className={`px-2.5 py-1 rounded-lg transition ${statusFilter === "resolved" ? "bg-emerald-600 text-white shadow-3xs" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  Resolved
+                </button>
+              </div>
+
+              {selectedUserEmail && (
+                <div className="flex items-center gap-1.5 border-l border-slate-200 pl-2">
+                  <button
+                    type="button"
+                    onClick={() => markConversationStatus("resolved")}
+                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                    title="Mark conversation resolved"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span>Resolve</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => markConversationStatus("open")}
+                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition cursor-pointer"
+                    title="Re-open conversation"
+                  >
+                    Re-open
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
             {loading ? (
               <div className="text-center py-20 text-xs text-slate-400">Loading support ticket feed...</div>
-            ) : activeMessages.length === 0 ? (
+            ) : filteredMessages.length === 0 ? (
               <div className="text-center py-20 space-y-2">
                 <Sparkles className="w-8 h-8 text-indigo-400 mx-auto animate-bounce" />
-                <h4 className="text-xs font-bold text-slate-700">No support messages found</h4>
-                <p className="text-[11px] text-slate-400">When users submit queries via the floating support widget, they will appear here instantly.</p>
+                <h4 className="text-xs font-bold text-slate-700">No support messages match current filters</h4>
+                <p className="text-[11px] text-slate-400">When users submit queries or chat via the support widget, messages will appear here instantly.</p>
               </div>
             ) : (
-              activeMessages.map((msg) => (
+              filteredMessages.map((msg) => (
                 <motion.div
                   key={msg.id}
                   initial={{ opacity: 0, y: 5 }}
@@ -216,6 +283,14 @@ export default function SupportDeskView() {
                   <div className="flex items-center gap-2 px-1">
                     <span className="text-[11px] font-bold text-slate-700">{msg.userName}</span>
                     <span className="text-[10px] text-slate-400 font-mono">({msg.userEmail})</span>
+                    {msg.status && (
+                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase ${
+                        msg.status === 'resolved' ? 'bg-emerald-100 text-emerald-800' :
+                        msg.status === 'in-progress' ? 'bg-indigo-100 text-indigo-800' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {msg.status}
+                      </span>
+                    )}
                     {msg.isAdminReply && (
                       <span className="text-[9px] bg-indigo-100 text-indigo-700 font-extrabold px-1.5 py-0.5 rounded">
                         Support Agent
@@ -260,7 +335,7 @@ export default function SupportDeskView() {
               type="text"
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
-              placeholder={selectedUserEmail ? `Reply to ${selectedUserEmail}...` : "Type broadcast or support response..."}
+              placeholder={selectedUserEmail ? `Reply to ${selectedUserEmail}...` : "Select a conversation or type support response..."}
               className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800"
             />
             <button

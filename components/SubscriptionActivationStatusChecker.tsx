@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { CheckCircle2, Loader2, ShieldCheck, RefreshCw, AlertCircle, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface SubscriptionActivationStatusCheckerProps {
   companyId: string;
@@ -19,6 +19,10 @@ export default function SubscriptionActivationStatusChecker({
   const [renewalDate, setRenewalDate] = useState<string>('');
   const [retryCount, setRetryCount] = useState<number>(0);
 
+  const onActivatedRef = useRef(onActivated);
+  onActivatedRef.current = onActivated;
+  const hasTriggeredActivatedRef = useRef(false);
+
   useEffect(() => {
     if (!companyId) return;
 
@@ -32,7 +36,7 @@ export default function SubscriptionActivationStatusChecker({
         const data = snap.data();
         const subStatus = (data.subscriptionStatus || data.status || 'trialing').toLowerCase();
         const plan = data.subscriptionPlanId || data.subscriptionPlan || data.plan || 'Standard';
-        const renewal = data.subscriptionRenewalDate || data.renewalDate || '';
+        const renewal = data.subscriptionRenewalDate || data.next_billing_date || data.renewalDate || '';
 
         if (!isMounted) return;
 
@@ -41,7 +45,10 @@ export default function SubscriptionActivationStatusChecker({
 
         if (subStatus === 'active' || subStatus === 'trialing') {
           setStatus('active');
-          if (onActivated) onActivated();
+          if (!hasTriggeredActivatedRef.current) {
+            hasTriggeredActivatedRef.current = true;
+            if (onActivatedRef.current) onActivatedRef.current();
+          }
         } else if (subStatus === 'past_due') {
           setStatus('past_due');
         } else {
@@ -54,15 +61,17 @@ export default function SubscriptionActivationStatusChecker({
 
     checkStatus();
     const interval = setInterval(() => {
-      setRetryCount(c => c + 1);
-      checkStatus();
-    }, 4000);
+      if (isMounted) {
+        setRetryCount(c => c + 1);
+        checkStatus();
+      }
+    }, 5000);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [companyId, onActivated]);
+  }, [companyId]);
 
   if (status === 'active') {
     return (
