@@ -132,8 +132,11 @@ export default function BusinessAdminDashboard({
   const [newEmpPhone, setNewEmpPhone] = useState("");
   const [newEmpDepts, setNewEmpDepts] = useState<string[]>(["sales"]);
   const [newEmpPermissions, setNewEmpPermissions] = useState({
+    canCreateQuotations: true,
     canApproveQuotations: true,
+    canCreateInvoices: true,
     canApproveInvoices: true,
+    canCreateReceipts: true,
     canApproveExpenses: true,
     canManageStaff: true,
     canExportReports: true,
@@ -154,8 +157,11 @@ export default function BusinessAdminDashboard({
   const [editEmpPhone, setEditEmpPhone] = useState("");
   const [editEmpDepts, setEditEmpDepts] = useState<string[]>([]);
   const [editEmpPermissions, setEditEmpPermissions] = useState({
+    canCreateQuotations: true,
     canApproveQuotations: false,
+    canCreateInvoices: true,
     canApproveInvoices: false,
+    canCreateReceipts: true,
     canApproveExpenses: false,
     canManageStaff: false,
     canExportReports: false,
@@ -351,8 +357,11 @@ export default function BusinessAdminDashboard({
     setEditEmpPhone(emp.phone || "");
     setEditEmpDepts(emp.departments || ["sales"]);
     setEditEmpPermissions({
+      canCreateQuotations: emp.permissions?.canCreateQuotations ?? true,
       canApproveQuotations: emp.permissions?.canApproveQuotations ?? (emp.role === "DEPARTMENT_MANAGER" || emp.role === "MANAGER"),
+      canCreateInvoices: emp.permissions?.canCreateInvoices ?? true,
       canApproveInvoices: emp.permissions?.canApproveInvoices ?? (emp.role === "DEPARTMENT_MANAGER" || emp.role === "MANAGER"),
+      canCreateReceipts: emp.permissions?.canCreateReceipts ?? true,
       canApproveExpenses: emp.permissions?.canApproveExpenses ?? (emp.role === "DEPARTMENT_MANAGER" || emp.role === "MANAGER"),
       canManageStaff: emp.permissions?.canManageStaff ?? (emp.role === "DEPARTMENT_MANAGER" || emp.role === "MANAGER"),
       canExportReports: emp.permissions?.canExportReports ?? true,
@@ -1348,6 +1357,15 @@ export default function BusinessAdminDashboard({
                   Granular Scoped Permissions
                 </label>
                 <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-indigo-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newEmpPermissions.canCreateQuotations}
+                      onChange={(e) => setNewEmpPermissions({ ...newEmpPermissions, canCreateQuotations: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-0"
+                    />
+                    <span>Create Quotes & Proposals</span>
+                  </label>
                   <label className="flex items-center gap-2 text-[11px] font-medium text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1356,6 +1374,24 @@ export default function BusinessAdminDashboard({
                       className="rounded text-indigo-600 focus:ring-0"
                     />
                     <span>Approve Quotes & Invoices</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-indigo-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newEmpPermissions.canCreateInvoices}
+                      onChange={(e) => setNewEmpPermissions({ ...newEmpPermissions, canCreateInvoices: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-0"
+                    />
+                    <span>Create Invoices & Billing</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-indigo-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newEmpPermissions.canCreateReceipts}
+                      onChange={(e) => setNewEmpPermissions({ ...newEmpPermissions, canCreateReceipts: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-0"
+                    />
+                    <span>Issue Official Receipts</span>
                   </label>
                   <label className="flex items-center gap-2 text-[11px] font-medium text-slate-700 cursor-pointer">
                     <input
@@ -1541,6 +1577,15 @@ export default function BusinessAdminDashboard({
                   Granular Scoped Permissions
                 </label>
                 <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-indigo-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editEmpPermissions.canCreateQuotations}
+                      onChange={(e) => setEditEmpPermissions({ ...editEmpPermissions, canCreateQuotations: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-0"
+                    />
+                    <span>Create Quotes & Proposals</span>
+                  </label>
                   <label className="flex items-center gap-2 text-[11px] font-medium text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1549,6 +1594,24 @@ export default function BusinessAdminDashboard({
                       className="rounded text-indigo-600 focus:ring-0"
                     />
                     <span>Approve Quotes & Invoices</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-indigo-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editEmpPermissions.canCreateInvoices}
+                      onChange={(e) => setEditEmpPermissions({ ...editEmpPermissions, canCreateInvoices: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-0"
+                    />
+                    <span>Create Invoices & Billing</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-indigo-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editEmpPermissions.canCreateReceipts}
+                      onChange={(e) => setEditEmpPermissions({ ...editEmpPermissions, canCreateReceipts: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-0"
+                    />
+                    <span>Issue Official Receipts</span>
                   </label>
                   <label className="flex items-center gap-2 text-[11px] font-medium text-slate-700 cursor-pointer">
                     <input

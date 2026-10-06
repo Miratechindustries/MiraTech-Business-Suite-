@@ -41,9 +41,12 @@ export default function UserManagement() {
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const [editDepartments, setEditDepartments] = useState<string[]>([]);
 
-  // Approval Permissions creation states
+  // Creation & Approval Permissions creation states
+  const [canCreateQuotations, setCanCreateQuotations] = useState(true);
   const [canApproveQuotations, setCanApproveQuotations] = useState(false);
+  const [canCreateInvoices, setCanCreateInvoices] = useState(true);
   const [canApproveInvoices, setCanApproveInvoices] = useState(false);
+  const [canCreateReceipts, setCanCreateReceipts] = useState(true);
   const [canOverrideHR, setCanOverrideHR] = useState(false);
   const [canFinalizeDocuments, setCanFinalizeDocuments] = useState(false);
   const [canRejectDocuments, setCanRejectDocuments] = useState(false);
@@ -53,9 +56,12 @@ export default function UserManagement() {
   const [canReceiveApprovalNotifications, setCanReceiveApprovalNotifications] = useState(false);
   const [approvalRights, setApprovalRights] = useState(false);
 
-  // Approval Permissions editing states
+  // Creation & Approval Permissions editing states
+  const [editCanCreateQuotations, setEditCanCreateQuotations] = useState(true);
   const [editCanApproveQuotations, setEditCanApproveQuotations] = useState(false);
+  const [editCanCreateInvoices, setEditCanCreateInvoices] = useState(true);
   const [editCanApproveInvoices, setEditCanApproveInvoices] = useState(false);
+  const [editCanCreateReceipts, setEditCanCreateReceipts] = useState(true);
   const [editCanOverrideHR, setEditCanOverrideHR] = useState(false);
   const [editCanFinalizeDocuments, setEditCanFinalizeDocuments] = useState(false);
   const [editCanRejectDocuments, setEditCanRejectDocuments] = useState(false);
@@ -109,8 +115,11 @@ export default function UserManagement() {
     setEditRole(user.role || 'STAFF');
     setEditCompanyId(user.companyId || '');
     setEditDepartments(user.departments || []);
+    setEditCanCreateQuotations(user.canCreateQuotations !== false && user.permissions?.canCreateQuotations !== false);
     setEditCanApproveQuotations(user.canApproveQuotations || false);
+    setEditCanCreateInvoices(user.canCreateInvoices !== false && user.permissions?.canCreateInvoices !== false);
     setEditCanApproveInvoices(user.canApproveInvoices || false);
+    setEditCanCreateReceipts(user.canCreateReceipts !== false && user.permissions?.canCreateReceipts !== false);
     setEditCanOverrideHR(user.canOverrideHR || false);
     setEditCanFinalizeDocuments(user.canFinalizeDocuments || false);
     setEditCanRejectDocuments(user.canRejectDocuments || false);
@@ -129,8 +138,11 @@ export default function UserManagement() {
         companyId: editCompanyId,
         businessId: editCompanyId, // Supporting legacy
         departments: isScopedRole ? editDepartments : [],
+        canCreateQuotations: editCanCreateQuotations,
         canApproveQuotations: editCanApproveQuotations,
+        canCreateInvoices: editCanCreateInvoices,
         canApproveInvoices: editCanApproveInvoices,
+        canCreateReceipts: editCanCreateReceipts,
         canOverrideHR: editCanOverrideHR,
         canFinalizeDocuments: editCanFinalizeDocuments,
         canRejectDocuments: editCanRejectDocuments,
@@ -230,8 +242,11 @@ export default function UserManagement() {
         status: 'ACTIVE',
         createdAt: new Date().toISOString(),
         departments: role === 'STAFF' ? selectedDepartments : [],
+        canCreateQuotations,
         canApproveQuotations,
+        canCreateInvoices,
         canApproveInvoices,
+        canCreateReceipts,
         canOverrideHR,
         canFinalizeDocuments,
         canRejectDocuments,
@@ -460,9 +475,18 @@ export default function UserManagement() {
 
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-3">
               <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                Approval Permissions & Override
+                Creation & Approval Permissions
               </label>
-              <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-blue-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canCreateQuotations}
+                    onChange={(e) => setCanCreateQuotations(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Create Quotations</span>
+                </label>
                 <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
                   <input
                     type="checkbox"
@@ -472,6 +496,15 @@ export default function UserManagement() {
                   />
                   <span>Approve Quotations</span>
                 </label>
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-blue-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canCreateInvoices}
+                    onChange={(e) => setCanCreateInvoices(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Create Invoices</span>
+                </label>
                 <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
                   <input
                     type="checkbox"
@@ -480,6 +513,15 @@ export default function UserManagement() {
                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
                   />
                   <span>Approve Invoices</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-blue-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canCreateReceipts}
+                    onChange={(e) => setCanCreateReceipts(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Issue Receipts</span>
                 </label>
                 <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-700 cursor-pointer">
                   <input
@@ -778,8 +820,11 @@ export default function UserManagement() {
                     <label className="block font-bold text-slate-600 mb-1">Approval Rights & Governance Permissions</label>
                     <div className="border border-slate-200 bg-slate-50/50 p-3 rounded-xl space-y-1.5 max-h-48 overflow-y-auto">
                       {[
+                        { checked: editCanCreateQuotations, setChecked: setEditCanCreateQuotations, label: "Create Quotations", highlight: true },
                         { checked: editCanApproveQuotations, setChecked: setEditCanApproveQuotations, label: "Approve Quotations" },
+                        { checked: editCanCreateInvoices, setChecked: setEditCanCreateInvoices, label: "Create Invoices", highlight: true },
                         { checked: editCanApproveInvoices, setChecked: setEditCanApproveInvoices, label: "Approve Invoices" },
+                        { checked: editCanCreateReceipts, setChecked: setEditCanCreateReceipts, label: "Issue Receipts", highlight: true },
                         { checked: editCanOverrideHR, setChecked: setEditCanOverrideHR, label: "Override HR & Payroll" },
                         { checked: editCanFinalizeDocuments, setChecked: setEditCanFinalizeDocuments, label: "Finalize PDF Documents" },
                         { checked: editCanRejectDocuments, setChecked: setEditCanRejectDocuments, label: "Reject Documents" },

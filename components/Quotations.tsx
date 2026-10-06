@@ -247,7 +247,31 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
     return nextNum;
   };
 
+  const isBusinessAdmin =
+    currentUser?.role === 'BUSINESS_ADMIN' ||
+    currentUser?.role === 'MASTER_ADMIN' ||
+    currentUser?.role === 'SUPER_ADMIN' ||
+    currentUser?.role === 'COMPANY_OWNER' ||
+    currentUser?.role === 'COMPANY_ADMIN' ||
+    currentUser?.role === 'GENERAL_MANAGER' ||
+    currentUser?.role === 'MANAGING_DIRECTOR' ||
+    currentUser?.role === 'DEPARTMENT_MANAGER' ||
+    currentUser?.role === 'FINANCE_MANAGER' ||
+    currentUser?.role === 'OPERATIONS_MANAGER';
+
+  const canCreateQuotation =
+    isBusinessAdmin ||
+    currentUser?.canCreateQuotations === true ||
+    currentUser?.permissions?.canCreateQuotations === true ||
+    (currentUser?.role !== 'READ_ONLY' &&
+     currentUser?.canCreateQuotations !== false &&
+     currentUser?.permissions?.canCreateQuotations !== false);
+
   const handleOpenCreateQuotation = () => {
+    if (!canCreateQuotation) {
+      addToast("Permission Denied: Your account role does not have authorization to create new quotations.", "error");
+      return;
+    }
     const nextNum = generateNextQuotationNumber();
     setNumber(nextNum);
     
@@ -854,7 +878,13 @@ export default function Quotations({ departmentId }: { departmentId?: string }) 
               )}
             <button
               onClick={handleOpenCreateQuotation}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold cursor-pointer shadow-3xs transition"
+              disabled={!canCreateQuotation}
+              title={!canCreateQuotation ? "Quotation Creation Permission Missing for your User Account" : "Create Quotation"}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition shadow-3xs ${
+                canCreateQuotation 
+                  ? "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer" 
+                  : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
+              }`}
             >
               <Plus className="h-3.5 w-3.5" /> Create Quotation
             </button>

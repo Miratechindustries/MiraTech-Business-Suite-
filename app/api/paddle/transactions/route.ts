@@ -5,6 +5,32 @@ import { adminDb } from "@/lib/firebase-admin";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function safeDateString(val: any): string {
+  if (!val) return new Date().toISOString();
+  if (typeof val === "string") return val;
+  if (typeof val === "number") return new Date(val).toISOString();
+  if (typeof val === "object") {
+    if (typeof val.toDate === "function") {
+      try { return val.toDate().toISOString(); } catch {}
+    }
+    if (typeof val.seconds === "number") {
+      return new Date(val.seconds * 1000).toISOString();
+    }
+    if (typeof val._seconds === "number") {
+      return new Date(val._seconds * 1000).toISOString();
+    }
+  }
+  try { return new Date(val).toISOString(); } catch {}
+  return new Date().toISOString();
+}
+
+function safeString(val: any, fallback = ""): string {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === "string") return val;
+  if (typeof val === "number" || typeof val === "boolean") return String(val);
+  return fallback;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -56,8 +82,8 @@ export async function GET(req: NextRequest) {
       companyData.paddleSubscriptionId = companyData.paddleSubscriptionId || searchParams.get("subscriptionId");
     }
 
-    const customerId = companyData.paddleCustomerId;
-    const subscriptionId = companyData.paddleSubscriptionId;
+    const customerId = safeString(companyData.paddleCustomerId, "");
+    const subscriptionId = safeString(companyData.paddleSubscriptionId, "");
 
     let transactions: any[] = [];
     let isLiveGateway = false;
@@ -76,27 +102,29 @@ export async function GET(req: NextRequest) {
 
           for await (const txn of transactionCollection) {
             const rawTotal = txn.details?.totals?.total ?? txn.details?.totals?.grand_total ?? 0;
-            const currency = txn.currency_code || "USD";
-            const numericTotal = typeof rawTotal === "string" ? parseFloat(rawTotal) : rawTotal;
+            const currency = safeString(txn.currency_code, "USD");
+            const numericTotal = typeof rawTotal === "string" ? parseFloat(rawTotal) : (typeof rawTotal === "number" ? rawTotal : 0);
+            
+            const rawTotalStr = safeString(txn.details?.totals?.total, "");
             const formattedTotal = typeof numericTotal === "number" && !isNaN(numericTotal)
-              ? (numericTotal > 1000 && !txn.details?.totals?.total?.includes?.(".") 
+              ? (numericTotal > 1000 && rawTotalStr !== "" && !rawTotalStr.includes(".") 
                   ? (numericTotal / 100).toFixed(2) 
                   : numericTotal.toFixed(2))
               : "0.00";
 
             fetchedItems.push({
-              id: txn.id,
-              invoiceNumber: txn.invoice_number || `INV-${txn.id.slice(-6).toUpperCase()}`,
-              status: txn.status || "completed",
-              billedAt: txn.billed_at || txn.created_at || new Date().toISOString(),
+              id: safeString(txn.id, `txn_${Math.random().toString(36).slice(2, 8)}`),
+              invoiceNumber: safeString(txn.invoice_number, `INV-${safeString(txn.id).slice(-6).toUpperCase()}`),
+              status: safeString(txn.status, "completed"),
+              billedAt: safeDateString(txn.billed_at || txn.created_at),
               currency: currency,
               amount: `${currency} ${formattedTotal}`,
               numericAmount: numericTotal,
-              description: txn.items?.[0]?.price?.description || companyData.subscriptionPlan || "Workspace Subscription Plan",
-              collectionMode: txn.collection_mode || "automatic",
-              periodStart: txn.billing_period?.starts_at || null,
-              periodEnd: txn.billing_period?.ends_at || null,
-              receiptUrl: txn.checkout?.url || null,
+              description: safeString(txn.items?.[0]?.price?.description || companyData.subscriptionPlan, "Workspace Subscription Plan"),
+              collectionMode: safeString(txn.collection_mode, "automatic"),
+              periodStart: txn.billing_period?.starts_at ? safeDateString(txn.billing_period.starts_at) : null,
+              periodEnd: txn.billing_period?.ends_at ? safeDateString(txn.billing_period.ends_at) : null,
+              receiptUrl: txn.checkout?.url ? safeString(txn.checkout.url) : null,
             });
 
             if (fetchedItems.length >= 20) break;
@@ -112,23 +140,23 @@ export async function GET(req: NextRequest) {
 
     // Fallback: If no transactions from Paddle SDK yet (e.g. sandbox or initial subscription checkout),
     // synthesize from company's verified Firestore payment records so the ledger is never blank
-    if (transactions.length === 0 && (companyData.lastPaymentRef || companyData.subscriptionPlanId || companyData.subscriptionPlan)) {
+    if (transactions.length === 0 && (companyData.lastPaymentRef || companyData.subscriptionPlanId || companyData.subscriptionPlan || companyId)) {
       const fallbackAmount = companyData.lastPaymentAmount 
-        ? `${companyData.currency || 'USD'} ${Number(companyData.lastPaymentAmount).toFixed(2)}`
+        ? `${safeString(companyData.currency, 'USD')} ${Number(companyData.lastPaymentAmount).toFixed(2)}`
         : companyData.subscriptionPlan === "Enterprise (Unlimited)" ? "$399.00" : "$99.00";
 
       transactions.push({
-        id: companyData.lastPaymentRef || `txn_init_${companyId.slice(0, 6)}`,
-        invoiceNumber: `INV-${(companyData.lastPaymentRef || companyId).slice(-6).toUpperCase()}`,
-        status: companyData.subscriptionStatus || companyData.status || "completed",
-        billedAt: companyData.subscriptionStartedAt || companyData.updatedAt || companyData.createdAt || new Date().toISOString(),
-        currency: companyData.currency || "USD",
+        id: safeString(companyData.lastPaymentRef, `txn_init_${companyId.slice(0, 6)}`),
+        invoiceNumber: `INV-${safeString(companyData.lastPaymentRef || companyId).slice(-6).toUpperCase()}`,
+        status: safeString(companyData.subscriptionStatus || companyData.status, "completed"),
+        billedAt: safeDateString(companyData.subscriptionStartedAt || companyData.updatedAt || companyData.createdAt),
+        currency: safeString(companyData.currency, "USD"),
         amount: fallbackAmount,
-        numericAmount: companyData.lastPaymentAmount || 99,
-        description: `${companyData.subscriptionPlan || 'Corporate Growth'} Tier (${companyData.subscriptionBillingCycle || 'Monthly'})`,
+        numericAmount: Number(companyData.lastPaymentAmount) || 99,
+        description: `${safeString(companyData.subscriptionPlan, 'Corporate Growth')} Tier (${safeString(companyData.subscriptionBillingCycle, 'Monthly')})`,
         collectionMode: "automatic",
-        periodStart: companyData.subscriptionStartedAt || new Date().toISOString(),
-        periodEnd: companyData.next_billing_date || companyData.subscriptionRenewsAt || null,
+        periodStart: safeDateString(companyData.subscriptionStartedAt),
+        periodEnd: companyData.next_billing_date || companyData.subscriptionRenewsAt ? safeDateString(companyData.next_billing_date || companyData.subscriptionRenewsAt) : null,
         receiptUrl: null,
         isRecordedRecord: true,
       });
@@ -142,7 +170,7 @@ export async function GET(req: NextRequest) {
       count: transactions.length,
     });
   } catch (err: any) {
-    console.error("Paddle transactions endpoint notice:", err?.message || err);
+    console.error("Paddle transactions endpoint caught error:", err?.message || err);
     return NextResponse.json({
       transactions: [],
       isLiveGateway: false,
