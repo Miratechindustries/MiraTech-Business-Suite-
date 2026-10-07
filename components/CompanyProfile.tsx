@@ -295,6 +295,10 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditProfile) {
+      setError("Permission Denied: Only Company Owner or Business Admin accounts are authorized to modify company profile & corporate branding.");
+      return;
+    }
     const user = auth.currentUser;
     if (!user) return;
 
@@ -376,15 +380,39 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
     return role.toLowerCase().replace(/[\s_-]+/g, "");
   };
 
-  const user = auth.currentUser;
-  const isRoleBusinessAdmin = normalizeRole(currentUser?.role) === "businessadmin";
-  const isRoleMasterAdmin = normalizeRole(currentUser?.role) === "masteradmin";
+  const userRoleNorm = normalizeRole(currentUser?.role);
 
-  const isAdminUser = 
-    isRoleBusinessAdmin || 
-    isRoleMasterAdmin ||
-    currentUser?.email?.toLowerCase() === 'miratechindustries@gmail.com' ||
-    (user && (user.uid === importAuth.currentUser?.uid));
+  const isCompanyOwner = 
+    userRoleNorm === "companyowner" || 
+    userRoleNorm === "owner" || 
+    userRoleNorm === "businessowner" ||
+    currentUser?.role === "COMPANY_OWNER";
+
+  const isBusinessAdmin = 
+    userRoleNorm === "businessadmin" || 
+    userRoleNorm === "masteradmin" || 
+    userRoleNorm === "superadmin" || 
+    userRoleNorm === "admin" ||
+    currentUser?.role === "BUSINESS_ADMIN" ||
+    currentUser?.role === "MASTER_ADMIN" ||
+    currentUser?.role === "SUPER_ADMIN";
+
+  const isCompanyAdmin = 
+    userRoleNorm === "companyadmin" || 
+    userRoleNorm === "generalmanager" || 
+    userRoleNorm === "managingdirector" ||
+    currentUser?.role === "COMPANY_ADMIN";
+
+  const canEditCompanyProfilePermission = 
+    currentUser?.canEditCompanyProfile === true || 
+    currentUser?.permissions?.canEditCompanyProfile === true;
+
+  const canEditProfile = 
+    isCompanyOwner || 
+    isBusinessAdmin || 
+    isCompanyAdmin ||
+    canEditCompanyProfilePermission ||
+    currentUser?.email?.toLowerCase() === 'miratechindustries@gmail.com';
 
   if (loading) {
     return (
@@ -449,13 +477,13 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
       </div>
 
       <form onSubmit={handleSave} className="p-6 space-y-5">
-        {!isAdminUser && (
+        {!canEditProfile && (
           <div className="p-3.5 text-xs bg-amber-50 text-amber-700 border border-amber-250 rounded-xl flex items-start gap-2.5 shadow-3xs">
             <ShieldAlert className="h-4.5 w-4.5 shrink-0 text-amber-600 mt-0.5" />
             <div>
-              <span className="font-bold block uppercase tracking-wider text-[10px]">View-Only Mode</span>
+              <span className="font-bold block uppercase tracking-wider text-[10px]">Read-Only Mode</span>
               <p className="mt-0.5 leading-relaxed">
-                You are currently logged in with staffing credentials. Only Company Administrators can modify corporation details, colors, and branding assets.
+                You are currently logged in with restricted staff credentials. Only <strong>Company Owner</strong>, <strong>Business Admin</strong>, or authorized administrators can modify corporation details, colors, and branding assets.
               </p>
             </div>
           </div>
@@ -486,7 +514,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
               <input
                 type="text"
                 required
-                disabled={!isAdminUser}
+                disabled={!canEditProfile}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400 disabled:opacity-60"
@@ -519,7 +547,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                 <input
                   type="email"
                   required
-                  disabled={!isAdminUser}
+                  disabled={!canEditProfile}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400 disabled:opacity-60"
@@ -539,7 +567,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                 <input
                   type="text"
                   required
-                  disabled={!isAdminUser}
+                  disabled={!canEditProfile}
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400 disabled:opacity-60"
@@ -560,7 +588,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
               <textarea
                 required
                 rows={2}
-                disabled={!isAdminUser}
+                disabled={!canEditProfile}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/20 focus:outline-hidden focus:border-slate-400 disabled:opacity-60"
@@ -584,7 +612,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                     className="max-h-24 mx-auto rounded-md object-contain border border-slate-100 bg-white p-2"
                     referrerPolicy="no-referrer"
                   />
-                  {isAdminUser && (
+                  {canEditProfile && (
                     <div className="flex gap-2 justify-center">
                       <label className="cursor-pointer text-xs font-medium text-slate-600 hover:text-slate-800 underline">
                         Change Letterhead Logo
@@ -607,7 +635,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                     Upload corporate symbol / visual logo
                   </p>
                   <p className="text-[10px] text-slate-400">Supports PNG, JPG (Max 3MB)</p>
-                  {isAdminUser && (
+                  {canEditProfile && (
                     <label className="cursor-pointer inline-block mt-2 px-3 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold rounded-lg shadow-2xs">
                       Choose Image File
                       <input
@@ -643,7 +671,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                 </div>
                 <div className="flex-1 space-y-1">
                   <span className="text-[10px] text-slate-400 block">PNG, JPG (Max 3MB)</span>
-                  {isAdminUser ? (
+                  {canEditProfile ? (
                     <label className="cursor-pointer inline-block px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold rounded-md shadow-3xs">
                       Change Logo
                       <input
@@ -678,7 +706,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                 </div>
                 <div className="flex-1 space-y-1">
                   <span className="text-[10px] text-slate-400 block">Square Image (Max 3MB)</span>
-                  {isAdminUser ? (
+                  {canEditProfile ? (
                     <label className="cursor-pointer inline-block px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-xs text-slate-700 font-semibold rounded-md shadow-3xs">
                       Change Icon
                       <input
@@ -702,7 +730,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
               <input
                 id="useCompanyLetterhead"
                 type="checkbox"
-                disabled={!isAdminUser}
+                disabled={!canEditProfile}
                 checked={useCompanyLetterhead}
                 onChange={(e) => setUseCompanyLetterhead(e.target.checked)}
                 className="mt-0.5 h-4 w-4 text-blue-600 border-slate-300 rounded-sm focus:ring-blue-500 cursor-pointer disabled:opacity-50"
@@ -722,7 +750,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                 <input
                   id="letterheadWidthFit"
                   type="checkbox"
-                  disabled={!isAdminUser}
+                  disabled={!canEditProfile}
                   checked={letterheadWidthFit}
                   onChange={(e) => setLetterheadWidthFit(e.target.checked)}
                   className="mt-0.5 h-4 w-4 text-blue-600 border-slate-300 rounded-sm focus:ring-blue-500 cursor-pointer disabled:opacity-50"
@@ -765,7 +793,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                   <button
                     key={presetItem.id}
                     type="button"
-                    disabled={!isAdminUser}
+                    disabled={!canEditProfile}
                     onClick={() => applyPresetColors(presetItem.id)}
                     className={`p-2 rounded-lg border text-left flex flex-col justify-between h-16 transition cursor-pointer disabled:opacity-50 ${
                       themePreset === presetItem.id
@@ -792,7 +820,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                 <div className="flex gap-2">
                   <input
                     type="color"
-                    disabled={!isAdminUser}
+                    disabled={!canEditProfile}
                     value={primaryColor}
                     onChange={(e) => {
                       setPrimaryColor(e.target.value);
@@ -802,7 +830,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                   />
                   <input
                     type="text"
-                    disabled={!isAdminUser}
+                    disabled={!canEditProfile}
                     value={primaryColor}
                     onChange={(e) => {
                       setPrimaryColor(e.target.value);
@@ -820,7 +848,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                 <div className="flex gap-2">
                   <input
                     type="color"
-                    disabled={!isAdminUser}
+                    disabled={!canEditProfile}
                     value={secondaryColor}
                     onChange={(e) => {
                       setSecondaryColor(e.target.value);
@@ -830,7 +858,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                   />
                   <input
                     type="text"
-                    disabled={!isAdminUser}
+                    disabled={!canEditProfile}
                     value={secondaryColor}
                     onChange={(e) => {
                       setSecondaryColor(e.target.value);
@@ -858,7 +886,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                   <button
                     key={modeItem.id}
                     type="button"
-                    disabled={!isAdminUser}
+                    disabled={!canEditProfile}
                     onClick={() => setThemeMode(modeItem.id as any)}
                     className={`p-2.5 rounded-lg border text-left flex flex-col justify-between h-20 transition cursor-pointer disabled:opacity-50 ${modeItem.bg} ${
                       themeMode === modeItem.id
@@ -880,7 +908,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                   3. Corporate Typography Font
                 </label>
                 <select
-                  disabled={!isAdminUser}
+                  disabled={!canEditProfile}
                   value={fontFamily}
                   onChange={(e) => setFontFamily(e.target.value as any)}
                   className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md"
@@ -899,7 +927,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                   4. Card Border Roundness (Radius)
                 </label>
                 <select
-                  disabled={!isAdminUser}
+                  disabled={!canEditProfile}
                   value={cardRadius}
                   onChange={(e) => setCardRadius(e.target.value as any)}
                   className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md"
@@ -952,7 +980,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
                 Session Inactivity Auto-Logout Timeout
               </label>
               <select
-                disabled={!isAdminUser}
+                disabled={!canEditProfile}
                 value={inactivityTimeout}
                 onChange={(e) => {
                   const val = Number(e.target.value);
@@ -977,7 +1005,7 @@ export default function CompanyProfile({ onCompanyLoaded }: CompanyProfileProps)
 
         <button
           type="submit"
-          disabled={saving || !name || !isAdminUser}
+          disabled={saving || !name || !canEditProfile}
           className="w-full mt-4 flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-slate-800 text-white font-medium hover:bg-slate-900 disabled:opacity-50 text-sm cursor-pointer shadow-xs transition"
         >
           {saving ? (

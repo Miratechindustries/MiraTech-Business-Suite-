@@ -132,6 +132,7 @@ export default function BusinessAdminDashboard({
   const [newEmpPhone, setNewEmpPhone] = useState("");
   const [newEmpDepts, setNewEmpDepts] = useState<string[]>(["sales"]);
   const [newEmpPermissions, setNewEmpPermissions] = useState({
+    canEditCompanyProfile: false,
     canCreateQuotations: true,
     canApproveQuotations: true,
     canCreateInvoices: true,
@@ -157,6 +158,7 @@ export default function BusinessAdminDashboard({
   const [editEmpPhone, setEditEmpPhone] = useState("");
   const [editEmpDepts, setEditEmpDepts] = useState<string[]>([]);
   const [editEmpPermissions, setEditEmpPermissions] = useState({
+    canEditCompanyProfile: false,
     canCreateQuotations: true,
     canApproveQuotations: false,
     canCreateInvoices: true,
@@ -313,6 +315,7 @@ export default function BusinessAdminDashboard({
         businessId: companyId,
         status: "ACTIVE",
         departments: newEmpDepts,
+        canEditCompanyProfile: newEmpPermissions.canEditCompanyProfile,
         permissions: newEmpPermissions,
         isVerified: true,
         createdAt: new Date().toISOString()
@@ -348,7 +351,7 @@ export default function BusinessAdminDashboard({
   };
 
   // Handle Start Edit Employee
-  const handleStartEditEmployee = (emp: EmployeeRecord) => {
+  const handleStartEditEmployee = (emp: any) => {
     setEditingEmpId(emp.id);
     setEditEmpName(emp.displayName || "");
     setEditEmpEmail(emp.email || "");
@@ -357,6 +360,7 @@ export default function BusinessAdminDashboard({
     setEditEmpPhone(emp.phone || "");
     setEditEmpDepts(emp.departments || ["sales"]);
     setEditEmpPermissions({
+      canEditCompanyProfile: emp.canEditCompanyProfile ?? emp.permissions?.canEditCompanyProfile ?? (emp.role === "BUSINESS_ADMIN" || emp.role === "COMPANY_OWNER"),
       canCreateQuotations: emp.permissions?.canCreateQuotations ?? true,
       canApproveQuotations: emp.permissions?.canApproveQuotations ?? (emp.role === "DEPARTMENT_MANAGER" || emp.role === "MANAGER"),
       canCreateInvoices: emp.permissions?.canCreateInvoices ?? true,
@@ -386,6 +390,7 @@ export default function BusinessAdminDashboard({
         positionTitle: editEmpTitle.trim(),
         phone: editEmpPhone.trim(),
         departments: editEmpDepts,
+        canEditCompanyProfile: editEmpPermissions.canEditCompanyProfile,
         permissions: editEmpPermissions,
         updatedAt: new Date().toISOString()
       };
@@ -1357,6 +1362,15 @@ export default function BusinessAdminDashboard({
                   Granular Scoped Permissions
                 </label>
                 <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-blue-700 cursor-pointer col-span-2 bg-blue-50/70 p-1.5 rounded-lg border border-blue-150">
+                    <input
+                      type="checkbox"
+                      checked={newEmpPermissions.canEditCompanyProfile}
+                      onChange={(e) => setNewEmpPermissions({ ...newEmpPermissions, canEditCompanyProfile: e.target.checked })}
+                      className="rounded text-blue-600 focus:ring-0"
+                    />
+                    <span>Modify Company Profile & Corporate Branding</span>
+                  </label>
                   <label className="flex items-center gap-2 text-[11px] font-bold text-indigo-700 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1577,6 +1591,15 @@ export default function BusinessAdminDashboard({
                   Granular Scoped Permissions
                 </label>
                 <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-blue-700 cursor-pointer col-span-2 bg-blue-50/70 p-1.5 rounded-lg border border-blue-150">
+                    <input
+                      type="checkbox"
+                      checked={editEmpPermissions.canEditCompanyProfile}
+                      onChange={(e) => setEditEmpPermissions({ ...editEmpPermissions, canEditCompanyProfile: e.target.checked })}
+                      className="rounded text-blue-600 focus:ring-0"
+                    />
+                    <span>Modify Company Profile & Corporate Branding</span>
+                  </label>
                   <label className="flex items-center gap-2 text-[11px] font-bold text-indigo-700 cursor-pointer">
                     <input
                       type="checkbox"

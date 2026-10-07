@@ -16,6 +16,7 @@ export type Role =
   | 'MANAGING_DIRECTOR';
 
 export interface ScopedPermissions {
+  canEditCompanyProfile?: boolean;
   canCreateQuotations?: boolean;
   canApproveQuotations?: boolean;
   canCreateInvoices?: boolean;

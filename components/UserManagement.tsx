@@ -42,6 +42,7 @@ export default function UserManagement() {
   const [editDepartments, setEditDepartments] = useState<string[]>([]);
 
   // Creation & Approval Permissions creation states
+  const [canEditCompanyProfile, setCanEditCompanyProfile] = useState(false);
   const [canCreateQuotations, setCanCreateQuotations] = useState(true);
   const [canApproveQuotations, setCanApproveQuotations] = useState(false);
   const [canCreateInvoices, setCanCreateInvoices] = useState(true);
@@ -57,6 +58,7 @@ export default function UserManagement() {
   const [approvalRights, setApprovalRights] = useState(false);
 
   // Creation & Approval Permissions editing states
+  const [editCanEditCompanyProfile, setEditCanEditCompanyProfile] = useState(false);
   const [editCanCreateQuotations, setEditCanCreateQuotations] = useState(true);
   const [editCanApproveQuotations, setEditCanApproveQuotations] = useState(false);
   const [editCanCreateInvoices, setEditCanCreateInvoices] = useState(true);
@@ -115,6 +117,7 @@ export default function UserManagement() {
     setEditRole(user.role || 'STAFF');
     setEditCompanyId(user.companyId || '');
     setEditDepartments(user.departments || []);
+    setEditCanEditCompanyProfile(user.canEditCompanyProfile || user.permissions?.canEditCompanyProfile || false);
     setEditCanCreateQuotations(user.canCreateQuotations !== false && user.permissions?.canCreateQuotations !== false);
     setEditCanApproveQuotations(user.canApproveQuotations || false);
     setEditCanCreateInvoices(user.canCreateInvoices !== false && user.permissions?.canCreateInvoices !== false);
@@ -138,6 +141,7 @@ export default function UserManagement() {
         companyId: editCompanyId,
         businessId: editCompanyId, // Supporting legacy
         departments: isScopedRole ? editDepartments : [],
+        canEditCompanyProfile: editCanEditCompanyProfile,
         canCreateQuotations: editCanCreateQuotations,
         canApproveQuotations: editCanApproveQuotations,
         canCreateInvoices: editCanCreateInvoices,
@@ -150,7 +154,23 @@ export default function UserManagement() {
         canViewApprovalHistory: editCanViewApprovalHistory,
         canApproveAcrossAllDepartments: editCanApproveAcrossAllDepartments,
         canReceiveApprovalNotifications: editCanReceiveApprovalNotifications,
-        approvalRights: editApprovalRights
+        approvalRights: editApprovalRights,
+        permissions: {
+          canEditCompanyProfile: editCanEditCompanyProfile,
+          canCreateQuotations: editCanCreateQuotations,
+          canApproveQuotations: editCanApproveQuotations,
+          canCreateInvoices: editCanCreateInvoices,
+          canApproveInvoices: editCanApproveInvoices,
+          canCreateReceipts: editCanCreateReceipts,
+          canOverrideHR: editCanOverrideHR,
+          canFinalizeDocuments: editCanFinalizeDocuments,
+          canRejectDocuments: editCanRejectDocuments,
+          canReturnForEditing: editCanReturnForEditing,
+          canViewApprovalHistory: editCanViewApprovalHistory,
+          canApproveAcrossAllDepartments: editCanApproveAcrossAllDepartments,
+          canReceiveApprovalNotifications: editCanReceiveApprovalNotifications,
+          approvalRights: editApprovalRights
+        }
       });
       fetchData();
       setEditingUserId(null);
@@ -242,6 +262,7 @@ export default function UserManagement() {
         status: 'ACTIVE',
         createdAt: new Date().toISOString(),
         departments: role === 'STAFF' ? selectedDepartments : [],
+        canEditCompanyProfile,
         canCreateQuotations,
         canApproveQuotations,
         canCreateInvoices,
@@ -254,7 +275,23 @@ export default function UserManagement() {
         canViewApprovalHistory,
         canApproveAcrossAllDepartments,
         canReceiveApprovalNotifications,
-        approvalRights
+        approvalRights,
+        permissions: {
+          canEditCompanyProfile,
+          canCreateQuotations,
+          canApproveQuotations,
+          canCreateInvoices,
+          canApproveInvoices,
+          canCreateReceipts,
+          canOverrideHR,
+          canFinalizeDocuments,
+          canRejectDocuments,
+          canReturnForEditing,
+          canViewApprovalHistory,
+          canApproveAcrossAllDepartments,
+          canReceiveApprovalNotifications,
+          approvalRights
+        }
       };
 
       await setDoc(doc(db, 'users', userUid), userPayload);
@@ -478,6 +515,15 @@ export default function UserManagement() {
                 Creation & Approval Permissions
               </label>
               <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-900 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={canEditCompanyProfile}
+                    onChange={(e) => setCanEditCompanyProfile(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                  />
+                  <span>Modify Company Profile & Branding</span>
+                </label>
                 <label className="flex items-center gap-1.5 text-[11px] font-bold text-blue-800 cursor-pointer">
                   <input
                     type="checkbox"
@@ -820,6 +866,7 @@ export default function UserManagement() {
                     <label className="block font-bold text-slate-600 mb-1">Approval Rights & Governance Permissions</label>
                     <div className="border border-slate-200 bg-slate-50/50 p-3 rounded-xl space-y-1.5 max-h-48 overflow-y-auto">
                       {[
+                        { checked: editCanEditCompanyProfile, setChecked: setEditCanEditCompanyProfile, label: "Modify Company Profile & Branding", highlight: true },
                         { checked: editCanCreateQuotations, setChecked: setEditCanCreateQuotations, label: "Create Quotations", highlight: true },
                         { checked: editCanApproveQuotations, setChecked: setEditCanApproveQuotations, label: "Approve Quotations" },
                         { checked: editCanCreateInvoices, setChecked: setEditCanCreateInvoices, label: "Create Invoices", highlight: true },
