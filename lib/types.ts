@@ -37,138 +37,65 @@ export interface ScopedPermissions {
 
 export interface User extends ScopedPermissions {
   id: string;
-  uid?: string;
   email: string;
   role: Role;
-  businessId: string;
-  companyId?: string;
-  name?: string;
-  displayName?: string;
-  positionTitle?: string;
-  phone?: string;
-  departments?: string[];
-  permissions?: ScopedPermissions;
-  photoURL?: string;
-  profilePic?: string;
-  isVerified?: boolean;
-  isEmailVerified?: boolean;
-  emailVerified?: boolean;
-  status?: 'ACTIVE' | 'DEACTIVATED' | 'PENDING';
-  authorizedCompanyIds?: string[];
-  lastActiveCompanyId?: string;
-  subscriptionPlanId?: string;
-  subscriptionPlan?: string;
-  createdAt?: string;
-}
-
-export interface Business {
-  id: string;
+  companyId: string;
   name: string;
+  photoURL?: string;
+  status: 'ACTIVE' | 'DEACTIVATED';
   createdAt: string;
-  isVerified?: boolean;
-  isEmailVerified?: boolean;
-  emailVerified?: boolean;
-  officialEmail?: string;
-  verifiedEmail?: string;
-  emailVerifiedAt?: string;
-  subscriptionPlanId?: string;
-  subscriptionPlan?: string;
-  subscriptionStatus?: string;
 }
 
 export interface Company {
   id: string;
-  ownerId: string;
   name: string;
-  legalName?: string;
   email: string;
-  officialEmail?: string;
-  phone?: string;
-  officialPhone?: string;
-  address?: string;
-  city?: string;
-  country?: string;
-  website?: string;
-  industry?: string;
-  businessType?: string;
-  currency?: string;
-  employeeRange?: string;
-  branchCount?: number;
-  logo?: string;
-  letterheadLogo?: string;
-  favicon?: string;
+  phone: string;
+  address: string;
+  logoUrl?: string;
   primaryColor?: string;
   secondaryColor?: string;
-  useCompanyLetterhead?: boolean;
-  themePreset?: string;
-  themeMode?: string;
-  fontFamily?: string;
-  cardRadius?: string;
-  sidebarStyle?: string;
-  isVerified: boolean;
-  isEmailVerified?: boolean;
-  emailVerified?: boolean;
-  verifiedEmail?: string;
-  emailVerifiedAt?: string;
-  subscriptionPlanId?: string;
-  subscriptionPlan?: string;
-  subscriptionStatus?: string;
-  lockedFeatures?: string[];
-  createdAt: string;
+  subscriptionPlanId: string;
+  subscriptionPlanName: string;
+  scheduledSubscriptionPlanId?: string;
+  scheduledSubscriptionPlanName?: string;
+  scheduledAt?: string;
+  autoRenew: boolean;
 }
 
-export interface Product {
+export interface Quotation {
   id: string;
-  businessId: string;
-  name: string;
-  sku: string;
-  price: number;
-  stock: number;
-}
-
-export interface Customer {
-  id: string;
-  businessId: string;
-  name: string;
-  email: string;
-}
-
-export interface ExpenseCategory {
-  id: string;
-  businessId: string;
-  name: string;
-}
-
-export interface Expense {
-  id: string;
-  businessId: string;
-  categoryId: string;
-  amount: number;
+  quoteNumber: string;
+  clientName: string;
+  clientEmail: string;
   date: string;
-  description: string;
-  status: 'Pending' | 'Approved' | 'Paid' | 'Rejected';
-  receiptUrl?: string;
+  validUntil: string;
+  items: Array<{ description: string; quantity: number; unitPrice: number }>;
+  total: number;
+  status: 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED';
+  notes?: string;
 }
 
-export interface FinancialDocument {
+export interface Invoice {
   id: string;
-  businessId: string;
-  name: string;
-  url: string;
-  category: 'Expenses' | 'Supplier invoices' | 'External quotations' | 'Receipts' | 'Purchases' | 'Operational costs';
-  extractedData?: Record<string, any>;
-  uploadedAt: string;
+  invoiceNumber: string;
+  clientName: string;
+  clientEmail: string;
+  date: string;
+  dueDate: string;
+  items: Array<{ description: string; quantity: number; unitPrice: number }>;
+  total: number;
+  status: 'UNPAID' | 'PAID' | 'OVERDUE';
+  notes?: string;
 }
 
-export interface Supplier {
+export interface Receipt {
   id: string;
-  businessId: string;
-  name: string;
-  email?: string;
-  phone?: string;
-}
-
-export interface UserInvitation {
-  email: string;
-  role: Role;
+  receiptNumber: string;
+  invoiceNumber: string;
+  clientName: string;
+  date: string;
+  amount: number;
+  paymentMethod: string;
+  notes?: string;
 }

@@ -39,7 +39,7 @@ export default function RegisterPage() {
                   MiraTech Company Registration &amp; Onboarding
                 </h1>
                 <p className="text-xs text-slate-600">
-                  Provision your isolated workspace with a 14-day free trial. Paddle Merchant of Record billing.
+                  Provision your isolated workspace with a 14-day free trial. Secure corporate billing.
                 </p>
               </div>
             </div>

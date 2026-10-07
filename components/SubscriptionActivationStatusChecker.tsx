@@ -110,7 +110,7 @@ export default function SubscriptionActivationStatusChecker({
           </div>
         </div>
         <p className="text-xs text-slate-700 leading-relaxed">
-          We encountered an issue processing your latest recurring payment via Paddle. Please update your payment instrument in settings to restore full write access.
+          We encountered an issue processing your latest recurring payment. Please update your payment instrument in settings to restore full write access.
         </p>
       </div>
     );
@@ -128,14 +128,14 @@ export default function SubscriptionActivationStatusChecker({
         </div>
       </div>
       <p className="text-xs text-slate-700 leading-relaxed">
-        We are waiting for cryptographic confirmation and webhook notification from Paddle.com Market Ltd. This typically takes 3 to 10 seconds.
+        We are waiting for cryptographic confirmation and webhook notification from our payment processor. This typically takes 3 to 10 seconds.
       </p>
       <div className="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-blue-100">
         <span className="flex items-center gap-1.5">
           <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
           Polling backend entitlement state (Attempt {retryCount + 1})...
         </span>
-        <span className="font-semibold text-blue-700">Secure MoR Sync</span>
+        <span className="font-semibold text-blue-700">Secure Billing Sync</span>
       </div>
     </div>
   );

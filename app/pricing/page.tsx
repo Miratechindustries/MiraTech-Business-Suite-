@@ -32,7 +32,7 @@ export default function PricingPage() {
     },
     {
       q: "What payment methods are supported?",
-      a: "All subscription transactions are processed by Paddle.com Market Ltd as our Merchant of Record. We accept major credit cards, PayPal, Apple Pay, Google Pay, and regional wire transfers."
+      a: "All subscription transactions are processed securely. We accept major credit cards, PayPal, Apple Pay, Google Pay, and regional wire transfers."
     },
     {
       q: "How does recurring subscription billing work?",
@@ -40,7 +40,7 @@ export default function PricingPage() {
     },
     {
       q: "How do I cancel my subscription?",
-      a: "You can cancel your subscription at any time without fees or penalties. You can cancel directly from within your MiraTech workspace under Settings > Subscriptions, or through the self-service Paddle Customer Portal. Your account remains active until the end of your paid billing period."
+      a: "You can cancel your subscription at any time without fees or penalties. You can cancel directly from within your MiraTech workspace under Settings > Subscriptions, or through the secure billing link sent in your receipt email. Your account remains active until the end of your paid billing period."
     },
     {
       q: "What is your refund policy?",
@@ -48,7 +48,7 @@ export default function PricingPage() {
     },
     {
       q: "Can I upgrade or downgrade between tiers?",
-      a: "Yes. Administrators can change tiers at any time. When upgrading, new user quotas and modules are unlocked immediately with prorated billing handled automatically by Paddle."
+      a: "Yes. Administrators can change tiers at any time. When upgrading, new user quotas and modules are unlocked immediately with prorated billing handled automatically."
     }
   ];
 
@@ -68,7 +68,7 @@ export default function PricingPage() {
               Plans Engineered for Modern Business Scale
             </h1>
             <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-              MiraTech Business Suite is a cloud-based business management SaaS platform for small and medium-sized businesses. Customers purchase recurring subscription plans to access the platform and its features. Billed securely through Paddle.
+              MiraTech Business Suite is a cloud-based business management SaaS platform for small and medium-sized businesses. Customers purchase recurring subscription plans to access the platform and its features. Billed securely through our enterprise payment gateway.
             </p>
 
             {/* Billing Cycle Switcher */}
@@ -191,14 +191,14 @@ export default function PricingPage() {
             })}
           </div>
 
-          {/* Paddle Merchant of Record & Subscription Disclosure */}
+          {/* Secure Payment & Subscription Disclosure */}
           <div className="bg-white border border-slate-200 rounded-3xl p-8 sm:p-10 space-y-6 shadow-xs">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-blue-50 text-blue-600 rounded-xl border border-blue-200">
                 <ShieldCheck className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-extrabold text-slate-900 text-lg">Secure Recurring Billing &amp; Merchant of Record Notice</h3>
+                <h3 className="font-extrabold text-slate-900 text-lg">Secure Recurring Billing &amp; Payment Gateway Notice</h3>
                 <p className="text-xs text-slate-600">
                   MiraTech Business Suite subscription plans are continuous recurring services that automatically renew until cancelled.
                 </p>
@@ -206,15 +206,15 @@ export default function PricingPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
               <div className="space-y-1">
-                <strong className="text-slate-900 block">Paddle Merchant of Record</strong>
+                <strong className="text-slate-900 block">Secure Payment Processing</strong>
                 <p>
-                  Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all orders, handling tax collection, compliance, and payments.
+                  Our order process handles automatic tax collection, local financial compliance, and credit card processing securely under rigorous PCI-DSS Tier 1 standards.
                 </p>
               </div>
               <div className="space-y-1">
                 <strong className="text-slate-900 block">Trial &amp; Cancellation Terms</strong>
                 <p>
-                  All paid tiers begin with a 14-day free evaluation trial. You may cancel with one click at any time from your workspace settings or via the Paddle portal with zero fees.
+                  All paid tiers begin with a 14-day free evaluation trial. You may cancel with one click at any time from your workspace settings with zero fees.
                 </p>
               </div>
               <div className="space-y-1">
@@ -233,7 +233,7 @@ export default function PricingPage() {
                 Frequently Asked Pricing Questions
               </h3>
               <p className="text-xs text-slate-600">
-                Everything you need to know about billing cycles, trials, and Paddle checkout.
+                Everything you need to know about billing cycles, trials, and secure checkout.
               </p>
             </div>
 

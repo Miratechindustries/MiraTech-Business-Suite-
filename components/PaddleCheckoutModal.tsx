@@ -45,7 +45,7 @@ export default function PaddleCheckoutModal({
             </div>
             <div>
               <h3 className="font-extrabold text-base tracking-tight">Pre-Checkout Confirmation</h3>
-              <p className="text-[11px] text-slate-300">Secure Paddle Merchant of Record Subscription</p>
+              <p className="text-[11px] text-slate-300">Secure Enterprise Subscription Checkout</p>
             </div>
           </div>
           <button
@@ -81,8 +81,8 @@ export default function PaddleCheckoutModal({
                 <strong className="text-emerald-600">14-Day Free Trial Included</strong>
               </div>
               <div className="flex justify-between">
-                <span>Merchant of Record:</span>
-                <strong className="text-slate-900">Paddle.com Market Ltd</strong>
+                <span>Secure Processor:</span>
+                <strong className="text-slate-900">Certified payment gateway</strong>
               </div>
             </div>
           </div>
@@ -91,7 +91,7 @@ export default function PaddleCheckoutModal({
           <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-2xl space-y-2 text-[11px] text-slate-700 leading-relaxed">
             <strong className="text-blue-900 block font-bold">Recurring Subscription &amp; Cancellation Terms</strong>
             <p>
-              By checking out, you authorize Paddle.com to charge your payment method automatically on a recurring {billingCycle} basis until you cancel. You may cancel instantly at any time via your workspace settings or the Paddle customer portal with zero cancellation fees.
+              By checking out, you authorize our secure billing processor to charge your payment method automatically on a recurring {billingCycle} basis until you cancel. You may cancel instantly at any time via your workspace settings with zero cancellation fees.
             </p>
           </div>
 
@@ -109,7 +109,7 @@ export default function PaddleCheckoutModal({
                 <Link href="/terms" target="_blank" className="text-blue-600 underline font-bold hover:text-blue-800">
                   Terms &amp; Conditions
                 </Link>{' '}
-                and acknowledge that my order is processed by Paddle as Merchant of Record.
+                and acknowledge that my order is processed via our secure PCI-compliant processor.
               </span>
             </label>
 
@@ -161,7 +161,7 @@ export default function PaddleCheckoutModal({
               <span>Preparing Checkout...</span>
             ) : (
               <>
-                <span>Proceed to Paddle Checkout</span>
+                <span>Proceed to Secure Checkout</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

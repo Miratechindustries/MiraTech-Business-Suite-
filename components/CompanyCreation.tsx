@@ -1136,7 +1136,7 @@ export default function CompanyCreation() {
       userId: adminUid,
       userEmail: accountEmail,
       action: 'TENANT_ONBOARDING_COMPLETED',
-      details: `Corporate workspace "${companyName}" successfully provisioned with ${selectedPlanObj.name} plan via Paddle Billing trial.`,
+      details: `Corporate workspace "${companyName}" successfully provisioned with ${selectedPlanObj.name} plan via Secure Billing trial.`,
       ipAddress: '127.0.0.1 (Web Portal Client)',
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Registration Wizard',
       timestamp: new Date().toISOString(),
@@ -2636,7 +2636,7 @@ export default function CompanyCreation() {
                     <div className="mt-2.5 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-xs text-emerald-800">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                       <div>
-                        <span className="font-bold">Firestore Subscription Status:</span> Valid <span className="uppercase">{existingSubStatus.status}</span> record found. Paddle re-checkout will be bypassed.
+                        <span className="font-bold">Firestore Subscription Status:</span> Valid <span className="uppercase">{existingSubStatus.status}</span> record found. Payment gateway re-checkout will be bypassed.
                       </div>
                     </div>
                   )}
@@ -2644,7 +2644,7 @@ export default function CompanyCreation() {
               </div>
             </div>
 
-            {/* Terms & Paddle Billing Disclosures Checkbox */}
+            {/* Terms & Billing Disclosures Checkbox */}
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <input
@@ -2667,7 +2667,7 @@ export default function CompanyCreation() {
                   <a href="/refund" target="_blank" className="text-blue-600 hover:text-blue-800 underline font-semibold">
                     Refund &amp; Cancellation Policy
                   </a>
-                  . I understand my subscription includes a <strong>14-day free trial</strong> followed by recurring subscription billing ({billingCycle}) processed securely by <strong>Paddle.com as Merchant of Record</strong>, and can be cancelled anytime via workspace settings.
+                  . I understand my subscription includes a <strong>14-day free trial</strong> followed by recurring subscription billing ({billingCycle}) processed securely by our <strong>certified payment gateway</strong>, and can be cancelled anytime via workspace settings.
                 </span>
               </label>
             </div>

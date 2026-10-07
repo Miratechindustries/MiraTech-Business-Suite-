@@ -169,20 +169,14 @@ export default function SupportPage() {
               <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100 w-fit">
                 <ShieldCheck className="w-6 h-6" />
               </div>
-              <h3 className="font-bold text-slate-900 text-base">Paddle Merchant Support</h3>
+              <h3 className="font-bold text-slate-900 text-base">Billing & Invoice Support</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                For direct receipt inquiries, payment verification, and credit card updates, access the Paddle Customer Portal:
+                For direct receipt inquiries, payment verification, and credit card updates, access our Secure Client Billing Portal:
               </p>
               <div className="pt-2">
-                <a 
-                  href="https://checkout.paddle.com" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:underline"
-                >
-                  <span>Open Paddle Customer Portal</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600">
+                  <span>Accessible via Workspace Settings &gt; Billing</span>
+                </span>
               </div>
             </div>
           </div>
@@ -330,11 +324,11 @@ export default function SupportPage() {
                 <div className="space-y-4 text-xs">
                   <div className="space-y-1 pb-3 border-b border-slate-100">
                     <strong className="text-slate-900 block font-bold">How do I update my credit card?</strong>
-                    <p className="text-slate-600">Access your workspace Settings &gt; Subscriptions or log into the Paddle Customer Portal using your receipt email.</p>
+                    <p className="text-slate-600">Access your workspace Settings &gt; Subscriptions or use the self-service billing link in your invoice email.</p>
                   </div>
                   <div className="space-y-1 pb-3 border-b border-slate-100">
                     <strong className="text-slate-900 block font-bold">Where can I download tax invoices?</strong>
-                    <p className="text-slate-600">Tax invoices are emailed automatically by Paddle upon billing. You can also retrieve them anytime via the Paddle billing portal.</p>
+                    <p className="text-slate-600">Tax invoices are emailed automatically upon billing. You can also retrieve them anytime via the billing portal in your workspace settings.</p>
                   </div>
                   <div className="space-y-1 pb-3 border-b border-slate-100">
                     <strong className="text-slate-900 block font-bold">How do I cancel my subscription?</strong>
@@ -351,9 +345,9 @@ export default function SupportPage() {
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 space-y-2">
-                <h4 className="font-bold text-slate-900 text-sm">Merchant of Record Notice</h4>
+                <h4 className="font-bold text-slate-900 text-sm">Secure Payment Gateways</h4>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all orders and provides customer service inquiries and handles returns.
+                  Our payment processing and subscriptions are managed securely through certified Tier 1 PCI-DSS compliant financial partners, ensuring 100% security and local tax compliance.
                 </p>
               </div>
             </div>

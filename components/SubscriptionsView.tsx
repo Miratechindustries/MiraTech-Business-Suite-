@@ -429,14 +429,14 @@ export default function SubscriptionsView() {
       {/* Upper Banner Status */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between border-b border-slate-200 pb-4">
         <div>
-          <h2 className="text-xl font-bold font-sans text-slate-900 tracking-tight">Paddle Subscriptions & Billing Engine</h2>
-          <p className="text-xs text-slate-500 font-medium">Merchant of Record billing, automated global tax compliance, and self-service customer portal.</p>
+          <h2 className="text-xl font-bold font-sans text-slate-900 tracking-tight">Corporate Subscriptions & Billing Engine</h2>
+          <p className="text-xs text-slate-500 font-medium">Secure subscription management, automated global tax compliance, and self-service customer portal.</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Gateway Status Badge */}
           <div className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 rounded-full px-3 py-1 text-xs font-bold text-slate-700">
             <span className={`w-2 h-2 rounded-full ${paddleConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-            <span>Paddle {paddleEnv === 'production' ? 'Live' : 'Sandbox'}</span>
+            <span>Gateway {paddleEnv === 'production' ? 'Production' : 'Sandbox'}</span>
           </div>
 
           <div className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 rounded-full px-3 py-1 text-xs font-bold text-slate-700">
@@ -479,7 +479,7 @@ export default function SubscriptionsView() {
               <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md border ${
                 isTrial ? 'bg-blue-100 text-blue-700 border-blue-200 animate-pulse' : 'bg-emerald-100 text-emerald-800 border-emerald-250'
               }`}>
-                {isTrial ? '14-Day Trial Active' : 'Paid Paddle Subscription'}
+                {isTrial ? '14-Day Trial Active' : 'Paid Active Subscription'}
               </span>
               <span className="text-xs text-slate-400 font-semibold">•</span>
               <span className="text-xs font-bold text-slate-700">
@@ -493,8 +493,8 @@ export default function SubscriptionsView() {
             </h3>
             <p className="text-xs text-slate-500 leading-normal">
               {isTrial 
-                ? "Upgrade seamlessly through Paddle to activate continuous double-entry ledger, multi-user quotas, and enterprise modules."
-                : "Your organization is securely billed via Paddle Merchant of Record. Invoices and tax receipts are available via the self-service portal."}
+                ? "Upgrade seamlessly to activate continuous double-entry ledger, multi-user quotas, and enterprise modules."
+                : "Your organization is securely billed via our secure payment gateway. Invoices and tax receipts are available via the self-service portal."}
             </p>
           </div>
 
@@ -507,7 +507,7 @@ export default function SubscriptionsView() {
                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-2 shadow-xs disabled:opacity-50"
               >
                 {isOpeningPortal ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5" />}
-                <span>Paddle Customer Portal</span>
+                <span>Secure Billing Portal</span>
               </button>
             )}
 
@@ -593,10 +593,10 @@ export default function SubscriptionsView() {
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-3xs space-y-3">
           <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
             <Shield className="w-5 h-5 text-emerald-600" />
-            <h3 className="font-bold text-slate-900 text-sm">Paddle Merchant of Record Architecture</h3>
+            <h3 className="font-bold text-slate-900 text-sm">Secure Billing Gateway Architecture</h3>
           </div>
           <p className="text-xs text-slate-550 leading-relaxed">
-            All subscription payments, VAT/Sales tax calculation, and PCI-DSS compliance are handled through Paddle Billing.
+            All subscription payments, VAT/Sales tax calculation, and PCI-DSS compliance are handled through our secure enterprise gateway.
           </p>
           <ul className="text-xs space-y-2 text-slate-600 font-medium">
             <li className="flex items-center gap-2">
@@ -621,7 +621,7 @@ export default function SubscriptionsView() {
               </div>
               <div>
                 <h3 className="font-bold text-slate-900 text-sm">Payment History & Invoices</h3>
-                <p className="text-xs text-slate-500 font-medium">Past billing statements, transaction receipts, and merchant records fetched via Paddle</p>
+                <p className="text-xs text-slate-500 font-medium">Past billing statements, transaction receipts, and official tax invoices.</p>
               </div>
             </div>
           </div>
@@ -631,7 +631,7 @@ export default function SubscriptionsView() {
             {isLiveGateway ? (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-250">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                Paddle MoR Synced
+                Gateway Synced
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
@@ -781,7 +781,7 @@ export default function SubscriptionsView() {
                 <FileText className="w-8 h-8 text-slate-300 mx-auto" />
                 <p className="text-xs font-bold text-slate-700">No past billing receipts or invoices recorded yet.</p>
                 <p className="text-[11px] text-slate-400 max-w-md mx-auto">
-                  When your workspace processes a subscription checkout or recurring billing cycle via Paddle, official tax-compliant PDF invoices will appear here automatically.
+                  When your workspace processes a subscription checkout or recurring billing cycle, official tax-compliant PDF invoices will appear here automatically.
                 </p>
                 <button
                   type="button"
@@ -790,7 +790,7 @@ export default function SubscriptionsView() {
                   className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition cursor-pointer shadow-3xs"
                 >
                   <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Launch Paddle Customer Portal</span>
+                  <span>Launch Customer Billing Portal</span>
                 </button>
               </div>
             )}
@@ -825,7 +825,7 @@ export default function SubscriptionsView() {
             ) : (
               <div className="text-center py-8 text-xs text-slate-400 space-y-1">
                 <p>No recent payment transactions or webhooks recorded in this session yet.</p>
-                <p className="text-[11px]">Paddle checkout completions and error logs will appear here automatically.</p>
+                <p className="text-[11px]">Payment completions and gateway events will appear here automatically.</p>
               </div>
             )}
           </div>
@@ -837,7 +837,7 @@ export default function SubscriptionsView() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h3 className="font-bold text-slate-900 text-base">Select Your Workspace Billing Tier</h3>
-            <p className="text-xs text-slate-500">Upgrading through Paddle immediately provisions advanced workflows and elevates user quotas:</p>
+            <p className="text-xs text-slate-500">Upgrading immediately provisions advanced workflows and elevates user quotas:</p>
           </div>
 
           {/* Billing Cycle Toggle */}
@@ -999,10 +999,10 @@ export default function SubscriptionsView() {
             {/* Modal Header */}
             <div className="bg-slate-900 text-white p-6 flex items-start justify-between">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Paddle Billing Gateway</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Secure Billing Gateway</span>
                 <h3 className="text-lg font-bold mt-1">Upgrade to {selectedPlan.name}</h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {formatPlanPrice(selectedPlan, billingCycle, 'ZAR')} / {billingCycle === 'annual' ? 'year' : 'month'} • Merchant of Record checkout
+                  {formatPlanPrice(selectedPlan, billingCycle, 'ZAR')} / {billingCycle === 'annual' ? 'year' : 'month'} • Secure checkout
                 </p>
               </div>
               <button
@@ -1020,9 +1020,9 @@ export default function SubscriptionsView() {
                 <div className="space-y-4 text-center py-2">
                   <CreditCard className="w-10 h-10 text-blue-600 mx-auto animate-pulse" />
                   <div className="space-y-1">
-                    <h4 className="font-bold text-sm text-slate-900">Hosted Paddle Checkout Active</h4>
+                    <h4 className="font-bold text-sm text-slate-900">Secure Payment Gateway Active</h4>
                     <p className="text-slate-500 text-[11px] leading-relaxed">
-                      Click below to open the secure Paddle payment overlay. Note: If your custom <code className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded">NEXT_PUBLIC_PADDLE_CLIENT_TOKEN</code> does not match default Price IDs, Paddle overlay may show a catalog error.
+                      Click below to open the secure payment overlay. Note: If your custom billing token does not match default Price IDs, the overlay may show a configuration error.
                     </p>
                   </div>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
@@ -1033,7 +1033,7 @@ export default function SubscriptionsView() {
                       className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
-                      <span>Launch Paddle Overlay</span>
+                      <span>Open Payment Gateway</span>
                     </button>
                     <button
                       type="button"
@@ -1051,17 +1051,17 @@ export default function SubscriptionsView() {
                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-amber-900">
                     <div className="flex items-center gap-2 font-bold text-xs text-amber-800">
                       <KeyRound className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                      <span>Paddle Client Token Not Configured</span>
+                      <span>Billing Gateway Token Not Configured</span>
                     </div>
                     <p className="text-[11px] text-amber-750 leading-relaxed">
-                      To run live client-side checkouts in this environment, provide <code className="font-mono font-bold bg-amber-100 px-1 py-0.5 rounded">NEXT_PUBLIC_PADDLE_CLIENT_TOKEN</code> in your environment variables.
+                      To run live client-side checkouts in this environment, provide the client token in your environment variables.
                     </p>
                   </div>
 
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
-                    <span className="font-bold text-slate-800 block text-xs">Paddle Sandbox Test Simulation</span>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      You can execute an end-to-end sandbox verification flow right now. This mimics the Paddle <code className="font-mono text-[10px]">subscription.created</code> lifecycle and provisions the workspace tier with real Firestore records and SecOps audit logging.
+                    <span className="font-bold text-slate-800 block text-xs">Enterprise Sandbox Test Simulation</span>
+                    <p className="text-[11px] text-slate-550 leading-relaxed">
+                      You can execute an end-to-end sandbox verification flow right now. This mimics the subscription registration lifecycle and provisions the workspace tier with real Firestore records and SecOps audit logging.
                     </p>
                     <button
                       type="button"
@@ -1080,7 +1080,7 @@ export default function SubscriptionsView() {
             {/* Modal Footer & Paddle MoR Disclosure */}
             <div className="bg-slate-50 border-t border-slate-150 p-4 space-y-2 text-[11px] text-slate-500">
               <p className="leading-relaxed text-[10px] text-slate-400">
-                Payments and subscriptions are securely processed by <strong>Paddle.com Market Ltd as Merchant of Record</strong>. Subscriptions renew automatically every {billingCycle === 'annual' ? 'year' : 'month'} until cancelled. View our{' '}
+                Payments and subscriptions are securely processed by our certified payment processor. Subscriptions renew automatically every {billingCycle === 'annual' ? 'year' : 'month'} until cancelled. View our{' '}
                 <a href="/terms" target="_blank" className="text-blue-600 hover:underline">Terms of Service</a> and{' '}
                 <a href="/refund" target="_blank" className="text-blue-600 hover:underline">Refund &amp; Cancellation Policy</a>.
               </p>

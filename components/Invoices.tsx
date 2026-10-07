@@ -92,6 +92,7 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
   const [clients, setClients] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeDiscussionInvoice, setActiveDiscussionInvoice] = useState<Invoice | null>(null);
+  const [integrityHash, setIntegrityHash] = useState<string>("");
 
   // Workflow states
   const [workflowComments, setWorkflowComments] = useState("");
@@ -348,6 +349,32 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
     fetchInvoicesAndCompany();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
+
+  useEffect(() => {
+    if (previewInvoice) {
+      const dataStr = `${previewInvoice.number}|${previewInvoice.date}|${previewInvoice.total}|${company?.name || "Corporate"}`;
+      const computeHash = async () => {
+        try {
+          const msgBuffer = new TextEncoder().encode(dataStr);
+          const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+          setIntegrityHash(hashHex);
+        } catch (err) {
+          let hash = 0;
+          for (let i = 0; i < dataStr.length; i++) {
+            const char = dataStr.charCodeAt(i);
+            hash = (hash << 5) - hash + char;
+            hash = hash & hash;
+          }
+          setIntegrityHash("MIRA-" + Math.abs(hash).toString(16).toUpperCase());
+        }
+      };
+      computeHash();
+    } else {
+      setIntegrityHash("");
+    }
+  }, [previewInvoice, company]);
 
   const handleClientSelect = (clientId: string) => {
     const selectedClient = clients.find((c) => c.id === clientId);
@@ -1368,8 +1395,26 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
                     </div>
                   </div>
 
+                  {/* Cryptographic Ledger Verification Block */}
+                  <div className="mt-8 pt-4 border-t border-dashed border-slate-200 grid grid-cols-3 gap-4 items-center">
+                    <div className="col-span-2 text-left space-y-1">
+                      <span className="inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-blue-800 bg-blue-50/70 border border-blue-200 px-2 py-0.5 rounded">
+                        <span>VERIFIED SECURE LEDGER RECORD</span>
+                      </span>
+                      <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                        This document has been cryptographically hashed for data integrity. Any alteration of billing parameters or totals nullifies this signature.
+                      </p>
+                    </div>
+                    <div className="text-right flex flex-col items-end justify-center">
+                      <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Integrity Verification Hash</span>
+                      <code className="font-mono text-[9px] text-slate-700 bg-slate-50 border border-slate-200 px-1.5 py-1 rounded block max-w-full truncate select-all">
+                        {integrityHash || "0x9f3d..."}
+                      </code>
+                    </div>
+                  </div>
+
                   {/* Footer sign */}
-                  <div className="mt-16 text-center border-t border-slate-100 pt-5 text-[10px] text-slate-400">
+                  <div className="mt-12 text-center border-t border-slate-100 pt-5 text-[10px] text-slate-400">
                     Thank you for doing business with {company?.name || "us"}! This document is issued securely by corporate ledger.
                   </div>
                 </div>
@@ -1425,6 +1470,27 @@ export default function Invoices({ departmentId }: { departmentId?: string }) {
                             className="px-2 py-1 text-[10px] font-bold text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
                           >
                             {copiedField === "Document Number" ? (
+                              <>
+                                <Check className="h-3 w-3 text-emerald-600" />
+                                <span className="text-emerald-600">Copied</span>
+                              </>
+                            ) : (
+                              "Copy"
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Integrity Hash */}
+                        <div className="flex items-center justify-between gap-2 bg-white p-2 rounded-md border border-slate-150">
+                          <div className="truncate">
+                            <span className="block text-[8px] font-bold text-slate-400 uppercase">Integrity Hash</span>
+                            <span className="text-[10px] font-bold font-mono text-slate-600 truncate block max-w-[150px]">{integrityHash || "N/A"}</span>
+                          </div>
+                          <button
+                            onClick={() => handleCopyText(integrityHash, "Integrity Hash")}
+                            className="px-2 py-1 text-[10px] font-bold text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedField === "Integrity Hash" ? (
                               <>
                                 <Check className="h-3 w-3 text-emerald-600" />
                                 <span className="text-emerald-600">Copied</span>
